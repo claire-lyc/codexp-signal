@@ -1,110 +1,132 @@
-import { Zap, Wifi, AlertTriangle, CheckCircle } from 'lucide-react';
+import { AlertTriangle, Camera, Clock3, Database, MapPin, Radio } from 'lucide-react';
+import SingaporeRegionMap, { type MapMarker } from '../SingaporeRegionMap';
+import dashboardData from '../../../data/dashboard-data.json';
 
-const infrastructureStatus = [
-  { name: 'Power Grid - North', status: 'operational', load: 78 },
-  { name: 'Power Grid - South', status: 'operational', load: 84 },
-  { name: 'Power Grid - East', status: 'warning', load: 92 },
-  { name: 'Power Grid - West', status: 'operational', load: 76 },
-  { name: 'Telecom Network - 5G', status: 'operational', uptime: 99.8 },
-  { name: 'Telecom Network - 4G', status: 'operational', uptime: 99.9 },
-  { name: 'Internet Exchange', status: 'operational', latency: 12 },
-  { name: 'Public Transport System', status: 'operational', disruptions: 0 },
-];
+const infrastructure = dashboardData.infrastructure;
+const snapshotTime = new Date(infrastructure.timestamp).getTime();
+
+function ageMinutes(timestamp: string) {
+  return Math.max(0, Math.round((snapshotTime - new Date(timestamp).getTime()) / 60_000));
+}
+
+function severity(minutes: number): MapMarker['severity'] {
+  if (minutes > 20) return 'high';
+  if (minutes > 10) return 'medium';
+  return 'low';
+}
+
+const cameras = infrastructure.cameras.map((camera) => ({
+  ...camera,
+  ageMinutes: ageMinutes(camera.timestamp),
+}));
+
+const markers: MapMarker[] = cameras.map((camera) => ({
+  id: `camera-${camera.id}`,
+  name: `Traffic camera ${camera.id}`,
+  latitude: camera.latitude,
+  longitude: camera.longitude,
+  value: camera.ageMinutes === 0 ? 'Current' : `${camera.ageMinutes} min old`,
+  detail: `${camera.width} × ${camera.height} LTA traffic image captured ${new Date(camera.timestamp).toLocaleString()}`,
+  severity: severity(camera.ageMinutes),
+}));
+
+const currentCameras = cameras.filter((camera) => camera.ageMinutes <= 10);
+const delayedCameras = cameras.filter((camera) => camera.ageMinutes > 10);
+const oldestAge = Math.max(...cameras.map((camera) => camera.ageMinutes), 0);
+const previewCameras = [...cameras].sort((a, b) => a.ageMinutes - b.ageMinutes).slice(0, 6);
 
 export default function GovInfrastructure() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold mb-2">Infrastructure Monitoring</h1>
-        <p className="text-zinc-400">Critical infrastructure health and resilience tracking</p>
+        <h1 className="mb-2 text-3xl font-bold">Infrastructure Monitoring</h1>
+        <p className="text-zinc-400">Real LTA traffic-camera coverage and telemetry freshness</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 bg-green-950 rounded-lg">
-              <Zap className="w-5 h-5 text-green-500" />
-            </div>
-            <CheckCircle className="w-5 h-5 text-green-500" />
-          </div>
-          <div className="text-2xl font-bold mb-1">99.2%</div>
-          <div className="text-sm text-zinc-400">Power Grid Uptime</div>
-        </div>
-
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 bg-blue-950 rounded-lg">
-              <Wifi className="w-5 h-5 text-blue-500" />
-            </div>
-            <CheckCircle className="w-5 h-5 text-green-500" />
-          </div>
-          <div className="text-2xl font-bold mb-1">99.8%</div>
-          <div className="text-sm text-zinc-400">Network Availability</div>
-        </div>
-
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 bg-yellow-950 rounded-lg">
-              <AlertTriangle className="w-5 h-5 text-yellow-500" />
-            </div>
-            <span className="text-xs px-2 py-1 bg-yellow-950 text-yellow-400 rounded">Monitor</span>
-          </div>
-          <div className="text-2xl font-bold mb-1">92%</div>
-          <div className="text-sm text-zinc-400">Peak Grid Load (East)</div>
-        </div>
-
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 bg-green-950 rounded-lg">
-              <CheckCircle className="w-5 h-5 text-green-500" />
-            </div>
-            <CheckCircle className="w-5 h-5 text-green-500" />
-          </div>
-          <div className="text-2xl font-bold mb-1">0</div>
-          <div className="text-sm text-zinc-400">Active Disruptions</div>
+      <div className="flex items-start gap-3 rounded-xl border border-blue-900/60 bg-blue-950/20 p-4 text-sm">
+        <Database className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" />
+        <div>
+          <div className="font-medium text-blue-300">Official infrastructure snapshot</div>
+          <p className="mt-1 text-zinc-400">
+            Dot colours measure camera-feed freshness at the snapshot time. They do not estimate congestion
+            or road speed from the images.
+          </p>
+          <a
+            className="mt-2 inline-block text-xs text-blue-400 hover:text-blue-300"
+            href={infrastructure.source.url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {infrastructure.source.label}
+          </a>
         </div>
       </div>
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-        <h2 className="text-lg font-semibold mb-4">Infrastructure Status</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {infrastructureStatus.map((item) => (
-            <div
-              key={item.name}
-              className={`p-4 rounded-lg border ${
-                item.status === 'operational'
-                  ? 'bg-green-950/20 border-green-800/50'
-                  : 'bg-yellow-950/20 border-yellow-800/50'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-medium">{item.name}</span>
-                {item.status === 'operational' ? (
-                  <CheckCircle className="w-5 h-5 text-green-500" />
-                ) : (
-                  <AlertTriangle className="w-5 h-5 text-yellow-500" />
-                )}
-              </div>
-              <div className="text-sm text-zinc-400">
-                {'load' in item && `Load: ${item.load}%`}
-                {'uptime' in item && `Uptime: ${item.uptime}%`}
-                {'latency' in item && `Latency: ${item.latency}ms`}
-                {'disruptions' in item && `Disruptions: ${item.disruptions}`}
-              </div>
-            </div>
-          ))}
-        </div>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[
+          { label: 'Reporting cameras', value: cameras.length, icon: Camera, colour: 'text-blue-400' },
+          { label: 'Current within 10 min', value: currentCameras.length, icon: Radio, colour: 'text-green-400' },
+          { label: 'Delayed feeds', value: delayedCameras.length, icon: AlertTriangle, colour: 'text-yellow-400' },
+          { label: 'Oldest camera image', value: `${oldestAge} min`, icon: Clock3, colour: 'text-zinc-300' },
+        ].map(({ label, value, icon: Icon, colour }) => (
+          <div key={label} className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+            <Icon className={`mb-3 h-5 w-5 ${colour}`} />
+            <div className="text-2xl font-bold">{value}</div>
+            <div className="mt-1 text-sm text-zinc-400">{label}</div>
+          </div>
+        ))}
       </div>
 
-      <div className="bg-yellow-950/30 border border-yellow-800 rounded-xl p-6">
-        <div className="flex items-start gap-4">
-          <AlertTriangle className="w-6 h-6 text-yellow-500 mt-1" />
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="font-semibold mb-2">East Region Power Grid Warning</h3>
-            <p className="text-sm text-zinc-300">
-              Power grid load in eastern region approaching critical threshold. Recommend load balancing and backup generator activation.
+            <h2 className="flex items-center gap-2 text-lg font-semibold">
+              <MapPin className="h-5 w-5 text-blue-500" />
+              Traffic Monitoring Network
+            </h2>
+            <p className="mt-1 text-xs text-zinc-500">
+              Snapshot time: {new Date(infrastructure.timestamp).toLocaleString()}
             </p>
           </div>
+          <div className="flex flex-wrap gap-4 text-xs text-zinc-500">
+            <span><i className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full bg-blue-500" />0-10 min</span>
+            <span><i className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full bg-yellow-500" />11-20 min</span>
+            <span><i className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full bg-red-500" />20+ min</span>
+            <span><i className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full bg-zinc-500" />No camera</span>
+          </div>
+        </div>
+        <div className="h-[520px]">
+          <SingaporeRegionMap
+            markers={markers}
+            emptyTitle="LTA traffic camera network"
+            emptyDetail="Hover a camera or planning area to inspect feed freshness"
+            problemLabel="traffic camera feeds"
+          />
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold">Latest Camera Images</h2>
+          <p className="mt-1 text-xs text-zinc-500">Most recent images in the cached data.gov.sg snapshot</p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {previewCameras.map((camera) => (
+            <article key={camera.id} className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/40">
+              <img
+                src={camera.image}
+                alt={`LTA traffic camera ${camera.id}`}
+                className="aspect-video w-full bg-zinc-950 object-cover"
+                loading="lazy"
+              />
+              <div className="flex items-center justify-between gap-3 p-3 text-sm">
+                <span className="font-medium">Camera {camera.id}</span>
+                <span className="text-xs text-zinc-500">
+                  {camera.ageMinutes === 0 ? 'Current' : `${camera.ageMinutes} min old`}
+                </span>
+              </div>
+            </article>
+          ))}
         </div>
       </div>
     </div>

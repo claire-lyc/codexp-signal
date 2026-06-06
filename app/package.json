@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "refresh:data": "node scripts/refresh-dashboard-data.mjs"
   },
   "dependencies": {
     "@popperjs/core": "2.11.8",

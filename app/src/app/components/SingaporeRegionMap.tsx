@@ -1,9 +1,27 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import mapData from '../../data/singapore-planning-areas.json';
 
 type RiskLevel = 'high' | 'medium' | 'low';
 type Point = [number, number];
+
+export type MapMarker = {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  value: string;
+  detail: string;
+  severity: RiskLevel;
+};
+
+type SingaporeRegionMapProps = {
+  markers?: MapMarker[];
+  showAreaLabels?: boolean;
+  emptyTitle?: string;
+  emptyDetail?: string;
+  problemLabel?: string;
+};
 
 type PlanningArea = {
   id: string;
@@ -20,6 +38,7 @@ type Viewport = {
   height: number;
 };
 
+const planningAreas = mapData.planningAreas as PlanningArea[];
 const initialViewport: Viewport = {
   x: 0,
   y: 0,
@@ -27,16 +46,6 @@ const initialViewport: Viewport = {
   height: mapData.height,
 };
 const maxZoom = 4;
-
-const highRiskAreas = new Set(['Bedok', 'Orchard', 'Tampines', 'Marine Parade']);
-const mediumRiskAreas = new Set([
-  'Ang Mo Kio',
-  'Jurong West',
-  'Punggol',
-  'Woodlands',
-  'Downtown Core',
-  'Kallang',
-]);
 
 const labelOffsets: Record<string, Point> = {
   'Bukit Merah': [-18, 18],
@@ -54,24 +63,13 @@ const labelOffsets: Record<string, Point> = {
 };
 
 const riskStyles: Record<RiskLevel, { dot: string; label: string; hover: string }> = {
-  high: { dot: '#ef4444', label: 'High risk', hover: '#991b1b' },
-  medium: { dot: '#eab308', label: 'Moderate risk', hover: '#854d0e' },
-  low: { dot: '#3b82f6', label: 'Low risk', hover: '#1e40af' },
+  high: { dot: '#ef4444', label: 'High severity', hover: '#991b1b' },
+  medium: { dot: '#eab308', label: 'Moderate severity', hover: '#854d0e' },
+  low: { dot: '#3b82f6', label: 'Low severity', hover: '#1e40af' },
 };
 
-function getRisk(name: string): RiskLevel {
-  if (highRiskAreas.has(name)) return 'high';
-  if (mediumRiskAreas.has(name)) return 'medium';
-  return 'low';
-}
-
-function getDetail(name: string, risk: RiskLevel) {
-  if (name === 'Bedok') return 'Dengue cluster monitoring';
-  if (name === 'Orchard') return 'Flash flood monitoring';
-  if (name === 'Tampines' || name === 'Marine Parade') return 'Weather alert monitoring';
-  if (risk === 'medium') return 'Elevated operational monitoring';
-  return 'No major active alerts';
-}
+const neutralStyle = { dot: '#71717a', label: 'No reported data', hover: '#3f3f46' };
+const severityRank: Record<RiskLevel, number> = { low: 1, medium: 2, high: 3 };
 
 function polygonPath(polygons: Point[][][]) {
   return polygons
@@ -90,15 +88,71 @@ function labelFontSize(name: string) {
   return 9;
 }
 
-export default function SingaporeRegionMap() {
-  const planningAreas = mapData.planningAreas as PlanningArea[];
+function pointInRing([x, y]: Point, ring: Point[]) {
+  let inside = false;
+
+  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
+    const [currentX, currentY] = ring[index];
+    const [previousX, previousY] = ring[previous];
+    const crosses =
+      currentY > y !== previousY > y &&
+      x < ((previousX - currentX) * (y - currentY)) / (previousY - currentY) + currentX;
+    if (crosses) inside = !inside;
+  }
+
+  return inside;
+}
+
+function pointInArea(point: Point, polygons: Point[][][]) {
+  return polygons.some(([outerRing, ...holes]) => {
+    if (!outerRing || !pointInRing(point, outerRing)) return false;
+    return !holes.some((hole) => pointInRing(point, hole));
+  });
+}
+
+function projectCoordinates(latitude: number, longitude: number): Point {
+  const { minLon, maxLon, minLat, maxLat, padding } = mapData.geoBounds;
+  const x = padding + ((longitude - minLon) / (maxLon - minLon)) * (mapData.width - padding * 2);
+  const y = padding + ((maxLat - latitude) / (maxLat - minLat)) * (mapData.height - padding * 2);
+  return [x, y];
+}
+
+export default function SingaporeRegionMap({
+  markers = [],
+  showAreaLabels = true,
+  emptyTitle = 'Singapore planning areas',
+  emptyDetail = 'Hover or focus any outlined area',
+  problemLabel = 'reported readings',
+}: SingaporeRegionMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [activeAreaId, setActiveAreaId] = useState<string | null>(null);
+  const [activeMarkerId, setActiveMarkerId] = useState<string | null>(null);
   const [viewport, setViewport] = useState(initialViewport);
   const [isPanning, setIsPanning] = useState(false);
   const dragStart = useRef<{ pointer: Point; viewport: Viewport } | null>(null);
+  const areaStatuses = useMemo(
+    () =>
+      new Map(
+        planningAreas.map((area) => {
+          const areaMarkers = markers.filter((marker) =>
+            pointInArea(projectCoordinates(marker.latitude, marker.longitude), area.polygons),
+          );
+          const severity = areaMarkers.reduce<RiskLevel | null>(
+            (highest, marker) =>
+              !highest || severityRank[marker.severity] > severityRank[highest]
+                ? marker.severity
+                : highest,
+            null,
+          );
+
+          return [area.id, { markers: areaMarkers, severity }] as const;
+        }),
+      ),
+    [markers],
+  );
   const activeArea = planningAreas.find((area) => area.id === activeAreaId);
-  const activeRisk = activeArea ? getRisk(activeArea.name) : null;
+  const activeStatus = activeArea ? areaStatuses.get(activeArea.id) : null;
+  const activeMarker = markers.find((marker) => marker.id === activeMarkerId);
   const zoom = mapData.width / viewport.width;
 
   const clampViewport = (next: Viewport): Viewport => ({
@@ -230,13 +284,14 @@ export default function SingaporeRegionMap() {
         <g>
           {planningAreas.map((area) => {
             const isActive = activeAreaId === area.id;
-            const risk = getRisk(area.name);
+            const status = areaStatuses.get(area.id);
+            const style = status?.severity ? riskStyles[status.severity] : neutralStyle;
 
             return (
               <path
                 key={area.id}
                 d={polygonPath(area.polygons)}
-                fill={isActive ? riskStyles[risk].hover : '#52525b'}
+                fill={isActive ? style.hover : '#52525b'}
                 fillRule="evenodd"
                 clipRule="evenodd"
                 stroke="#18181b"
@@ -246,7 +301,7 @@ export default function SingaporeRegionMap() {
                 className="outline-none transition-colors duration-150"
                 tabIndex={0}
                 role="button"
-                aria-label={`${area.name}, ${area.region}: ${riskStyles[risk].label}`}
+                aria-label={`${area.name}, ${area.region}: ${style.label}, ${status?.markers.length ?? 0} ${problemLabel}`}
                 onMouseEnter={() => setActiveAreaId(area.id)}
                 onMouseLeave={() => setActiveAreaId(null)}
                 onFocus={() => setActiveAreaId(area.id)}
@@ -256,7 +311,7 @@ export default function SingaporeRegionMap() {
           })}
         </g>
 
-        {activeArea && activeRisk && (
+        {activeArea && activeStatus && (
           <path
             d={polygonPath(activeArea.polygons)}
             fill="none"
@@ -267,13 +322,65 @@ export default function SingaporeRegionMap() {
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
             className="pointer-events-none"
-            style={{ filter: `drop-shadow(0 0 4px ${riskStyles[activeRisk].dot})` }}
+            style={{
+              filter: `drop-shadow(0 0 4px ${
+                activeStatus.severity ? riskStyles[activeStatus.severity].dot : neutralStyle.dot
+              })`,
+            }}
           />
         )}
 
-        <g className="pointer-events-none">
+        <g>
+          {markers.map((marker) => {
+            const [x, y] = projectCoordinates(marker.latitude, marker.longitude);
+            const isActive = activeMarkerId === marker.id;
+            const style = riskStyles[marker.severity];
+
+            return (
+              <g
+                key={marker.id}
+                className="cursor-pointer outline-none"
+                tabIndex={0}
+                role="button"
+                aria-label={`${marker.name}: ${marker.value}. ${marker.detail}`}
+                onMouseEnter={() => setActiveMarkerId(marker.id)}
+                onMouseLeave={() => setActiveMarkerId(null)}
+                onFocus={() => setActiveMarkerId(marker.id)}
+                onBlur={() => setActiveMarkerId(null)}
+              >
+                <circle
+                  cx={x}
+                  cy={y}
+                  r={isActive ? 9 : 6}
+                  fill={style.dot}
+                  fillOpacity={isActive ? 1 : 0.82}
+                  stroke="#fafafa"
+                  strokeWidth={isActive ? 2.5 : 1.5}
+                  vectorEffect="non-scaling-stroke"
+                  style={{ filter: isActive ? `drop-shadow(0 0 5px ${style.dot})` : 'none' }}
+                />
+                {isActive && (
+                  <text
+                    x={x + 12}
+                    y={y + 4}
+                    fill="#ffffff"
+                    fontSize="11"
+                    fontWeight="700"
+                    className="pointer-events-none"
+                    style={{ paintOrder: 'stroke', stroke: '#18181b', strokeWidth: 3 }}
+                  >
+                    {marker.value}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </g>
+
+        {showAreaLabels && <g className="pointer-events-none">
           {planningAreas.map((area) => {
-            const risk = getRisk(area.name);
+            const status = areaStatuses.get(area.id);
+            const style = status?.severity ? riskStyles[status.severity] : neutralStyle;
             const [dotX, dotY] = area.label;
             const [offsetX = 0, offsetY = 0] = labelOffsets[area.name] ?? [];
             const labelX = dotX + offsetX;
@@ -298,7 +405,7 @@ export default function SingaporeRegionMap() {
                   cx={dotX}
                   cy={dotY}
                   r={isActive ? 4.3 : 3}
-                  fill={riskStyles[risk].dot}
+                  fill={style.dot}
                   stroke="#18181b"
                   strokeWidth="1.2"
                 />
@@ -315,7 +422,7 @@ export default function SingaporeRegionMap() {
               </g>
             );
           })}
-        </g>
+        </g>}
       </svg>
 
       <div className="absolute right-3 top-3 flex items-center overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950/95 shadow-xl backdrop-blur">
@@ -352,22 +459,44 @@ export default function SingaporeRegionMap() {
       </div>
 
       <div className="pointer-events-none absolute left-3 top-3 max-w-[240px] rounded-lg border border-zinc-700 bg-zinc-950/95 px-3 py-2 shadow-xl backdrop-blur">
-        {activeArea && activeRisk ? (
+        {activeMarker ? (
           <>
             <div className="flex items-center gap-2 text-sm font-semibold text-white">
               <span
                 className="h-2 w-2 shrink-0 rounded-full"
-                style={{ backgroundColor: riskStyles[activeRisk].dot }}
+                style={{ backgroundColor: riskStyles[activeMarker.severity].dot }}
+              />
+              {activeMarker.name}
+            </div>
+            <div className="mt-1 text-sm font-semibold text-zinc-100">{activeMarker.value}</div>
+            <div className="mt-0.5 text-xs text-zinc-300">{activeMarker.detail}</div>
+          </>
+        ) : activeArea && activeStatus ? (
+          <>
+            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{
+                  backgroundColor: activeStatus.severity
+                    ? riskStyles[activeStatus.severity].dot
+                    : neutralStyle.dot,
+                }}
               />
               {activeArea.name}
             </div>
             <div className="mt-0.5 text-[11px] text-zinc-500">{activeArea.region}</div>
-            <div className="mt-1 text-xs text-zinc-300">{getDetail(activeArea.name, activeRisk)}</div>
+            <div className="mt-1 text-xs text-zinc-300">
+              {activeStatus.markers.length
+                ? `${activeStatus.markers.length} ${problemLabel} · Highest level: ${
+                    riskStyles[activeStatus.severity ?? 'low'].label
+                  }`
+                : `No ${problemLabel} mapped in this area`}
+            </div>
           </>
         ) : (
           <>
-            <div className="text-xs font-medium text-zinc-300">Singapore planning areas</div>
-            <div className="mt-0.5 text-[11px] text-zinc-500">Hover or focus any outlined area</div>
+            <div className="text-xs font-medium text-zinc-300">{emptyTitle}</div>
+            <div className="mt-0.5 text-[11px] text-zinc-500">{emptyDetail}</div>
           </>
         )}
       </div>

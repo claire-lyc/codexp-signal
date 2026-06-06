@@ -137,5 +137,8 @@ function titleCase(value) {
 }
 
 await mkdir(path.dirname(outputPath), { recursive: true });
-await writeFile(outputPath, `${JSON.stringify({ width, height, planningAreas })}\n`);
+await writeFile(
+  outputPath,
+  `${JSON.stringify({ width, height, geoBounds: { minLon, maxLon, minLat, maxLat, padding }, planningAreas })}\n`,
+);
 console.log(`Generated ${planningAreas.length} planning areas at ${outputPath}`);
