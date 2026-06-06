@@ -1,2 +1,14 @@
-app/docs
-app/node_modules
+node_modules/
+dist/
+coverage/
+.vite/
+
+.DS_Store
+Thumbs.db
+
+*.log
+.env
+.env.*
+!.env.example
+
+app/docs/

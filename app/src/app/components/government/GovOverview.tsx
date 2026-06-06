@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { AlertCircle, MapPin, Activity, Cloud, Package, Shield, ChevronRight, Filter, Pin } from 'lucide-react';
 import { Link } from 'react-router';
+import SingaporeRegionMap from '../SingaporeRegionMap';
 
 const crisisCards = [
   {
@@ -91,22 +92,6 @@ const alerts = [
   { id: 4, type: 'Infrastructure', severity: 'medium', message: 'Power grid fluctuation in Woodlands', region: 'North', time: '07:15 AM' },
   { id: 5, type: 'Health', severity: 'medium', message: 'New Covid-19 cluster at Jurong West MRT', region: 'West', time: '06:50 AM' },
 ];
-
-const heatmapZones = [
-  { id: 'north', label: 'North', x: 35, y: 20, intensity: 'low', crisis: 'Infrastructure' },
-  { id: 'northwest', label: 'Jurong', x: 18, y: 48, intensity: 'medium', crisis: 'Health' },
-  { id: 'central', label: 'Central', x: 45, y: 38, intensity: 'medium', crisis: 'Weather' },
-  { id: 'east', label: 'East', x: 72, y: 42, intensity: 'high', crisis: 'Weather / Health' },
-  { id: 'south', label: 'South', x: 47, y: 65, intensity: 'low', crisis: 'Supply' },
-  { id: 'northeast', label: 'Punggol', x: 63, y: 22, intensity: 'medium', crisis: 'Health' },
-  { id: 'bedok', label: 'Bedok', x: 76, y: 55, intensity: 'high', crisis: 'Dengue' },
-];
-
-const intensityColor: Record<string, string> = {
-  high: 'bg-red-500',
-  medium: 'bg-yellow-500',
-  low: 'bg-blue-500',
-};
 
 const trendData = [
   { date: 'May 13', incidents: 4 },
@@ -199,29 +184,8 @@ export default function GovOverview() {
             </h2>
             <span className="text-xs text-zinc-500">Pins linked to Active Alerts</span>
           </div>
-          {/* SVG map placeholder with proportional Singapore shape */}
-          <div className="relative bg-zinc-800 rounded-lg overflow-hidden" style={{ paddingBottom: '52%' }}>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <svg viewBox="0 0 100 52" className="w-full h-full opacity-20" fill="none">
-                <path d="M5,22 Q15,10 30,8 Q50,5 70,12 Q85,16 95,22 Q90,35 80,42 Q65,48 50,48 Q35,48 20,42 Q8,36 5,22Z" fill="#dc2626" />
-              </svg>
-              {/* Zone pins */}
-              {heatmapZones.map((zone) => (
-                <div
-                  key={zone.id}
-                  className="absolute group cursor-pointer"
-                  style={{ left: `${zone.x}%`, top: `${zone.y}%`, transform: 'translate(-50%, -50%)' }}
-                >
-                  <div className={`w-4 h-4 rounded-full ${intensityColor[zone.intensity]} opacity-70 animate-pulse border-2 border-white/30`} />
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-10">
-                    <div className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs whitespace-nowrap">
-                      <div className="font-medium">{zone.label}</div>
-                      <div className="text-zinc-400">{zone.crisis}</div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="h-[440px]">
+            <SingaporeRegionMap />
           </div>
           <div className="flex items-center gap-4 mt-3 text-xs text-zinc-500">
             <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-red-500" />High Risk</div>

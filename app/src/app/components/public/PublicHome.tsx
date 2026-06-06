@@ -2,6 +2,7 @@
 // GET /api/heatmap?layer=crises&public=true
 import { AlertTriangle, MapPin, Activity, Shield, TrendingUp, Navigation } from 'lucide-react';
 import { Link } from 'react-router';
+import SingaporeRegionMap from '../SingaporeRegionMap';
 
 const activeAlerts = [
   { id: 1, type: 'Weather', message: 'Flash flood risk in Orchard & East Coast regions', severity: 'high', region: 'East / Central' },
@@ -20,22 +21,6 @@ const updates = [
   { time: '4 hours ago', message: 'Panadol Menstrual shortage confirmed islandwide. Authorities sourcing alternatives.' },
   { time: '1 day ago', message: 'Government announces enhanced flood prevention measures for 2026.' },
 ];
-
-const heatmapZones = [
-  { label: 'Jurong', x: 18, y: 50, severity: 'medium', type: 'Health' },
-  { label: 'Orchard', x: 43, y: 43, severity: 'high', type: 'Weather' },
-  { label: 'East Coast', x: 72, y: 57, severity: 'high', type: 'Weather' },
-  { label: 'Ang Mo Kio', x: 48, y: 28, severity: 'medium', type: 'Health' },
-  { label: 'Bedok', x: 76, y: 55, severity: 'high', type: 'Health / Dengue' },
-  { label: 'Woodlands', x: 38, y: 12, severity: 'low', type: 'General' },
-  { label: 'Punggol', x: 63, y: 22, severity: 'low', type: 'General' },
-];
-
-const pinColors: Record<string, string> = {
-  high: 'bg-red-500',
-  medium: 'bg-yellow-500',
-  low: 'bg-green-500',
-};
 
 export default function PublicHome() {
   return (
@@ -96,29 +81,10 @@ export default function PublicHome() {
             <span className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-green-500" />Low Risk</span>
           </div>
         </div>
-        <div className="relative bg-zinc-800 rounded-lg overflow-hidden" style={{ paddingBottom: '48%' }}>
-          <div className="absolute inset-0">
-            <svg viewBox="0 0 100 48" className="w-full h-full opacity-10" fill="none">
-              <path d="M5,18 Q15,8 30,6 Q50,3 70,10 Q85,14 95,18 Q90,30 80,36 Q65,43 50,43 Q35,43 20,37 Q8,28 5,18Z" fill="#dc2626" />
-            </svg>
-            {heatmapZones.map((zone) => (
-              <div
-                key={zone.label}
-                className="absolute group cursor-pointer"
-                style={{ left: `${zone.x}%`, top: `${zone.y}%`, transform: 'translate(-50%,-50%)' }}
-              >
-                <div className={`w-5 h-5 rounded-full ${pinColors[zone.severity]} border-2 border-white/30 animate-pulse`} />
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-10">
-                  <div className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs whitespace-nowrap">
-                    <div className="font-medium">{zone.label}</div>
-                    <div className="text-zinc-400">{zone.type}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+        <div className="h-[500px]">
+          <SingaporeRegionMap />
         </div>
-        <p className="text-xs text-zinc-500 mt-2">Hover pins for area details. Pins represent active alert zones linked to government crisis data.</p>
+        <p className="text-xs text-zinc-500 mt-2">Hover or focus a region for current alert details. Regional status is linked to government crisis data.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
