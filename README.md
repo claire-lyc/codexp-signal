@@ -6,9 +6,7 @@ SiGnal has two main local apps:
 - `backend/` - backend API server and local PostgreSQL setup
 
 ## First-time setup
-
-Install dependencies in both folders:
-
+1. Install dependencies in both folders:
 ```bash
 cd backend
 npm install
@@ -17,9 +15,9 @@ cd ../app
 npm install
 ```
 
-Make sure Docker Desktop is running before starting the database.
+2. Make sure Docker Desktop is running before starting the database.
 
-Create the backend `.env` file if it does not exist:
+3. Create the backend `.env` file if it does not exist:
 
 ```bash
 cd backend
@@ -33,13 +31,11 @@ cd backend
 Copy-Item .env.example .env
 ```
 
-Initialize the local database:
+4. Initialize the local database:
 
 ```bash
 npm run db:init
 ```
-
-`db:init` starts PostgreSQL, waits for it, applies schemas, then loads dashboard data from `backend/data/*.json`.
 
 ## Daily local run
 
@@ -66,25 +62,9 @@ cd app
 npm run dev
 ```
 
-Frontend URL is printed by Vite, usually:
+If 500 Error, remember to load up your docker Desktop
 
-```text
-http://localhost:5173
-```
-
-The frontend calls the backend through `app/src/app/lib/api.ts`. By default it uses:
-
-```text
-http://localhost:4000
-```
-
-To override it, create `app/.env`:
-
-```env
-VITE_API_URL=http://localhost:4000
-```
-
-## Backend database commands
+## Backend database commands(internal)
 
 Run these from `backend/`.
 
