@@ -2,6 +2,21 @@ import 'dotenv/config';
 import cors from 'cors';
 import express from 'express';
 import {
+  createForumPost,
+  createForumReply,
+  likeForumPost,
+  listForumPosts,
+  reportForumPost,
+} from './forumRepository.js';
+import {
+  addTicketComment,
+  createCitizenTicket,
+  listTickets,
+  pingTicketAgencies,
+  updateTicketStatus,
+  type TicketStatus,
+} from './ticketRepository.js';
+import {
   getLatestMapLayer,
   getLatestSnapshot,
   listAlerts,
@@ -16,6 +31,174 @@ app.use(express.json());
 
 app.get('/health', (_request, response) => {
   response.json({ ok: true });
+});
+
+app.get('/api/forum/posts', (_request, response) => {
+  response.json({ items: listForumPosts() });
+});
+
+app.post('/api/forum/posts', (request, response) => {
+  const content = stringBody(request.body?.content);
+  if (!content) {
+    response.status(400).json({ error: 'Post content is required' });
+    return;
+  }
+
+  const post = createForumPost({
+    author: stringBody(request.body?.author),
+    content,
+    category: stringBody(request.body?.category),
+  });
+  response.status(201).json({ item: post });
+});
+
+app.post('/api/forum/posts/:id/like', (request, response) => {
+  const post = likeForumPost(request.params.id);
+  if (!post) {
+    response.status(404).json({ error: 'Forum post not found' });
+    return;
+  }
+  response.json({ item: post });
+});
+
+app.post('/api/forum/posts/:id/report', (request, response) => {
+  const post = reportForumPost(request.params.id);
+  if (!post) {
+    response.status(404).json({ error: 'Forum post not found' });
+    return;
+  }
+  response.json({ item: post });
+});
+
+app.post('/api/forum/posts/:id/replies', (request, response) => {
+  const content = stringBody(request.body?.content);
+  if (!content) {
+    response.status(400).json({ error: 'Reply content is required' });
+    return;
+  }
+
+  const post = createForumReply(request.params.id, {
+    author: stringBody(request.body?.author),
+    content,
+  });
+  if (!post) {
+    response.status(404).json({ error: 'Forum post not found' });
+    return;
+  }
+  response.status(201).json({ item: post });
+});
+
+app.get('/api/tickets', (request, response) => {
+  response.json({
+    items: listTickets({
+      agency: stringParam(request.query.agency),
+      status: stringParam(request.query.status),
+      crisisType: stringParam(request.query.crisisType),
+      query: stringParam(request.query.query),
+    }),
+  });
+});
+
+app.post('/api/citizen/reports', (request, response) => {
+  const message = stringBody(request.body?.description) ?? stringBody(request.body?.message);
+  const crisisType = stringBody(request.body?.crisisType) ?? stringBody(request.body?.reportType) ?? 'general';
+  if (!message) {
+    response.status(400).json({ error: 'Report description is required' });
+    return;
+  }
+
+  const ticket = createCitizenTicket({
+    reporter: stringBody(request.body?.reporter),
+    message,
+    location: stringBody(request.body?.locationText) ?? stringBody(request.body?.location),
+    crisisType,
+    hasImage: Boolean(request.body?.hasImage),
+  });
+
+  response.status(201).json({
+    id: ticket.id,
+    publicReportId: ticket.id,
+    status: ticket.status,
+    assignedAgency: ticket.assignedAgency,
+    createdAt: new Date().toISOString(),
+    item: ticket,
+  });
+});
+
+app.get('/api/citizen/reports/:publicReportId', (request, response) => {
+  const ticket = listTickets({}).find((item) => item.id === request.params.publicReportId);
+  if (!ticket) {
+    response.status(404).json({ error: 'Report not found' });
+    return;
+  }
+
+  response.json({
+    publicReportId: ticket.id,
+    status: ticket.status,
+    assignedAgency: ticket.assignedAgency,
+    latestPublicMessage:
+      [...ticket.comments].reverse().find((comment) => comment.visibility === 'public')?.body ??
+      'Your report is in the government ticket queue.',
+    updatedAt: ticket.comments.at(-1)?.createdAt ?? new Date().toISOString(),
+    item: ticket,
+  });
+});
+
+app.patch('/api/tickets/:id/status', (request, response) => {
+  const status = stringBody(request.body?.status);
+  if (!isTicketStatus(status)) {
+    response.status(400).json({ error: 'Valid ticket status is required' });
+    return;
+  }
+
+  const ticket = updateTicketStatus(request.params.id, status);
+  if (!ticket) {
+    response.status(404).json({ error: 'Ticket not found' });
+    return;
+  }
+  response.json({ item: ticket });
+});
+
+app.post('/api/tickets/:id/comments', (request, response) => {
+  const body = stringBody(request.body?.body);
+  const visibility = request.body?.visibility === 'public' ? 'public' : 'internal';
+  if (!body) {
+    response.status(400).json({ error: 'Comment body is required' });
+    return;
+  }
+
+  const ticket = addTicketComment(request.params.id, {
+    body,
+    visibility,
+    author: stringBody(request.body?.author),
+  });
+  if (!ticket) {
+    response.status(404).json({ error: 'Ticket not found' });
+    return;
+  }
+  response.status(201).json({ item: ticket });
+});
+
+app.post('/api/tickets/:id/ping-agencies', (request, response) => {
+  const agencyCodes = Array.isArray(request.body?.agencyCodes)
+    ? request.body.agencyCodes.filter((item: unknown) => typeof item === 'string' && item.trim())
+    : [];
+  if (agencyCodes.length === 0) {
+    response.status(400).json({ error: 'At least one agency code is required' });
+    return;
+  }
+
+  const result = pingTicketAgencies(request.params.id, agencyCodes);
+  if (!result) {
+    response.status(404).json({ error: 'Ticket not found' });
+    return;
+  }
+  response.json({
+    item: result.ticket,
+    ticketId: result.ticket.id,
+    pingedAgencies: result.pingedAgencies,
+    createdAt: result.createdAt,
+  });
 });
 
 app.get(['/api/gov/crises', '/api/crises'], async (request, response, next) => {
@@ -145,6 +328,14 @@ app.listen(port, () => {
 
 function stringParam(value: unknown) {
   return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function stringBody(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function isTicketStatus(value: unknown): value is TicketStatus {
+  return value === 'open' || value === 'in-progress' || value === 'resolved' || value === 'grouped';
 }
 
 async function getSnapshotResponse(snapshotKey: string) {

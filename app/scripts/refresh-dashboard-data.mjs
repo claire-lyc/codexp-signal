@@ -2,10 +2,11 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const outputPath = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../../backend/data/dashboard-data.json',
-);
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const outputPaths = [
+  path.resolve(scriptDir, '../../backend/data/dashboard-data.json'),
+  path.resolve(scriptDir, '../src/data/dashboard-data.json'),
+];
 
 const sources = {
   rainfall: 'https://api-open.data.gov.sg/v2/real-time/api/rainfall',
@@ -182,6 +183,10 @@ const database = {
   },
 };
 
-await mkdir(path.dirname(outputPath), { recursive: true });
-await writeFile(outputPath, `${JSON.stringify(database)}\n`);
-console.log(`Wrote dashboard snapshot to ${outputPath}`);
+await Promise.all(
+  outputPaths.map(async (outputPath) => {
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, `${JSON.stringify(database)}\n`);
+    console.log(`Wrote dashboard snapshot to ${outputPath}`);
+  }),
+);

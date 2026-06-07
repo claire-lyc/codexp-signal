@@ -37,6 +37,7 @@ export const router = createBrowserRouter([
       { path: "alerts", lazy: lazyRoute(() => import("./components/public/PublicAlerts")) },
       { path: "report", lazy: lazyRoute(() => import("./components/public/PublicSOS")) },
       { path: "sos", lazy: lazyRoute(() => import("./components/public/PublicSOS")) },
+      { path: "tickets", lazy: lazyRoute(() => import("./components/public/PublicTickets")) },
       { path: "volunteer", lazy: lazyRoute(() => import("./components/public/PublicVolunteer")) },
       { path: "forum", lazy: lazyRoute(() => import("./components/public/PublicForum")) },
     ],

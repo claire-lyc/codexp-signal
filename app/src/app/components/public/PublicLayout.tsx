@@ -1,11 +1,12 @@
 import { Outlet, Link, useLocation } from 'react-router';
-import { Home, Bell, AlertTriangle, Users, MessageSquare, Shield, Menu, X } from 'lucide-react';
+import { Home, Bell, AlertTriangle, Users, MessageSquare, Ticket, Shield, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 
 const navItems = [
   { path: '/public', label: 'Home', icon: Home },
   { path: '/public/alerts', label: 'Alerts', icon: Bell },
   { path: '/public/report', label: 'Report', icon: AlertTriangle },
+  { path: '/public/tickets', label: 'Tickets', icon: Ticket },
   { path: '/public/volunteer', label: 'Volunteer', icon: Users },
   { path: '/public/forum', label: 'Forum', icon: MessageSquare },
 ];

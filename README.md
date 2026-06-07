@@ -5,8 +5,29 @@ SiGnal has two main local apps:
 - `app/` - frontend Vite/React app
 - `backend/` - backend API server and local PostgreSQL setup
 
-## First-time setup
+## Run the website only
+
+Docker is not required for the normal website/demo mode. The frontend uses
+committed fallback data when the local backend is not running.
+
+```bash
+cd app
+npm install
+npm run dev
+```
+
+Open the Vite URL shown in the terminal, usually:
+
+```text
+http://localhost:5173
+```
+
+## Run the full local system
+
+Use this only if you want the backend API and PostgreSQL database too.
+
 1. Install dependencies in both folders:
+
 ```bash
 cd backend
 npm install
@@ -62,7 +83,8 @@ cd app
 npm run dev
 ```
 
-If 500 Error, remember to load up your docker Desktop
+If the backend shows a database error, make sure Docker Desktop is running and
+run the backend database setup commands below.
 
 ## Backend database commands(internal)
 
