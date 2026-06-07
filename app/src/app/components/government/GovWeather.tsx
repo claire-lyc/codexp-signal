@@ -2,11 +2,10 @@ import { useState } from 'react';
 import { Cloud, Database, Droplets, Layers, ThermometerSun, Wind } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import SingaporeRegionMap, { type MapMarker } from '../SingaporeRegionMap';
-import dashboardData from '../../../data/dashboard-data.json';
+import { useApi } from '../../lib/api';
 
 type LayerKey = 'Rainfall' | 'Temperature' | 'Wind' | 'PSI';
 
-const weather = dashboardData.weather;
 const layers: LayerKey[] = ['Rainfall', 'Temperature', 'Wind', 'PSI'];
 
 function severity(layer: LayerKey, value: number): MapMarker['severity'] {
@@ -16,7 +15,7 @@ function severity(layer: LayerKey, value: number): MapMarker['severity'] {
   return value > 100 ? 'high' : value > 50 ? 'medium' : 'low';
 }
 
-function layerData(layer: LayerKey) {
+function layerData(weather: any, layer: LayerKey) {
   if (layer === 'PSI') {
     return {
       unit: weather.psi.unit,
@@ -47,8 +46,14 @@ function layerData(layer: LayerKey) {
 }
 
 export default function GovWeather() {
+  const { data: dashboardData, loading, error } = useApi<any>('/api/dashboard/cached-external');
   const [activeLayer, setActiveLayer] = useState<LayerKey>('Rainfall');
-  const current = layerData(activeLayer);
+
+  if (loading) return <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">Loading weather dashboard data...</div>;
+  if (error || !dashboardData?.weather) return <div className="rounded-lg border border-red-800 bg-red-950/40 p-4 text-sm text-red-300">Weather dashboard API unavailable: {error ?? 'missing weather data'}</div>;
+
+  const weather = dashboardData.weather;
+  const current = layerData(weather, activeLayer);
   const sorted = [...current.rows].sort((a, b) => b.value - a.value);
   const markers: MapMarker[] = current.rows.map((row) => ({
     id: `${activeLayer}-${row.id}`,
@@ -84,7 +89,7 @@ export default function GovWeather() {
           ['Wind', Wind],
           ['PSI', Cloud],
         ] as const).map(([layer, Icon]) => {
-          const data = layerData(layer);
+          const data = layerData(weather, layer);
           const max = Math.max(...data.rows.map((row) => row.value));
           return (
             <button key={layer} onClick={() => setActiveLayer(layer)} className={`rounded-xl border p-5 text-left transition-colors ${activeLayer === layer ? 'border-blue-600 bg-blue-950/30' : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700'}`}>

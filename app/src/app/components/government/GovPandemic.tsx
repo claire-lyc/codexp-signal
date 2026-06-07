@@ -1,9 +1,7 @@
 import { Activity, AlertTriangle, Database, MapPin, TrendingUp } from 'lucide-react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import SingaporeRegionMap, { type MapMarker } from '../SingaporeRegionMap';
-import dashboardData from '../../../data/dashboard-data.json';
-
-const dengue = dashboardData.health.dengue;
+import { useApi } from '../../lib/api';
 
 function severity(cases: number): MapMarker['severity'] {
   if (cases >= 10) return 'high';
@@ -11,21 +9,26 @@ function severity(cases: number): MapMarker['severity'] {
   return 'low';
 }
 
-const markers: MapMarker[] = dengue.clusters.map((cluster, index) => ({
-  id: `dengue-${index}`,
-  name: cluster.name,
-  latitude: cluster.latitude,
-  longitude: cluster.longitude,
-  value: `${cluster.cases} cases`,
-  detail: `${cluster.homes} homes and ${cluster.publicPlaces} public places recorded`,
-  severity: severity(cluster.cases),
-}));
-
-const totalCases = dengue.clusters.reduce((sum, cluster) => sum + cluster.cases, 0);
-const largestCluster = [...dengue.clusters].sort((a, b) => b.cases - a.cases)[0];
-const latestHistory = dengue.history.at(-1);
-
 export default function GovPandemic() {
+  const { data: dashboardData, loading, error } = useApi<any>('/api/dashboard/cached-external');
+  const dengue = dashboardData?.health?.dengue;
+
+  if (loading) return <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">Loading health dashboard data...</div>;
+  if (error || !dengue) return <div className="rounded-lg border border-red-800 bg-red-950/40 p-4 text-sm text-red-300">Health dashboard API unavailable: {error ?? 'missing dengue data'}</div>;
+
+  const markers: MapMarker[] = dengue.clusters.map((cluster: any, index: number) => ({
+    id: `dengue-${index}`,
+    name: cluster.name,
+    latitude: cluster.latitude,
+    longitude: cluster.longitude,
+    value: `${cluster.cases} cases`,
+    detail: `${cluster.homes} homes and ${cluster.publicPlaces} public places recorded`,
+    severity: severity(cluster.cases),
+  }));
+  const totalCases = dengue.clusters.reduce((sum: number, cluster: any) => sum + cluster.cases, 0);
+  const largestCluster = [...dengue.clusters].sort((a: any, b: any) => b.cases - a.cases)[0];
+  const latestHistory = dengue.history.at(-1);
+
   return (
     <div className="space-y-6">
       <div>

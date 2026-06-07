@@ -2,10 +2,7 @@ import { useState } from 'react';
 import { BarChart3, Database, Package, Ship, TrendingDown, TrendingUp } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import SingaporeRegionMap, { type MapMarker } from '../SingaporeRegionMap';
-import dashboardData from '../../../data/dashboard-data.json';
-
-const supply = dashboardData.supply;
-const indicators = [...supply.importPrices, ...supply.retailSales];
+import { useApi } from '../../lib/api';
 
 function severity(value: number): MapMarker['severity'] {
   const magnitude = Math.abs(value);
@@ -15,9 +12,16 @@ function severity(value: number): MapMarker['severity'] {
 }
 
 export default function GovSupplyChain() {
-  const [selectedId, setSelectedId] = useState(indicators[0].id);
+  const { data: dashboardData, loading, error } = useApi<any>('/api/dashboard/cached-external');
+  const supply = dashboardData?.supply;
+  const indicators = supply ? [...supply.importPrices, ...supply.retailSales] : [];
+  const [selectedId, setSelectedId] = useState('');
+
+  if (loading) return <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">Loading supply-chain dashboard data...</div>;
+  if (error || !supply) return <div className="rounded-lg border border-red-800 bg-red-950/40 p-4 text-sm text-red-300">Supply-chain dashboard API unavailable: {error ?? 'missing supply data'}</div>;
+
   const selected = indicators.find((indicator) => indicator.id === selectedId) ?? indicators[0];
-  const markers: MapMarker[] = supply.nodes.map((node, index) => ({
+  const markers: MapMarker[] = supply.nodes.map((node: any, index: number) => ({
     id: `supply-${index}`,
     name: node.name,
     latitude: node.latitude,
@@ -63,7 +67,7 @@ export default function GovSupplyChain() {
             <h2 className="flex items-center gap-2 text-lg font-semibold"><Ship className="h-5 w-5 text-yellow-500" />Logistics Node Context Map</h2>
             <p className="mt-1 text-xs text-zinc-500">SingStat updated {supply.updatedAt}</p>
           </div>
-          <select value={selectedId} onChange={(event) => setSelectedId(event.target.value)} className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm">
+          <select value={selected?.id ?? ''} onChange={(event) => setSelectedId(event.target.value)} className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm">
             {indicators.map((indicator) => <option key={indicator.id} value={indicator.id}>{indicator.name}</option>)}
           </select>
         </div>

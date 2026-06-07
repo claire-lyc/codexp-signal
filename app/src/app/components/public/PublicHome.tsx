@@ -3,6 +3,7 @@
 import { AlertTriangle, MapPin, Activity, Shield, TrendingUp, Navigation } from 'lucide-react';
 import { Link } from 'react-router';
 import SingaporeRegionMap from '../SingaporeRegionMap';
+import { useApi } from '../../lib/api';
 
 const activeAlerts = [
   { id: 1, type: 'Weather', message: 'Flash flood risk in Orchard & East Coast regions', severity: 'high', region: 'East / Central' },
@@ -22,7 +23,31 @@ const updates = [
   { time: '1 day ago', message: 'Government announces enhanced flood prevention measures for 2026.' },
 ];
 
+type PublicHomeData = {
+  activeCrisisLabels: string[];
+  summary: string;
+  stats: Array<{ label: string; value: string; icon: string; colour: string }>;
+  activeAlerts: Array<{ id: number; type: string; message: string; severity: string; region: string }>;
+  nearbyResources: Array<{ name: string; type: string; distance: string; status: string }>;
+  updates: Array<{ time: string; message: string }>;
+};
+
+const publicStats: PublicHomeData['stats'] = [];
+const statIconMap = { Activity, AlertTriangle, Shield, TrendingUp };
+const statColours: Record<string, { bg: string; text: string }> = {
+  red: { bg: 'bg-red-950', text: 'text-red-500' },
+  yellow: { bg: 'bg-yellow-950', text: 'text-yellow-500' },
+  green: { bg: 'bg-green-950', text: 'text-green-500' },
+  blue: { bg: 'bg-blue-950', text: 'text-blue-500' },
+};
+
 export default function PublicHome() {
+  const { data: publicHome, loading, error } = useApi<PublicHomeData>('/api/citizen/home');
+  const activeAlerts = publicHome?.activeAlerts ?? [];
+  const nearbyResources = publicHome?.nearbyResources ?? [];
+  const updates = publicHome?.updates ?? [];
+  const stats = publicHome?.stats ?? publicStats;
+
   return (
     <div className="space-y-8">
       {/* Status banner — no universal threat level tag */}
@@ -34,38 +59,33 @@ export default function PublicHome() {
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-              <span className="text-sm font-medium text-red-400">Active crises: Weather, Health, Supply</span>
+              <span className="text-sm font-medium text-red-400">Active crises: {publicHome?.activeCrisisLabels.join(', ') ?? 'Loading'}</span>
             </div>
             <h2 className="text-2xl font-bold mb-2">Stay Informed & Safe</h2>
             <p className="text-zinc-400">
-              Singapore is managing flash flood risk, dengue cluster expansion, and a medicine shortage. Follow official advisories and check your area on the heatmap below.
+              {publicHome?.summary ?? 'Loading current public advisories...'}
             </p>
           </div>
         </div>
       </div>
 
+      {loading && <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">Loading public dashboard data...</div>}
+      {error && <div className="rounded-lg border border-red-800 bg-red-950/40 p-4 text-sm text-red-300">Public dashboard API unavailable: {error}</div>}
+
       {/* Quick stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <div className="p-2 bg-red-950 rounded-lg mb-3 inline-block"><Activity className="w-5 h-5 text-red-500" /></div>
-          <div className="text-2xl font-bold mb-1">378</div>
-          <div className="text-sm text-zinc-400">Covid-19 Cases Today</div>
-        </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <div className="p-2 bg-yellow-950 rounded-lg mb-3 inline-block"><AlertTriangle className="w-5 h-5 text-yellow-500" /></div>
-          <div className="text-2xl font-bold mb-1">156</div>
-          <div className="text-sm text-zinc-400">Air Quality (PSI)</div>
-        </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <div className="p-2 bg-green-950 rounded-lg mb-3 inline-block"><Shield className="w-5 h-5 text-green-500" /></div>
-          <div className="text-2xl font-bold mb-1">94%</div>
-          <div className="text-sm text-zinc-400">Essential Supply Level</div>
-        </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-          <div className="p-2 bg-blue-950 rounded-lg mb-3 inline-block"><TrendingUp className="w-5 h-5 text-blue-500" /></div>
-          <div className="text-2xl font-bold mb-1">Elevated</div>
-          <div className="text-sm text-zinc-400">Overall Situation</div>
-        </div>
+        {stats.map((stat) => {
+          const Icon = statIconMap[stat.icon as keyof typeof statIconMap] ?? Activity;
+          const colour = statColours[stat.colour] ?? statColours.blue;
+
+          return (
+            <div key={stat.label} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+              <div className={`p-2 ${colour.bg} rounded-lg mb-3 inline-block`}><Icon className={`w-5 h-5 ${colour.text}`} /></div>
+              <div className="text-2xl font-bold mb-1">{stat.value}</div>
+              <div className="text-sm text-zinc-400">{stat.label}</div>
+            </div>
+          );
+        })}
       </div>
 
       {/* National heatmap */}

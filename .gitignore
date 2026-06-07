@@ -12,3 +12,6 @@ Thumbs.db
 !.env.example
 
 app/docs/
+
+
+.scribe

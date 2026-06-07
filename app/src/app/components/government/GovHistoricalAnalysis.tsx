@@ -1,4 +1,5 @@
 import { History, TrendingUp, CheckCircle, AlertCircle } from 'lucide-react';
+import { useApi } from '../../lib/api';
 
 const historicalCrises = [
   {
@@ -40,12 +41,18 @@ const historicalCrises = [
 ];
 
 export default function GovHistoricalAnalysis() {
+  const { data, loading, error } = useApi<{ items: typeof historicalCrises }>('/api/gov/historical');
+  const historicalCrises = data?.items ?? [];
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold mb-2">Historical Crisis Analysis</h1>
         <p className="text-zinc-400">Past response effectiveness and lessons learned</p>
       </div>
+
+      {loading && <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">Loading historical data...</div>}
+      {error && <div className="rounded-lg border border-red-800 bg-red-950/40 p-4 text-sm text-red-300">Historical API unavailable: {error}</div>}
 
       <div className="bg-gradient-to-r from-indigo-950/50 to-purple-950/50 border border-indigo-900/50 rounded-xl p-6">
         <div className="flex items-start gap-4">

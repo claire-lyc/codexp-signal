@@ -1,11 +1,31 @@
 import { AlertTriangle, Camera, Clock3, Database, MapPin, Radio } from 'lucide-react';
+import { useApi } from '../../lib/api';
 import SingaporeRegionMap, { type MapMarker } from '../SingaporeRegionMap';
-import dashboardData from '../../../data/dashboard-data.json';
 
-const infrastructure = dashboardData.infrastructure;
-const snapshotTime = new Date(infrastructure.timestamp).getTime();
+type CameraSnapshot = {
+  id: string;
+  timestamp: string;
+  latitude: number;
+  longitude: number;
+  image: string;
+  width: number;
+  height: number;
+};
 
-function ageMinutes(timestamp: string) {
+type InfrastructureSnapshot = {
+  timestamp: string;
+  cameras: CameraSnapshot[];
+  source: {
+    label: string;
+    url: string;
+  };
+};
+
+type CachedDashboardData = {
+  infrastructure: InfrastructureSnapshot;
+};
+
+function ageMinutes(snapshotTime: number, timestamp: string) {
   return Math.max(0, Math.round((snapshotTime - new Date(timestamp).getTime()) / 60_000));
 }
 
@@ -15,27 +35,37 @@ function severity(minutes: number): MapMarker['severity'] {
   return 'low';
 }
 
-const cameras = infrastructure.cameras.map((camera) => ({
-  ...camera,
-  ageMinutes: ageMinutes(camera.timestamp),
-}));
-
-const markers: MapMarker[] = cameras.map((camera) => ({
-  id: `camera-${camera.id}`,
-  name: `Traffic camera ${camera.id}`,
-  latitude: camera.latitude,
-  longitude: camera.longitude,
-  value: camera.ageMinutes === 0 ? 'Current' : `${camera.ageMinutes} min old`,
-  detail: `${camera.width} × ${camera.height} LTA traffic image captured ${new Date(camera.timestamp).toLocaleString()}`,
-  severity: severity(camera.ageMinutes),
-}));
-
-const currentCameras = cameras.filter((camera) => camera.ageMinutes <= 10);
-const delayedCameras = cameras.filter((camera) => camera.ageMinutes > 10);
-const oldestAge = Math.max(...cameras.map((camera) => camera.ageMinutes), 0);
-const previewCameras = [...cameras].sort((a, b) => a.ageMinutes - b.ageMinutes).slice(0, 6);
-
 export default function GovInfrastructure() {
+  const { data: dashboardData, loading, error } = useApi<CachedDashboardData>('/api/dashboard/cached-external');
+  const infrastructure = dashboardData?.infrastructure;
+
+  if (loading) {
+    return <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">Loading infrastructure dashboard...</div>;
+  }
+
+  if (error || !infrastructure) {
+    return <div className="rounded-lg border border-red-800 bg-red-950/40 p-4 text-sm text-red-300">Infrastructure dashboard API unavailable: {error ?? 'missing infrastructure data'}</div>;
+  }
+
+  const snapshotTime = new Date(infrastructure.timestamp).getTime();
+  const cameras = infrastructure.cameras.map((camera) => ({
+    ...camera,
+    ageMinutes: ageMinutes(snapshotTime, camera.timestamp),
+  }));
+  const markers: MapMarker[] = cameras.map((camera) => ({
+    id: `camera-${camera.id}`,
+    name: `Traffic camera ${camera.id}`,
+    latitude: camera.latitude,
+    longitude: camera.longitude,
+    value: camera.ageMinutes === 0 ? 'Current' : `${camera.ageMinutes} min old`,
+    detail: `${camera.width} x ${camera.height} LTA traffic image captured ${new Date(camera.timestamp).toLocaleString()}`,
+    severity: severity(camera.ageMinutes),
+  }));
+  const currentCameras = cameras.filter((camera) => camera.ageMinutes <= 10);
+  const delayedCameras = cameras.filter((camera) => camera.ageMinutes > 10);
+  const oldestAge = Math.max(...cameras.map((camera) => camera.ageMinutes), 0);
+  const previewCameras = [...cameras].sort((a, b) => a.ageMinutes - b.ageMinutes).slice(0, 6);
+
   return (
     <div className="space-y-6">
       <div>

@@ -1,6 +1,7 @@
 // GET /api/citizen/alerts — linked to Government Broadcast Centre
 import { CheckCircle, AlertTriangle, Bell, Shield, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
+import { useApi } from '../../lib/api';
 
 type Incident = {
   id: string;
@@ -98,8 +99,11 @@ const statusConfig: Record<string, string> = {
 };
 
 export default function PublicAlerts() {
+  const { data, loading, error } = useApi<{ incidents: Incident[]; pastIncidents: typeof pastIncidents }>('/api/citizen/incidents');
+  const incidents = data?.incidents ?? [];
+  const pastIncidents = data?.pastIncidents ?? [];
   const [subscribed, setSubscribed] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(incidents[0].id);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const activeIncidents = incidents.filter((i) => i.status !== 'resolved');
 
@@ -123,6 +127,9 @@ export default function PublicAlerts() {
           </button>
         </div>
       </div>
+
+      {loading && <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">Loading public incidents...</div>}
+      {error && <div className="rounded-lg border border-red-800 bg-red-950/40 p-4 text-sm text-red-300">Public incidents API unavailable: {error}</div>}
 
       {/* Current incidents */}
       <div>

@@ -1,6 +1,7 @@
 // GET /api/recommendations?crisisType=
 import { useState } from 'react';
 import { Brain, CheckCircle, AlertTriangle, Globe, TrendingUp, Filter } from 'lucide-react';
+import { useApi } from '../../lib/api';
 
 const allRecommendations = [
   {
@@ -84,14 +85,28 @@ const categoryStyles: Record<string, string> = {
   Infrastructure: 'bg-purple-900/50 text-purple-400',
 };
 
+type Recommendation = {
+  id: number;
+  category: string;
+  agency: string;
+  action: string;
+  reasoning: string;
+  confidence: number;
+  urgency: string;
+  region: string;
+  sources: string[];
+  comparison: string;
+};
+
 export default function GovAIRecommendations() {
+  const { data, loading, error } = useApi<{ items: Recommendation[] }>('/api/gov/recommendations');
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterAgency, setFilterAgency] = useState('All Agencies');
   const [filterSeverity, setFilterSeverity] = useState('All');
   const [filterRegion, setFilterRegion] = useState('All');
   const [dismissed, setDismissed] = useState<number[]>([]);
 
-  const filtered = allRecommendations.filter((r) => {
+  const filtered = (data?.items ?? []).filter((r) => {
     if (dismissed.includes(r.id)) return false;
     if (filterCategory !== 'All' && r.category !== filterCategory) return false;
     if (filterAgency !== 'All Agencies' && r.agency !== filterAgency) return false;
@@ -106,6 +121,9 @@ export default function GovAIRecommendations() {
         <h1 className="text-3xl font-bold mb-2">Data Projections</h1>
         <p className="text-zinc-400">Analyst-supported insights, recommended actions, and data-driven crisis response guidance</p>
       </div>
+
+      {loading && <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">Loading recommendations...</div>}
+      {error && <div className="rounded-lg border border-red-800 bg-red-950/40 p-4 text-sm text-red-300">Recommendations API unavailable: {error}</div>}
 
       <div className="bg-gradient-to-r from-purple-950/50 to-blue-950/50 border border-purple-900/50 rounded-xl p-6">
         <div className="flex items-start gap-4">

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const outputPath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../src/data/dashboard-data.json',
+  '../../backend/data/dashboard-data.json',
 );
 
 const sources = {

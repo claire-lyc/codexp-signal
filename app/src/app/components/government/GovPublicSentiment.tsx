@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { MessageSquare, AlertTriangle, CheckCircle, TrendingUp, Shield, ExternalLink, Twitter, Radio, Users } from 'lucide-react';
 import { Link } from 'react-router';
+import { useApi } from '../../lib/api';
 
 const crisisTopicSets: Record<string, { topic: string; sentiment: string; score: number; trend: string; source: string }[]> = {
   health: [
@@ -44,8 +45,20 @@ const crisisFilters = [
 ];
 
 export default function GovPublicSentiment() {
+  const { data: sentiment, loading, error } = useApi<{
+    stats: { overallScore: number; misinformationFlagged: number; pendingVerification: number; publicAnxietyLevel: string };
+    crisisTopicSets?: typeof crisisTopicSets;
+    misinfoQueue: typeof misinfoQueue;
+    socialSources: typeof socialSources;
+    crisisFilters?: typeof crisisFilters;
+    summary: { body: string; confidence: number; sources: string };
+  }>('/api/gov/sentiment');
   const [activeCrisis, setActiveCrisis] = useState('health');
-  const sentimentData = crisisTopicSets[activeCrisis];
+  const activeTopicSets = sentiment?.crisisTopicSets ?? crisisTopicSets;
+  const sentimentData = activeTopicSets[activeCrisis as keyof typeof activeTopicSets] ?? [];
+  const activeMisinfoQueue = sentiment?.misinfoQueue ?? [];
+  const activeSocialSources = sentiment?.socialSources ?? [];
+  const activeCrisisFilters = sentiment?.crisisFilters ?? crisisFilters;
 
   return (
     <div className="space-y-6">
@@ -54,6 +67,9 @@ export default function GovPublicSentiment() {
         <p className="text-zinc-400">Social monitoring, misinformation detection, and public anxiety tracking — linked to Form Handling and Citizen Forum</p>
       </div>
 
+      {loading && <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">Loading sentiment data...</div>}
+      {error && <div className="rounded-lg border border-red-800 bg-red-950/40 p-4 text-sm text-red-300">Sentiment API unavailable: {error}</div>}
+
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
@@ -61,7 +77,7 @@ export default function GovPublicSentiment() {
             <div className="p-2 bg-green-950 rounded-lg"><MessageSquare className="w-5 h-5 text-green-500" /></div>
             <TrendingUp className="w-5 h-5 text-green-500" />
           </div>
-          <div className="text-2xl font-bold mb-1">59%</div>
+          <div className="text-2xl font-bold mb-1">{sentiment?.stats.overallScore ?? 0}%</div>
           <div className="text-sm text-zinc-400">Overall Sentiment Score</div>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
@@ -69,7 +85,7 @@ export default function GovPublicSentiment() {
             <div className="p-2 bg-red-950 rounded-lg"><AlertTriangle className="w-5 h-5 text-red-500" /></div>
             <span className="text-xs px-2 py-1 bg-red-950 text-red-400 rounded">Active</span>
           </div>
-          <div className="text-2xl font-bold mb-1">47</div>
+          <div className="text-2xl font-bold mb-1">{sentiment?.stats.misinformationFlagged ?? 0}</div>
           <div className="text-sm text-zinc-400">Misinformation Flagged</div>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
@@ -77,7 +93,7 @@ export default function GovPublicSentiment() {
             <div className="p-2 bg-yellow-950 rounded-lg"><Shield className="w-5 h-5 text-yellow-500" /></div>
             <span className="text-xs px-2 py-1 bg-yellow-950 text-yellow-400 rounded">Review</span>
           </div>
-          <div className="text-2xl font-bold mb-1">12</div>
+          <div className="text-2xl font-bold mb-1">{sentiment?.stats.pendingVerification ?? 0}</div>
           <div className="text-sm text-zinc-400">Pending Verification</div>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
@@ -85,7 +101,7 @@ export default function GovPublicSentiment() {
             <div className="p-2 bg-blue-950 rounded-lg"><Users className="w-5 h-5 text-blue-500" /></div>
             <CheckCircle className="w-5 h-5 text-green-500" />
           </div>
-          <div className="text-2xl font-bold mb-1">Medium</div>
+          <div className="text-2xl font-bold mb-1">{sentiment?.stats.publicAnxietyLevel ?? 'Loading'}</div>
           <div className="text-sm text-zinc-400">Public Anxiety Level</div>
         </div>
       </div>
@@ -97,7 +113,7 @@ export default function GovPublicSentiment() {
           Social Media & Citizen Report Sources
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {socialSources.map((src) => (
+          {activeSocialSources.map((src) => (
             <div key={src.platform} className="bg-zinc-800 rounded-lg p-4">
               <div className="font-medium text-sm mb-2">{src.platform}</div>
               <div className="text-2xl font-bold mb-1">{src.posts.toLocaleString()}</div>
@@ -115,7 +131,7 @@ export default function GovPublicSentiment() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Topic Sentiment by Crisis</h2>
             <div className="flex gap-1">
-              {crisisFilters.map((f) => (
+              {activeCrisisFilters.map((f) => (
                 <button
                   key={f.id}
                   onClick={() => setActiveCrisis(f.id)}
@@ -166,7 +182,7 @@ export default function GovPublicSentiment() {
             </Link>
           </div>
           <div className="space-y-3">
-            {misinfoQueue.map((item) => (
+            {activeMisinfoQueue.map((item) => (
               <div
                 key={item.id}
                 className={`p-4 rounded-lg border ${item.priority === 'high' ? 'bg-red-950/30 border-red-800' : 'bg-yellow-950/30 border-yellow-800'}`}
@@ -225,11 +241,11 @@ export default function GovPublicSentiment() {
           <div className="flex-1">
             <h3 className="font-semibold mb-2">Analyst-Supported Sentiment Summary</h3>
             <p className="text-sm text-zinc-300 mb-3">
-              Increasing public concern regarding Panadol Menstrual shortage and dengue cluster expansion. Recommend proactive communication campaign to address misinformation and clarify supply status. 47 flagged instances require human verification before public correction.
+              {sentiment?.summary.body ?? 'No sentiment summary available.'}
             </p>
             <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-              <span className="px-2 py-1 bg-zinc-800 rounded">Confidence: 76%</span>
-              <span className="px-2 py-1 bg-zinc-800 rounded">Sources: Twitter, Citizen Reports, Forum</span>
+              <span className="px-2 py-1 bg-zinc-800 rounded">Confidence: {sentiment?.summary.confidence ?? 0}%</span>
+              <span className="px-2 py-1 bg-zinc-800 rounded">Sources: {sentiment?.summary.sources ?? 'None'}</span>
               <span className="px-2 py-1 bg-yellow-900 text-yellow-400 rounded">Human Approval Required</span>
             </div>
           </div>

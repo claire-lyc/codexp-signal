@@ -6,73 +6,26 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { AlertCircle, MapPin, Activity, Cloud, Package, Shield, ChevronRight, Filter, Pin } from 'lucide-react';
 import { Link } from 'react-router';
 import SingaporeRegionMap from '../SingaporeRegionMap';
+import { useApi } from '../../lib/api';
 
-const crisisCards = [
-  {
-    id: 'covid',
-    label: 'Covid-19',
-    type: 'Health',
-    severity: 'medium',
-    path: '/gov/pandemic',
-    stats: [
-      { label: 'Active cases today', value: '378', delta: '+12%' },
-      { label: 'ICU occupancy', value: '25', delta: '+5' },
-    ],
-    icon: Activity,
-    color: 'orange',
-  },
-  {
-    id: 'dengue',
-    label: 'Dengue',
-    type: 'Health',
-    severity: 'high',
-    path: '/gov/pandemic',
-    stats: [
-      { label: 'Red zone clusters', value: '14', delta: '+3' },
-      { label: 'Cases this week', value: '212', delta: '+8%' },
-    ],
-    icon: Activity,
-    color: 'red',
-  },
-  {
-    id: 'flood',
-    label: 'Flash Flood Risk',
-    type: 'Weather',
-    severity: 'high',
-    path: '/gov/weather',
-    stats: [
-      { label: 'High-risk zones', value: '6', delta: '' },
-      { label: 'Peak rainfall (1h)', value: '45mm', delta: 'Alert' },
-    ],
-    icon: Cloud,
-    color: 'blue',
-  },
-  {
-    id: 'panadol',
-    label: 'Panadol Shortage',
-    type: 'Supply Chain',
-    severity: 'medium',
-    path: '/gov/supply-chain',
-    stats: [
-      { label: 'Affected outlets', value: '87', delta: '' },
-      { label: 'Est. restock', value: '4 days', delta: '' },
-    ],
-    icon: Package,
-    color: 'yellow',
-  },
-  {
-    id: 'cyber',
-    label: 'Cyber Incident',
-    type: 'Cybersecurity',
-    severity: 'low',
-    path: '/gov/cybersecurity',
-    stats: [
-      { label: 'Active threats', value: '3', delta: '-1' },
-    ],
-    icon: Shield,
-    color: 'purple',
-  },
-];
+const iconMap = { Activity, Cloud, Package, Shield };
+type OverviewData = {
+  crises: unknown[];
+  alerts: typeof alerts;
+  overview: {
+    crisisCards: Array<{
+      id: string;
+      label: string;
+      type: string;
+      severity: string;
+      path: string;
+      stats: Array<{ label: string; value: string; delta: string }>;
+      icon: string;
+    }>;
+    incidentTrend: Array<{ date: string; incidents: number }>;
+    riskSummary: { body: string; confidence: number; sources: string };
+  };
+};
 
 const severityBorder: Record<string, string> = {
   high: 'border-red-700',
@@ -85,32 +38,22 @@ const severityBadge: Record<string, string> = {
   low: 'bg-blue-900 text-blue-400',
 };
 
-const alerts = [
-  { id: 1, type: 'Weather', severity: 'high', message: 'Flash flood risk in Orchard & East Coast', region: 'East/Central', time: '10:23 AM' },
-  { id: 2, type: 'Health', severity: 'high', message: 'New dengue red zone: Bedok North Ave 1', region: 'East', time: '09:45 AM' },
-  { id: 3, type: 'Supply', severity: 'medium', message: 'Panadol Menstrual out-of-stock at 87 outlets', region: 'Nationwide', time: '08:30 AM' },
-  { id: 4, type: 'Infrastructure', severity: 'medium', message: 'Power grid fluctuation in Woodlands', region: 'North', time: '07:15 AM' },
-  { id: 5, type: 'Health', severity: 'medium', message: 'New Covid-19 cluster at Jurong West MRT', region: 'West', time: '06:50 AM' },
-];
-
-const trendData = [
-  { date: 'May 13', incidents: 4 },
-  { date: 'May 14', incidents: 5 },
-  { date: 'May 15', incidents: 7 },
-  { date: 'May 16', incidents: 6 },
-  { date: 'May 17', incidents: 8 },
-  { date: 'May 18', incidents: 9 },
-  { date: 'May 19', incidents: 8 },
-];
+const alerts: Array<{ id: number | string; type: string; severity: string; message: string; region: string; time?: string }> = [];
+const trendData: Array<{ date: string; incidents: number }> = [];
 
 const filterTypes = ['All', 'Health', 'Weather', 'Supply', 'Infrastructure', 'Cybersecurity'];
 const filterSeverities = ['All', 'High', 'Medium', 'Low'];
 const filterRegions = ['All', 'North', 'South', 'East', 'West', 'Central', 'Nationwide'];
 
 export default function GovOverview() {
+  const { data, loading, error } = useApi<OverviewData>('/api/gov/overview');
   const [filterType, setFilterType] = useState('All');
   const [filterSeverity, setFilterSeverity] = useState('All');
   const [filterRegion, setFilterRegion] = useState('All');
+  const crisisCards = data?.overview?.crisisCards ?? [];
+  const alerts = data?.alerts ?? [];
+  const trendData = data?.overview?.incidentTrend ?? [];
+  const riskSummary = data?.overview?.riskSummary;
 
   const filteredAlerts = alerts.filter((a) => {
     const typeMatch = filterType === 'All' || a.type === filterType;
@@ -126,6 +69,9 @@ export default function GovOverview() {
         <p className="text-zinc-400">Real-time overview of Singapore's crisis response systems</p>
       </div>
 
+      {loading && <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">Loading dashboard data...</div>}
+      {error && <div className="rounded-lg border border-red-800 bg-red-950/40 p-4 text-sm text-red-300">Dashboard API unavailable: {error}</div>}
+
       {/* Horizontally scrollable crisis cards — GET /api/crises?status=active */}
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -134,7 +80,7 @@ export default function GovOverview() {
         </div>
         <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
           {crisisCards.map((card) => {
-            const Icon = card.icon;
+            const Icon = iconMap[card.icon as keyof typeof iconMap] ?? AlertCircle;
             return (
               <Link
                 key={card.id}
@@ -305,11 +251,11 @@ export default function GovOverview() {
           <div className="flex-1">
             <h3 className="font-semibold mb-2">Analyst-Supported Risk Summary</h3>
             <p className="text-sm text-zinc-300 mb-3">
-              Data projections indicate a moderate increase in respiratory cases over the next 72 hours due to deteriorating air quality. Supply disruptions for Panadol Menstrual may escalate if emergency procurement is not initiated. Recommend activating flood response protocols in eastern zones.
+              {riskSummary?.body ?? 'No risk summary available.'}
             </p>
             <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-              <span className="px-2 py-1 bg-zinc-800 rounded">Confidence: 87%</span>
-              <span className="px-2 py-1 bg-zinc-800 rounded">Sources: MOH, NEA, Enterprise SG</span>
+              <span className="px-2 py-1 bg-zinc-800 rounded">Confidence: {riskSummary?.confidence ?? 0}%</span>
+              <span className="px-2 py-1 bg-zinc-800 rounded">Sources: {riskSummary?.sources ?? 'None'}</span>
               <span className="px-2 py-1 bg-yellow-900 text-yellow-400 rounded">Human Approval Required</span>
             </div>
           </div>
