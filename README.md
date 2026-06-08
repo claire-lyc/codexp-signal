@@ -166,6 +166,14 @@ npm run db:seed:profiles
 
 This creates `MOH`, `PUB`, `LTA`, `SCDF`, `SPF`, `NEA`, `Enterprise SG`, `Form Handler`, and `Admin`. For demo use, each username has the same password as the username.
 
+Create the demo citizen user:
+
+```bash
+npm run db:seed:citizen
+```
+
+This creates `user` / `user` for the public portal.
+
 Reset citizen/form-handling tickets to the committed demo set:
 
 ```bash

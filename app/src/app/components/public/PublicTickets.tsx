@@ -160,7 +160,12 @@ export default function PublicTickets() {
       setTickets(data.items);
       setSelectedTicket((current) => {
         if (!data.items.length) return null;
-        return data.items.find((ticket) => ticket.id === current?.id) ?? current ?? data.items[0];
+        const matching = data.items.find((ticket) => ticket.id === current?.id);
+        if (!matching) return current ?? data.items[0];
+        return {
+          ...matching,
+          images: current?.images?.some((image) => image.previewUrl) ? current.images : matching.images,
+        };
       });
     } catch {
       if (!quiet) {
@@ -170,6 +175,23 @@ export default function PublicTickets() {
     } finally {
       if (!quiet) setTicketsLoading(false);
     }
+  };
+
+  const fetchTicketDetails = async (ticketId: string) => {
+    try {
+      const response = await fetch(apiUrl(`/api/citizen/reports/${ticketId}`), { headers: authHeaders() });
+      if (!response.ok) throw new Error('Unable to load ticket');
+      const data = await response.json() as { item: TicketRecord };
+      setSelectedTicket(data.item);
+      setTickets((current) => current.map((ticket) => (ticket.id === data.item.id ? data.item : ticket)));
+    } catch {
+      // Keep the lightweight list item selected if detail fetch is unavailable.
+    }
+  };
+
+  const openTicket = (ticket: TicketRecord) => {
+    setSelectedTicket(ticket);
+    void fetchTicketDetails(ticket.id);
   };
 
   const handleLogin = async () => {
@@ -531,7 +553,7 @@ export default function PublicTickets() {
 
           <div className="space-y-3">
             {(tickets.length ? tickets : createdTicket?.item ? [createdTicket.item] : []).map((ticket) => (
-              <TicketCard key={ticket.id} ticket={ticket} selected={selectedTicket?.id === ticket.id} onClick={() => setSelectedTicket(ticket)} />
+              <TicketCard key={ticket.id} ticket={ticket} selected={selectedTicket?.id === ticket.id} onClick={() => openTicket(ticket)} />
             ))}
             {ticketsLoading && (
               <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
@@ -805,8 +827,18 @@ function groupMessages(ticket: TicketRecord): MessageGroupData[] {
       visibility: 'public',
       createdAt: 'Original report',
       bodies: [ticket.message],
-      images: ticket.images ?? [],
+      images: [],
     },
+    ...((ticket.images ?? []).length
+      ? [{
+          id: `${ticket.id}-original-images`,
+          author: ticket.reporter,
+          visibility: 'public' as const,
+          createdAt: 'Attached photos',
+          bodies: [],
+          images: ticket.images ?? [],
+        }]
+      : []),
     ...(ticket.comments ?? [])
       .filter((comment) => comment.visibility === 'public')
       .map((comment) => ({
@@ -821,7 +853,13 @@ function groupMessages(ticket: TicketRecord): MessageGroupData[] {
 
   return messages.reduce<MessageGroupData[]>((groups, message) => {
     const previous = groups.at(-1);
-    if (previous && previous.author === message.author && previous.visibility === message.visibility) {
+    if (
+      previous &&
+      previous.author === message.author &&
+      previous.visibility === message.visibility &&
+      previous.images.length === 0 &&
+      message.images.length === 0
+    ) {
       previous.bodies.push(...message.bodies);
       previous.images.push(...message.images);
       previous.createdAt = message.createdAt;

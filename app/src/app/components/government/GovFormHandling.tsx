@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
+import { useSearchParams } from 'react-router';
 import {
   Bell,
   CheckCircle,
@@ -172,6 +173,7 @@ const statusColors: Record<TicketStatus, string> = {
 };
 
 export default function GovFormHandling() {
+  const [searchParams] = useSearchParams();
   const [tickets, setTickets] = useState<Ticket[]>(seedTickets);
   const [selectedTicketId, setSelectedTicketId] = useState(seedTickets[0]?.id ?? '');
   const [query, setQuery] = useState('');
@@ -187,6 +189,7 @@ export default function GovFormHandling() {
 
   useEffect(() => {
     let active = true;
+    const requestedTicket = searchParams.get('ticket');
 
     const loadTickets = () => {
       fetch(apiUrl('/api/tickets'), { headers: authHeaders() })
@@ -198,7 +201,11 @@ export default function GovFormHandling() {
           if (!active) return;
           setUsingBackend(true);
           setTickets(data.items);
-          setSelectedTicketId((current) => current || data.items[0]?.id || '');
+          setSelectedTicketId((current) => {
+            const next = requestedTicket || current || data.items[0]?.id || '';
+            if (next) void fetchTicketDetails(next);
+            return next;
+          });
         })
         .catch(() => {
           if (!active) return;
@@ -216,7 +223,7 @@ export default function GovFormHandling() {
       active = false;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [searchParams]);
 
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -239,6 +246,23 @@ export default function GovFormHandling() {
 
   const syncTicket = (updated: Ticket) => {
     setTickets((current) => current.map((ticket) => (ticket.id === updated.id ? updated : ticket)));
+  };
+
+  const fetchTicketDetails = async (ticketId: string) => {
+    try {
+      const response = await fetch(apiUrl(`/api/tickets/${ticketId}`), { headers: authHeaders() });
+      if (!response.ok) throw new Error('Ticket detail unavailable');
+      const data = await response.json() as { item: Ticket };
+      syncTicket(data.item);
+      setUsingBackend(true);
+    } catch {
+      // Keep the lightweight list item selected if detail fetch fails.
+    }
+  };
+
+  const selectTicket = (ticketId: string) => {
+    setSelectedTicketId(ticketId);
+    void fetchTicketDetails(ticketId);
   };
 
   const updateStatus = async (ticket: Ticket, status: TicketStatus) => {
@@ -388,7 +412,7 @@ export default function GovFormHandling() {
             {filtered.map((ticket) => (
               <button
                 key={ticket.id}
-                onClick={() => setSelectedTicketId(ticket.id)}
+                onClick={() => selectTicket(ticket.id)}
                 className={`w-full text-left p-3 border-b border-zinc-800 hover:bg-zinc-800/60 transition-colors ${
                   selectedTicket?.id === ticket.id ? 'bg-zinc-800' : ''
                 }`}
@@ -491,7 +515,12 @@ export default function GovFormHandling() {
                       </div>
                       <p className="text-sm text-zinc-300 leading-relaxed">{selectedTicket.message}</p>
                       {selectedTicket.images?.length ? (
-                        <div className="mt-3 grid grid-cols-2 gap-2">
+                        <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+                          <div className="mb-2 flex items-center gap-2 text-xs text-zinc-500">
+                            <Image className="h-3.5 w-3.5" />
+                            Attached photo{selectedTicket.images.length > 1 ? 's' : ''}
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
                           {selectedTicket.images.map((image) =>
                             image.previewUrl ? (
                               <img key={image.id} src={image.previewUrl} alt={image.filename ?? 'Ticket attachment'} className="h-36 w-full rounded-lg border border-zinc-800 object-cover" />
@@ -502,6 +531,7 @@ export default function GovFormHandling() {
                               </div>
                             )
                           )}
+                          </div>
                         </div>
                       ) : null}
                       <div className="flex items-center gap-2 mt-2 text-xs text-zinc-500"><MapPin className="w-3 h-3" />{selectedTicket.location}</div>

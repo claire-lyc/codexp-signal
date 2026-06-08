@@ -173,7 +173,7 @@ export async function listTickets(filters: {
     values,
   );
 
-  return hydrateTickets(reports);
+  return hydrateTickets(reports, { includeImagePreviews: false });
 }
 
 export async function getTicketByPublicId(publicReportId: string) {
@@ -208,7 +208,7 @@ export async function getTicketByPublicId(publicReportId: string) {
     [publicReportId],
   );
 
-  const [ticket] = await hydrateTickets(reports);
+  const [ticket] = await hydrateTickets(reports, { includeImagePreviews: true });
   return ticket ?? null;
 }
 
@@ -244,7 +244,7 @@ export async function listTicketsForReporter(userId: string) {
     [userId],
   );
 
-  return hydrateTickets(reports);
+  return hydrateTickets(reports, { includeImagePreviews: false });
 }
 
 export async function createCitizenTicket(input: {
@@ -557,10 +557,11 @@ export async function pingTicketAgencies(id: string, agencyCodes: string[], ping
   };
 }
 
-async function hydrateTickets(reports: ReportRow[]) {
+async function hydrateTickets(reports: ReportRow[], options: { includeImagePreviews?: boolean } = {}) {
   if (!reports.length) return [];
 
   const reportIds = reports.map((report) => report.id);
+  const includeImagePreviews = options.includeImagePreviews === true;
   const [comments, images, chatAttachments, pings, childGroups] = await Promise.all([
     query<CommentRow>(
       `
@@ -605,12 +606,21 @@ async function hydrateTickets(reports: ReportRow[]) {
     ),
     query<ImageRow>(
       `
-        SELECT id, report_id, original_filename, mime_type, byte_size, storage_key, processed_metadata, processing_status, created_at
+        SELECT
+          id,
+          report_id,
+          original_filename,
+          mime_type,
+          byte_size,
+          storage_key,
+          CASE WHEN $2 THEN processed_metadata ELSE '{}'::jsonb END AS processed_metadata,
+          processing_status,
+          created_at
         FROM citizen.report_images
         WHERE report_id = ANY($1::uuid[])
         ORDER BY created_at ASC
       `,
-      [reportIds],
+      [reportIds, includeImagePreviews],
     ),
     query<ChatAttachmentRow>(
       `
@@ -622,14 +632,14 @@ async function hydrateTickets(reports: ReportRow[]) {
           attachments.mime_type,
           attachments.byte_size,
           attachments.storage_key,
-          attachments.preview_url,
+          CASE WHEN $2 THEN attachments.preview_url ELSE NULL END AS preview_url,
           attachments.created_at
         FROM citizen.report_chat_attachments attachments
         JOIN citizen.report_chat_messages messages ON messages.id = attachments.message_id
         WHERE messages.report_id = ANY($1::uuid[])
         ORDER BY attachments.created_at ASC
       `,
-      [reportIds],
+      [reportIds, includeImagePreviews],
     ),
     query<PingRow>(
       `

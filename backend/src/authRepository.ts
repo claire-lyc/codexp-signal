@@ -21,6 +21,15 @@ export type AuthenticatedUser = AuthUser & {
   clearance_level: string | null;
 };
 
+export type NotificationPreferences = {
+  alertNotifications: boolean;
+  replyNotifications: boolean;
+  agencyPingNotifications: boolean;
+  volunteerNotifications: boolean;
+  smsEnabled: boolean;
+  phoneNumber: string | null;
+};
+
 export async function createPasswordUser(input: {
   email: string;
   password: string;
@@ -233,6 +242,154 @@ export async function upsertPasswordUser(input: {
   } finally {
     client.release();
   }
+}
+
+export async function upsertCitizenPasswordUser(input: {
+  username: string;
+  password: string;
+  displayName?: string;
+  email?: string;
+  tags?: string[];
+}) {
+  const username = input.username.trim();
+  const email = input.email ? normalizeEmail(input.email) : `${username.toLowerCase().replace(/\s+/g, '-')}.demo@signal.local`;
+  const passwordHash = await bcrypt.hash(input.password, 12);
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+    const existingUser = await client.query<{ id: string }>(
+      `SELECT id FROM auth.users WHERE lower(username) = lower($1) LIMIT 1`,
+      [username],
+    );
+
+    const userResult = existingUser.rows[0]
+      ? await client.query<AuthUser>(
+          `
+            UPDATE auth.users
+            SET actor_type = 'citizen', display_name = $2, email = $3, username = $4, tags = $5, updated_at = now()
+            WHERE id = $1
+            RETURNING id, actor_type, display_name, email, username, tags, created_at, updated_at
+          `,
+          [existingUser.rows[0].id, input.displayName ?? username, email, username, input.tags ?? ['Citizen']],
+        )
+      : await client.query<AuthUser>(
+          `
+            INSERT INTO auth.users (actor_type, display_name, email, username, tags)
+            VALUES ('citizen', $1, $2, $3, $4)
+            RETURNING id, actor_type, display_name, email, username, tags, created_at, updated_at
+          `,
+          [input.displayName ?? username, email, username, input.tags ?? ['Citizen']],
+        );
+    const user = userResult.rows[0];
+
+    await client.query(
+      `
+        INSERT INTO auth.password_credentials (user_id, password_hash)
+        VALUES ($1, $2)
+        ON CONFLICT (user_id)
+        DO UPDATE SET password_hash = EXCLUDED.password_hash, password_updated_at = now()
+      `,
+      [user.id, passwordHash],
+    );
+
+    await client.query('COMMIT');
+    return getUserById(user.id);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function getNotificationPreferences(userId: string): Promise<NotificationPreferences> {
+  await query(
+    `
+      INSERT INTO auth.user_notification_preferences (user_id)
+      VALUES ($1)
+      ON CONFLICT (user_id) DO NOTHING
+    `,
+    [userId],
+  );
+  const rows = await query<{
+    alert_notifications: boolean;
+    reply_notifications: boolean;
+    agency_ping_notifications: boolean;
+    volunteer_notifications: boolean;
+    sms_enabled: boolean;
+    phone_number: string | null;
+  }>(
+    `
+      SELECT alert_notifications, reply_notifications, agency_ping_notifications, volunteer_notifications, sms_enabled, phone_number
+      FROM auth.user_notification_preferences
+      WHERE user_id = $1
+    `,
+    [userId],
+  );
+  const row = rows[0];
+  return {
+    alertNotifications: row?.alert_notifications ?? true,
+    replyNotifications: row?.reply_notifications ?? true,
+    agencyPingNotifications: row?.agency_ping_notifications ?? true,
+    volunteerNotifications: row?.volunteer_notifications ?? false,
+    smsEnabled: row?.sms_enabled ?? false,
+    phoneNumber: row?.phone_number ?? null,
+  };
+}
+
+export async function updateNotificationPreferences(userId: string, input: Partial<NotificationPreferences>) {
+  const smsEnabled = Boolean(input.smsEnabled);
+  const phoneNumber = typeof input.phoneNumber === 'string' && input.phoneNumber.trim() ? input.phoneNumber.trim() : null;
+  const rows = await query<{
+    alert_notifications: boolean;
+    reply_notifications: boolean;
+    agency_ping_notifications: boolean;
+    volunteer_notifications: boolean;
+    sms_enabled: boolean;
+    phone_number: string | null;
+  }>(
+    `
+      INSERT INTO auth.user_notification_preferences (
+        user_id,
+        alert_notifications,
+        reply_notifications,
+        agency_ping_notifications,
+        volunteer_notifications,
+        sms_enabled,
+        phone_number
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (user_id)
+      DO UPDATE SET
+        alert_notifications = EXCLUDED.alert_notifications,
+        reply_notifications = EXCLUDED.reply_notifications,
+        agency_ping_notifications = EXCLUDED.agency_ping_notifications,
+        volunteer_notifications = EXCLUDED.volunteer_notifications,
+        sms_enabled = EXCLUDED.sms_enabled,
+        phone_number = EXCLUDED.phone_number,
+        updated_at = now()
+      RETURNING alert_notifications, reply_notifications, agency_ping_notifications, volunteer_notifications, sms_enabled, phone_number
+    `,
+    [
+      userId,
+      input.alertNotifications ?? true,
+      input.replyNotifications ?? true,
+      input.agencyPingNotifications ?? true,
+      input.volunteerNotifications ?? false,
+      smsEnabled,
+      smsEnabled ? phoneNumber : null,
+    ],
+  );
+  const row = rows[0];
+  return {
+    alertNotifications: row.alert_notifications,
+    replyNotifications: row.reply_notifications,
+    agencyPingNotifications: row.agency_ping_notifications,
+    volunteerNotifications: row.volunteer_notifications,
+    smsEnabled: row.sms_enabled,
+    phoneNumber: row.phone_number,
+  };
 }
 
 export async function createSession(input: {

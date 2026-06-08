@@ -1,7 +1,9 @@
 // GET /api/citizen/alerts — linked to Government Broadcast Centre
 import { CheckCircle, AlertTriangle, Bell, Shield, ChevronRight } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApi } from '../../lib/api';
+import { apiUrl } from '../../lib/api';
+import { authHeaders } from '../../lib/auth';
 
 type Incident = {
   id: string;
@@ -12,6 +14,17 @@ type Incident = {
   status: 'active' | 'monitoring' | 'resolved';
   verified: boolean;
   updates: { time: string; text: string }[];
+};
+
+type BroadcastAlert = {
+  id: string;
+  title: string;
+  message: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  target: string;
+  status: 'ongoing' | 'resolved';
+  time: string;
+  notificationAction?: 'notify' | 'ignore' | null;
 };
 
 const incidents: Incident[] = [
@@ -100,12 +113,34 @@ const statusConfig: Record<string, string> = {
 
 export default function PublicAlerts() {
   const { data, loading, error } = useApi<{ incidents: Incident[]; pastIncidents: typeof pastIncidents }>('/api/citizen/incidents');
+  const [broadcasts, setBroadcasts] = useState<BroadcastAlert[]>([]);
   const incidents = data?.incidents ?? [];
   const pastIncidents = data?.pastIncidents ?? [];
   const [subscribed, setSubscribed] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const activeIncidents = incidents.filter((i) => i.status !== 'resolved');
+  const activeBroadcasts = broadcasts.filter((item) => item.status === 'ongoing');
+  const resolvedBroadcasts = broadcasts.filter((item) => item.status === 'resolved');
+
+  useEffect(() => {
+    fetch(apiUrl('/api/citizen/broadcasts'), { headers: authHeaders() })
+      .then((response) => {
+        if (!response.ok) throw new Error('Broadcasts unavailable');
+        return response.json() as Promise<{ items: BroadcastAlert[] }>;
+      })
+      .then((data) => setBroadcasts(data.items))
+      .catch(() => setBroadcasts([]));
+  }, []);
+
+  const setBroadcastAction = async (id: string, action: 'notify' | 'ignore') => {
+    setBroadcasts((current) => current.map((item) => item.id === id ? { ...item, notificationAction: action } : item));
+    await fetch(apiUrl(`/api/citizen/broadcasts/${id}/action`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ action }),
+    }).catch(() => undefined);
+  };
 
   return (
     <div className="space-y-8 max-w-3xl mx-auto">
@@ -130,6 +165,41 @@ export default function PublicAlerts() {
 
       {loading && <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">Loading public incidents...</div>}
       {error && <div className="rounded-lg border border-red-800 bg-red-950/40 p-4 text-sm text-red-300">Public incidents API unavailable: {error}</div>}
+
+      {activeBroadcasts.length > 0 && (
+        <div id="broadcasts">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-xl font-bold">Government Broadcasts</h2>
+            <span className="text-sm text-zinc-400">{activeBroadcasts.length} ongoing</span>
+          </div>
+          <div className="space-y-3">
+            {activeBroadcasts.map((broadcast) => {
+              const cfg = severityConfig[broadcast.severity];
+              return (
+                <div key={broadcast.id} className={`rounded-xl border p-5 ${cfg.banner}`}>
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    <span className="font-semibold">{broadcast.title}</span>
+                    <span className={`rounded px-1.5 py-0.5 text-xs ${cfg.badge}`}>{broadcast.severity.toUpperCase()}</span>
+                    <span className="text-xs text-zinc-500">{broadcast.time}</span>
+                  </div>
+                  <p className="text-sm text-zinc-300">{broadcast.message}</p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                    <span>{broadcast.target}</span>
+                    <span>Government Verified</span>
+                  </div>
+                  {!broadcast.notificationAction && (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button onClick={() => setBroadcastAction(broadcast.id, 'notify')} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">Turn on notification</button>
+                      <button onClick={() => setBroadcastAction(broadcast.id, 'ignore')} className="rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-700">Ignore</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Current incidents */}
       <div>
@@ -209,6 +279,22 @@ export default function PublicAlerts() {
       <div>
         <h2 className="text-lg font-semibold mb-4 text-zinc-400">Past Incidents</h2>
         <div className="space-y-6">
+          {resolvedBroadcasts.length > 0 && (
+            <div>
+              <div className="text-sm font-medium text-zinc-500 mb-3 border-b border-zinc-800 pb-2">Resolved broadcasts</div>
+              <div className="space-y-2">
+                {resolvedBroadcasts.map((broadcast) => (
+                  <div key={broadcast.id} className="px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-lg">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-medium text-sm">{broadcast.title}</span>
+                      <span className="text-xs px-2 py-0.5 bg-green-900/50 text-green-400 rounded">Resolved</span>
+                    </div>
+                    <div className="text-xs text-zinc-500">{broadcast.target} - {broadcast.message}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {pastIncidents.map((group) => (
             <div key={group.date}>
               <div className="text-sm font-medium text-zinc-500 mb-3 border-b border-zinc-800 pb-2">{group.date}</div>

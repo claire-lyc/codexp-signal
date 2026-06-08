@@ -30,6 +30,13 @@ import {
   listCrises,
 } from './dashboardRepository.js';
 import { startExternalDashboardRefresh } from './externalDashboardRefresh.js';
+import {
+  createBroadcast,
+  listBroadcasts,
+  resolveBroadcast,
+  setBroadcastAction,
+  type BroadcastSeverity,
+} from './broadcastRepository.js';
 import { detectPotentialMisinformation } from './misinformationDetector.js';
 import { detectTicketUrgency } from './severityDetector.js';
 
@@ -150,6 +157,19 @@ app.get('/api/tickets', ...requireGovUser, async (request, response, next) => {
         query: stringParam(request.query.query),
       }),
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/tickets/:id', ...requireGovUser, async (request, response, next) => {
+  try {
+    const ticket = await getTicketByPublicId(request.params.id);
+    if (!ticket) {
+      response.status(404).json({ error: 'Ticket not found' });
+      return;
+    }
+    response.json({ item: ticket });
   } catch (error) {
     next(error);
   }
@@ -390,6 +410,79 @@ app.get('/api/citizen/alerts', async (request, response, next) => {
   }
 });
 
+app.get('/api/broadcasts', ...requireGovUser, async (_request, response, next) => {
+  try {
+    response.json({ items: await listBroadcasts({ includeResolved: true }) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/broadcasts', ...requireGovUser, async (request: AuthenticatedRequest, response, next) => {
+  const title = stringBody(request.body?.title);
+  const message = stringBody(request.body?.message);
+  const severity = stringBody(request.body?.severity);
+  if (!title || !message || !isBroadcastSeverity(severity)) {
+    response.status(400).json({ error: 'Valid title, message, and severity are required' });
+    return;
+  }
+
+  try {
+    const item = await createBroadcast({
+      createdByUserId: request.user?.id,
+      title,
+      message,
+      severity,
+      targetType: request.body?.targetType === 'regions' ? 'regions' : request.body?.targetType === 'agencies' ? 'agencies' : 'all_citizens',
+      targetRegions: Array.isArray(request.body?.targetRegions) ? request.body.targetRegions.filter((item: unknown) => typeof item === 'string') : [],
+      platforms: Array.isArray(request.body?.platforms) ? request.body.platforms.filter((item: unknown) => typeof item === 'string') : ['web'],
+    });
+    response.status(201).json({ item });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch('/api/broadcasts/:id/resolve', ...requireGovUser, async (request, response, next) => {
+  try {
+    const item = await resolveBroadcast(request.params.id);
+    if (!item) {
+      response.status(404).json({ error: 'Broadcast not found' });
+      return;
+    }
+    response.json({ item });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/citizen/broadcasts', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
+  try {
+    response.json({ items: await listBroadcasts({ includeResolved: true, userId: request.user?.id }) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/citizen/broadcasts/:id/action', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
+  const action = request.body?.action === 'ignore' ? 'ignore' : request.body?.action === 'notify' ? 'notify' : null;
+  if (!action) {
+    response.status(400).json({ error: 'Valid action is required' });
+    return;
+  }
+  if (!request.user?.id) {
+    response.status(401).json({ error: 'Bearer token is required' });
+    return;
+  }
+
+  try {
+    await setBroadcastAction(request.user.id, request.params.id, action);
+    response.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get('/api/gov/overview', ...requireGovUser, async (_request, response, next) => {
   try {
     const [crises, alerts, overview] = await Promise.all([
@@ -534,6 +627,10 @@ function parseImageMetadata(value: unknown) {
 
 function isTicketStatus(value: unknown): value is TicketStatus {
   return value === 'open' || value === 'in-progress' || value === 'resolved' || value === 'grouped';
+}
+
+function isBroadcastSeverity(value: unknown): value is BroadcastSeverity {
+  return value === 'critical' || value === 'high' || value === 'medium' || value === 'low';
 }
 
 async function getSnapshotResponse(snapshotKey: string) {

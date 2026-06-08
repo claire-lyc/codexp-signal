@@ -20,6 +20,13 @@ export default function RequireAuth() {
     fetch(apiUrl('/api/auth/me'), { headers: authHeaders() })
       .then((response) => {
         if (!response.ok) throw new Error('Unauthorized');
+        return response.json() as Promise<{ user: { actorType?: string | null } | null }>;
+      })
+      .then((data) => {
+        const isGovRoute = location.pathname.startsWith('/gov');
+        const actorType = data.user?.actorType;
+        const allowed = isGovRoute ? actorType === 'government_user' || actorType === 'system' : Boolean(actorType);
+        if (!allowed) throw new Error('Unauthorized');
         if (!cancelled) setState('allowed');
       })
       .catch(() => {

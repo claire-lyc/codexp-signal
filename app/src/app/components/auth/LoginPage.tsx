@@ -86,6 +86,10 @@ export default function LoginPage() {
         throw new Error(message);
       }
 
+      if (portal === 'gov' && payload.user?.actorType !== 'government_user' && payload.user?.actorType !== 'system') {
+        throw new Error('This account cannot access the government portal');
+      }
+
       saveAuthTokens(payload.tokens);
       navigate(redirectTo, { replace: true });
     } catch (caught: unknown) {
