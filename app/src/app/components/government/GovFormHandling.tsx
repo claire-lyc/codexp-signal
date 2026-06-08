@@ -232,17 +232,10 @@ export default function GovFormHandling() {
       const data = await requestJson<{ item: Ticket }>(`/api/tickets/${ticket.id}/status`, 'PATCH', { status });
       syncTicket(data.item);
       setUsingBackend(true);
-    } catch {
+    } catch (error) {
       setUsingBackend(false);
-      updateLocalTickets(
-        (current) =>
-          current.map((item) =>
-            item.id === ticket.id
-              ? { ...item, status, comments: [...item.comments, createComment('internal', `Status changed to ${status}.`)] }
-              : item,
-          ),
-        setTickets,
-      );
+      setNotice(`Could not update ${ticket.id}: ${error instanceof Error ? error.message : 'backend unavailable'}. Sign in and retry.`);
+      return;
     }
     setNotice(`${ticket.id} marked ${status}.`);
   };
@@ -257,21 +250,10 @@ export default function GovFormHandling() {
       });
       syncTicket(data.item);
       setUsingBackend(true);
-    } catch {
+    } catch (error) {
       setUsingBackend(false);
-      if (isResolved(selectedTicket)) {
-        setNotice(`${selectedTicket.id} is resolved. Discussion is closed.`);
-        return;
-      }
-      updateLocalTickets(
-        (current) =>
-          current.map((ticket) =>
-            ticket.id === selectedTicket.id
-              ? { ...ticket, comments: [...ticket.comments, createComment(commentType, comment)] }
-              : ticket,
-          ),
-        setTickets,
-      );
+      setNotice(`Reply was not sent to backend: ${error instanceof Error ? error.message : 'backend unavailable'}. Sign in and retry.`);
+      return;
     }
     setComment('');
   };
@@ -287,21 +269,10 @@ export default function GovFormHandling() {
       );
       syncTicket(data.item);
       setUsingBackend(true);
-    } catch {
+    } catch (error) {
       setUsingBackend(false);
-      updateLocalTickets(
-        (current) =>
-          current.map((ticket) =>
-            ticket.id === selectedTicket.id
-              ? {
-                  ...ticket,
-                  pingedAgencies: [...new Set([...ticket.pingedAgencies, ...pinnedAgencies])],
-                  comments: [...ticket.comments, createComment('internal', `Pinged agencies: ${pinnedAgencies.join(', ')}.`)],
-                }
-              : ticket,
-          ),
-        setTickets,
-      );
+      setNotice(`Agencies were not pinged: ${error instanceof Error ? error.message : 'backend unavailable'}. Sign in and retry.`);
+      return;
     }
 
     setNotice(`Agencies pinged: ${pinnedAgencies.join(', ')}.`);
