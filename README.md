@@ -126,6 +126,14 @@ Load dashboard data from committed backend JSON files:
 npm run db:seed:json
 ```
 
+Create a demo government admin user:
+
+```bash
+$env:DEMO_ADMIN_EMAIL="admin@signal.local"
+$env:DEMO_ADMIN_PASSWORD="replace-with-temp-admin-password"
+npm run db:seed:auth
+```
+
 Apply old SQL seed files:
 
 ```bash

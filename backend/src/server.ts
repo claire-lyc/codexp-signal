@@ -1,6 +1,9 @@
 import 'dotenv/config';
 import cors from 'cors';
 import express from 'express';
+import helmet from 'helmet';
+import { authenticateJwt, requireActor } from './authMiddleware.js';
+import { createAuthRouter } from './authRoutes.js';
 import {
   createForumPost,
   createForumReply,
@@ -25,9 +28,15 @@ import {
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
+const requireGovUser: express.RequestHandler[] = [
+  authenticateJwt as express.RequestHandler,
+  requireActor('government_user', 'system') as express.RequestHandler,
+];
 
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') ?? true }));
+app.use(helmet());
 app.use(express.json());
+app.use('/api/auth', createAuthRouter());
 
 app.get('/health', (_request, response) => {
   response.json({ ok: true });
@@ -88,7 +97,7 @@ app.post('/api/forum/posts/:id/replies', (request, response) => {
   response.status(201).json({ item: post });
 });
 
-app.get('/api/tickets', (request, response) => {
+app.get('/api/tickets', ...requireGovUser, (request, response) => {
   response.json({
     items: listTickets({
       agency: stringParam(request.query.agency),
@@ -144,7 +153,7 @@ app.get('/api/citizen/reports/:publicReportId', (request, response) => {
   });
 });
 
-app.patch('/api/tickets/:id/status', (request, response) => {
+app.patch('/api/tickets/:id/status', ...requireGovUser, (request, response) => {
   const status = stringBody(request.body?.status);
   if (!isTicketStatus(status)) {
     response.status(400).json({ error: 'Valid ticket status is required' });
@@ -159,7 +168,7 @@ app.patch('/api/tickets/:id/status', (request, response) => {
   response.json({ item: ticket });
 });
 
-app.post('/api/tickets/:id/comments', (request, response) => {
+app.post('/api/tickets/:id/comments', ...requireGovUser, (request, response) => {
   const body = stringBody(request.body?.body);
   const visibility = request.body?.visibility === 'public' ? 'public' : 'internal';
   if (!body) {
@@ -179,7 +188,7 @@ app.post('/api/tickets/:id/comments', (request, response) => {
   response.status(201).json({ item: ticket });
 });
 
-app.post('/api/tickets/:id/ping-agencies', (request, response) => {
+app.post('/api/tickets/:id/ping-agencies', ...requireGovUser, (request, response) => {
   const agencyCodes = Array.isArray(request.body?.agencyCodes)
     ? request.body.agencyCodes.filter((item: unknown) => typeof item === 'string' && item.trim())
     : [];
@@ -201,7 +210,7 @@ app.post('/api/tickets/:id/ping-agencies', (request, response) => {
   });
 });
 
-app.get(['/api/gov/crises', '/api/crises'], async (request, response, next) => {
+app.get(['/api/gov/crises', '/api/crises'], ...requireGovUser, async (request, response, next) => {
   try {
     const items = await listCrises({
       status: stringParam(request.query.status),
@@ -213,7 +222,7 @@ app.get(['/api/gov/crises', '/api/crises'], async (request, response, next) => {
   }
 });
 
-app.get(['/api/gov/alerts', '/api/alerts', '/api/citizen/alerts'], async (request, response, next) => {
+app.get(['/api/gov/alerts', '/api/alerts'], ...requireGovUser, async (request, response, next) => {
   try {
     const items = await listAlerts({
       status: stringParam(request.query.status) ?? 'active',
@@ -226,7 +235,20 @@ app.get(['/api/gov/alerts', '/api/alerts', '/api/citizen/alerts'], async (reques
   }
 });
 
-app.get('/api/gov/overview', async (_request, response, next) => {
+app.get('/api/citizen/alerts', async (request, response, next) => {
+  try {
+    const items = await listAlerts({
+      status: stringParam(request.query.status) ?? 'active',
+      crisisType: stringParam(request.query.type) ?? stringParam(request.query.crisisType),
+      region: stringParam(request.query.region),
+    });
+    response.json({ items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/gov/overview', ...requireGovUser, async (_request, response, next) => {
   try {
     const [crises, alerts, overview] = await Promise.all([
       listCrises({ status: 'active' }),
@@ -240,7 +262,7 @@ app.get('/api/gov/overview', async (_request, response, next) => {
   }
 });
 
-app.get(['/api/gov/cybersecurity', '/api/cybersecurity'], async (_request, response, next) => {
+app.get(['/api/gov/cybersecurity', '/api/cybersecurity'], ...requireGovUser, async (_request, response, next) => {
   try {
     response.json(await getSnapshotResponse('dashboard_cybersecurity'));
   } catch (error) {
@@ -264,7 +286,7 @@ app.get(['/api/citizen/incidents', '/api/public/incidents'], async (_request, re
   }
 });
 
-app.get('/api/dashboard/cached-external', async (_request, response, next) => {
+app.get('/api/dashboard/cached-external', ...requireGovUser, async (_request, response, next) => {
   try {
     response.json(await getSnapshotResponse('dashboard_cached_external'));
   } catch (error) {
@@ -272,7 +294,7 @@ app.get('/api/dashboard/cached-external', async (_request, response, next) => {
   }
 });
 
-app.get(['/api/gov/recommendations', '/api/recommendations'], async (request, response, next) => {
+app.get(['/api/gov/recommendations', '/api/recommendations'], ...requireGovUser, async (request, response, next) => {
   try {
     const payload = await getLatestSnapshot<{ items: Record<string, unknown>[] }>('dashboard_recommendations');
     const crisisType = stringParam(request.query.crisisType);
@@ -287,7 +309,7 @@ app.get(['/api/gov/recommendations', '/api/recommendations'], async (request, re
   }
 });
 
-app.get(['/api/gov/sentiment', '/api/sentiment'], async (_request, response, next) => {
+app.get(['/api/gov/sentiment', '/api/sentiment'], ...requireGovUser, async (_request, response, next) => {
   try {
     response.json(await getSnapshotResponse('dashboard_sentiment'));
   } catch (error) {
@@ -295,7 +317,7 @@ app.get(['/api/gov/sentiment', '/api/sentiment'], async (_request, response, nex
   }
 });
 
-app.get(['/api/gov/historical', '/api/historical'], async (_request, response, next) => {
+app.get(['/api/gov/historical', '/api/historical'], ...requireGovUser, async (_request, response, next) => {
   try {
     response.json(await getSnapshotResponse('dashboard_historical'));
   } catch (error) {
@@ -303,7 +325,7 @@ app.get(['/api/gov/historical', '/api/historical'], async (_request, response, n
   }
 });
 
-app.get(['/api/gov/heatmap', '/api/heatmap'], async (request, response, next) => {
+app.get(['/api/gov/heatmap', '/api/heatmap'], ...requireGovUser, async (request, response, next) => {
   try {
     const layer = stringParam(request.query.layer) ?? 'crises';
     const mapLayer = await getLatestMapLayer(layer);

@@ -168,6 +168,12 @@ Backend returns:
 
 ## Dashboard data
 
+Government dashboard endpoints now require:
+
+```http
+Authorization: Bearer <accessToken>
+```
+
 ### `GET /api/crises`
 
 Used by: government overview page.
@@ -252,7 +258,63 @@ Query params:
 
 - `crisisType`
 
-## Auth placeholders
+## Auth
+
+### `POST /api/auth/login`
+
+Purpose: sign in with email/password and receive JWT tokens.
+
+Frontend sends:
+
+- `email`
+- `password`
+
+Backend returns:
+
+- `user`
+- `tokens.accessToken`
+- `tokens.refreshToken`
+- `tokens.tokenType`
+- `tokens.expiresIn`
+
+### `POST /api/auth/refresh`
+
+Purpose: rotate an existing refresh token and receive a new access/refresh token pair.
+
+Frontend sends:
+
+- `refreshToken`
+
+Backend returns:
+
+- `tokens.accessToken`
+- `tokens.refreshToken`
+- `tokens.tokenType`
+- `tokens.expiresIn`
+
+### `POST /api/auth/logout`
+
+Purpose: revoke a refresh token session.
+
+Frontend sends:
+
+- `refreshToken`
+
+### `GET /api/auth/me`
+
+Purpose: return the current user profile from a Bearer access token.
+
+Requires:
+
+- `Authorization: Bearer <accessToken>`
+
+### `POST /api/auth/register`
+
+Purpose: create a rough email/password user for development only.
+
+This endpoint is disabled unless `AUTH_REGISTRATION_ENABLED=true`.
+
+## Singpass placeholders
 
 ### `GET /api/auth/singpass/login`
 
@@ -261,12 +323,3 @@ Purpose: start Singpass/OIDC login.
 ### `GET /api/auth/singpass/callback`
 
 Purpose: finish Singpass/OIDC login.
-
-### `POST /api/auth/logout`
-
-Purpose: revoke session.
-
-### `GET /api/auth/me`
-
-Purpose: return current user profile.
-
