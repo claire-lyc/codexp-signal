@@ -17,16 +17,6 @@ export type ForumPost = {
   category: string;
 };
 
-const misinformationTerms = [
-  'all hospitals',
-  'turning away',
-  'confirmed cure',
-  'secret',
-  'cover up',
-  'breaking:',
-  '!!!',
-];
-
 const forumPosts: ForumPost[] = [
   {
     id: 'forum-1',
@@ -102,7 +92,7 @@ export function listForumPosts() {
   );
 }
 
-export function createForumPost(input: { author?: string; content: string; category?: string }) {
+export function createForumPost(input: { author?: string; content: string; category?: string; aiFlag?: boolean }) {
   const content = input.content.trim();
   const post: ForumPost = {
     id: crypto.randomUUID(),
@@ -110,7 +100,7 @@ export function createForumPost(input: { author?: string; content: string; categ
     content,
     createdAt: new Date().toISOString(),
     verified: false,
-    aiFlag: shouldFlag(content),
+    aiFlag: Boolean(input.aiFlag),
     likes: 0,
     replies: [],
     category: input.category?.trim() || inferCategory(content),
@@ -144,11 +134,6 @@ export function createForumReply(id: string, input: { author?: string; content: 
   };
   post.replies.push(reply);
   return post;
-}
-
-function shouldFlag(content: string) {
-  const normalized = content.toLowerCase();
-  return misinformationTerms.some((term) => normalized.includes(term));
 }
 
 function inferCategory(content: string) {

@@ -29,6 +29,7 @@ import {
   listAlerts,
   listCrises,
 } from './dashboardRepository.js';
+import { detectPotentialMisinformation } from './misinformationDetector.js';
 import { detectTicketUrgency } from './severityDetector.js';
 
 const app = express();
@@ -65,19 +66,25 @@ app.get('/api/forum/posts', (_request, response) => {
   response.json({ items: listForumPosts() });
 });
 
-app.post('/api/forum/posts', (request, response) => {
+app.post('/api/forum/posts', async (request, response, next) => {
   const content = stringBody(request.body?.content);
   if (!content) {
     response.status(400).json({ error: 'Post content is required' });
     return;
   }
 
-  const post = createForumPost({
-    author: stringBody(request.body?.author),
-    content,
-    category: stringBody(request.body?.category),
-  });
-  response.status(201).json({ item: post });
+  try {
+    const aiFlag = await detectPotentialMisinformation(content);
+    const post = createForumPost({
+      author: stringBody(request.body?.author),
+      content,
+      category: stringBody(request.body?.category),
+      aiFlag,
+    });
+    response.status(201).json({ item: post });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.post('/api/forum/posts/:id/like', (request, response) => {
