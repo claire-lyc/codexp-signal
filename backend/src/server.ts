@@ -10,6 +10,7 @@ import {
   createForumReply,
   likeForumPost,
   listForumPosts,
+  moderateForumPost,
   reportForumPost,
 } from './forumRepository.js';
 import {
@@ -76,6 +77,10 @@ app.get('/api/forum/posts', (_request, response) => {
   response.json({ items: listForumPosts() });
 });
 
+app.get('/api/forum/posts/moderation', ...requireGovUser, (_request, response) => {
+  response.json({ items: listForumPosts() });
+});
+
 app.post('/api/forum/posts', async (request, response, next) => {
   const content = stringBody(request.body?.content);
   if (!content) {
@@ -111,6 +116,23 @@ app.post('/api/forum/posts', async (request, response, next) => {
   }
 });
 
+app.post('/api/forum/posts/official', ...requireGovUser, (request: AuthenticatedRequest, response) => {
+  const content = stringBody(request.body?.content);
+  if (!content) {
+    response.status(400).json({ error: 'Post content is required' });
+    return;
+  }
+
+  const post = createForumPost({
+    author: request.user?.display_name ?? request.user?.username ?? request.user?.email ?? 'Government Moderator',
+    content,
+    category: stringBody(request.body?.category),
+    verified: true,
+    moderationState: 'verified',
+  });
+  response.status(201).json({ item: post });
+});
+
 app.post('/api/forum/posts/:id/like', (request, response) => {
   const post = likeForumPost(request.params.id);
   if (!post) {
@@ -129,6 +151,25 @@ app.post('/api/forum/posts/:id/report', (request, response) => {
   response.json({ item: post });
 });
 
+app.post('/api/forum/posts/:id/moderation', ...requireGovUser, (request: AuthenticatedRequest, response) => {
+  const action = stringBody(request.body?.action);
+  if (action !== 'verify' && action !== 'hide' && action !== 'review') {
+    response.status(400).json({ error: 'Moderation action is required' });
+    return;
+  }
+
+  const post = moderateForumPost(request.params.id, {
+    action,
+    moderator: request.user?.display_name ?? request.user?.username ?? request.user?.email ?? 'Government Moderator',
+    note: stringBody(request.body?.note),
+  });
+  if (!post) {
+    response.status(404).json({ error: 'Forum post not found' });
+    return;
+  }
+  response.json({ item: post });
+});
+
 app.post('/api/forum/posts/:id/replies', (request, response) => {
   const content = stringBody(request.body?.content);
   if (!content) {
@@ -139,6 +180,25 @@ app.post('/api/forum/posts/:id/replies', (request, response) => {
   const post = createForumReply(request.params.id, {
     author: stringBody(request.body?.author),
     content,
+  });
+  if (!post) {
+    response.status(404).json({ error: 'Forum post not found' });
+    return;
+  }
+  response.status(201).json({ item: post });
+});
+
+app.post('/api/forum/posts/:id/official-replies', ...requireGovUser, (request: AuthenticatedRequest, response) => {
+  const content = stringBody(request.body?.content);
+  if (!content) {
+    response.status(400).json({ error: 'Reply content is required' });
+    return;
+  }
+
+  const post = createForumReply(request.params.id, {
+    author: request.user?.display_name ?? request.user?.username ?? request.user?.email ?? 'Government Moderator',
+    content,
+    official: true,
   });
   if (!post) {
     response.status(404).json({ error: 'Forum post not found' });

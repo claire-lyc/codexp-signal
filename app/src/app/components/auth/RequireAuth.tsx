@@ -25,7 +25,9 @@ export default function RequireAuth() {
       .then((data) => {
         const isGovRoute = location.pathname.startsWith('/gov');
         const actorType = data.user?.actorType;
-        const allowed = isGovRoute ? actorType === 'government_user' || actorType === 'system' : Boolean(actorType);
+        const allowed = isGovRoute
+          ? actorType === 'government_user' || actorType === 'system'
+          : actorType === 'citizen';
         if (!allowed) throw new Error('Unauthorized');
         if (!cancelled) setState('allowed');
       })

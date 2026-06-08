@@ -20,7 +20,6 @@ import {
   LogOut,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import EmergencySnapshot from '../shared/EmergencySnapshot';
 import { apiUrl } from '../../lib/api';
 import { authHeaders, clearAuthTokens } from '../../lib/auth';
 
@@ -75,7 +74,7 @@ export default function GovLayout() {
   const logout = () => {
     clearAuthTokens();
     setProfileOpen(false);
-    navigate('/login');
+    navigate('/login?portal=gov&redirect=%2Fgov');
   };
 
   return (
@@ -113,21 +112,6 @@ export default function GovLayout() {
             })}
           </div>
         </nav>
-
-        <div className="p-4 border-t border-zinc-800">
-          <Link
-            to="/gov-profile"
-            className="flex items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-zinc-800"
-          >
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-800 text-zinc-300">
-              <UserCircle className="h-5 w-5" />
-            </div>
-            <div className="min-w-0 text-xs">
-              <div className="mb-0.5 text-zinc-600">Authorized User</div>
-              <div className="truncate text-zinc-400">Profile / Sign out</div>
-            </div>
-          </Link>
-        </div>
       </aside>
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -197,9 +181,6 @@ export default function GovLayout() {
         </header>
 
         <main className="flex-1 overflow-y-auto p-6">
-          <div className="-mx-6 -mt-6 mb-6">
-            <EmergencySnapshot portal="gov" />
-          </div>
           <Outlet />
         </main>
       </div>

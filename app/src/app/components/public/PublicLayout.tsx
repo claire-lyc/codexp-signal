@@ -1,14 +1,12 @@
 import { Outlet, Link, useLocation } from 'react-router';
-import { Home, Bell, AlertTriangle, Users, MessageSquare, Ticket, Shield, Menu, X, UserCircle, Megaphone } from 'lucide-react';
+import { Home, Bell, AlertTriangle, Users, MessageSquare, Shield, Menu, X, UserCircle, Megaphone } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
-import EmergencySnapshot from '../shared/EmergencySnapshot';
 
 const navItems = [
   { path: '/public', label: 'Home', icon: Home },
   { path: '/public/alerts', label: 'Alerts', icon: Bell },
   { path: '/public/report', label: 'Report', icon: AlertTriangle },
-  { path: '/public/tickets', label: 'Tickets', icon: Ticket },
   { path: '/public/volunteer', label: 'Volunteer', icon: Users },
   { path: '/public/forum', label: 'Forum', icon: MessageSquare },
 ];
@@ -61,7 +59,7 @@ export default function PublicLayout() {
                 {notificationsOpen && (
                   <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-lg border border-zinc-800 bg-zinc-900 p-2 shadow-2xl">
                     <NotificationLink to="/public/alerts#broadcasts" icon={Megaphone} title="Government broadcast" text="Flash flood warning still active" onClick={() => setNotificationsOpen(false)} />
-                    <NotificationLink to="/public/tickets" icon={Ticket} title="Ticket replies" text="View updates from the handling team" onClick={() => setNotificationsOpen(false)} />
+                    <NotificationLink to="/public/report" icon={AlertTriangle} title="Report updates" text="View replies from the handling team" onClick={() => setNotificationsOpen(false)} />
                   </div>
                 )}
               </div>
@@ -105,18 +103,12 @@ export default function PublicLayout() {
         )}
       </header>
 
-      <EmergencySnapshot portal="public" />
-
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Outlet />
       </main>
 
       <footer className="bg-zinc-900 border-t border-zinc-800 mt-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Link to="/public/profile" className="mx-auto mb-6 flex max-w-xs items-center justify-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-300 transition-colors hover:border-blue-800 hover:text-white">
-            <UserCircle className="h-5 w-5 text-blue-400" />
-            Profile and notifications
-          </Link>
           <div className="text-center text-sm text-zinc-500">
             <p className="mb-2">Singapore's National Adaptive Logistics & Alert Network</p>
             <p>A trusted platform for crisis information and coordination</p>

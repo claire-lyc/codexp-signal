@@ -18,6 +18,7 @@ type ForumReply = {
   author: string;
   content: string;
   createdAt: string;
+  official?: boolean;
 };
 
 type ForumPost = {
@@ -28,6 +29,8 @@ type ForumPost = {
   verified: boolean;
   aiFlag: boolean;
   likes: number;
+  reports?: number;
+  moderationState?: 'live' | 'under_review' | 'verified' | 'hidden';
   replies: ForumReply[];
   category: string;
 };
@@ -454,7 +457,10 @@ export default function PublicForum() {
                     <div className="flex items-start gap-2 text-xs text-red-400">
                       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                       <div>
-                        <strong>Content flagged:</strong> this post is hidden while a moderator verifies the claim.
+                        <strong>{post.moderationState === 'hidden' ? 'Content hidden:' : 'Content flagged:'}</strong>{' '}
+                        {post.moderationState === 'hidden'
+                          ? 'this post was removed from normal view while moderators investigate it.'
+                          : 'this post is hidden while a moderator verifies the claim.'}
                       </div>
                     </div>
                   </div>
@@ -480,9 +486,9 @@ export default function PublicForum() {
                 {expanded && (
                   <div className="mt-4 space-y-3 border-t border-zinc-700 pt-4">
                     {post.replies.map((reply) => (
-                      <div key={reply.id} className="rounded-lg bg-zinc-900/70 p-3">
+                      <div key={reply.id} className={`rounded-lg p-3 ${reply.official ? 'border border-blue-800 bg-blue-950/30' : 'bg-zinc-900/70'}`}>
                         <div className="mb-1 flex items-center justify-between gap-3">
-                          <span className="text-sm font-medium">{reply.author}</span>
+                          <span className={`text-sm font-medium ${reply.official ? 'text-blue-300' : ''}`}>{reply.author}</span>
                           <span className="text-xs text-zinc-600">{relativeTime(reply.createdAt)}</span>
                         </div>
                         <p className="text-sm text-zinc-300">{reply.content}</p>

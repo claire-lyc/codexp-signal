@@ -3,7 +3,10 @@ export type ForumReply = {
   author: string;
   content: string;
   createdAt: string;
+  official?: boolean;
 };
+
+export type ForumModerationState = 'live' | 'under_review' | 'verified' | 'hidden';
 
 export type ForumPost = {
   id: string;
@@ -13,6 +16,8 @@ export type ForumPost = {
   verified: boolean;
   aiFlag: boolean;
   likes: number;
+  reports: number;
+  moderationState: ForumModerationState;
   replies: ForumReply[];
   category: string;
 };
@@ -27,6 +32,8 @@ const forumPosts: ForumPost[] = [
     verified: false,
     aiFlag: false,
     likes: 12,
+    reports: 0,
+    moderationState: 'live',
     replies: [
       {
         id: 'reply-1',
@@ -52,12 +59,15 @@ const forumPosts: ForumPost[] = [
     verified: true,
     aiFlag: false,
     likes: 45,
+    reports: 0,
+    moderationState: 'verified',
     replies: [
       {
         id: 'reply-3',
         author: 'Moderator',
         content: 'Pinned as verified guidance.',
         createdAt: new Date(Date.now() - 2.5 * 60 * 60 * 1000).toISOString(),
+        official: true,
       },
     ],
     category: 'Health',
@@ -70,6 +80,8 @@ const forumPosts: ForumPost[] = [
     verified: false,
     aiFlag: false,
     likes: 8,
+    reports: 1,
+    moderationState: 'live',
     replies: [],
     category: 'Weather',
   },
@@ -81,6 +93,8 @@ const forumPosts: ForumPost[] = [
     verified: false,
     aiFlag: true,
     likes: 0,
+    reports: 41,
+    moderationState: 'under_review',
     replies: [],
     category: 'Health',
   },
@@ -92,16 +106,26 @@ export function listForumPosts() {
   );
 }
 
-export function createForumPost(input: { author?: string; content: string; category?: string; aiFlag?: boolean }) {
+export function createForumPost(input: {
+  author?: string;
+  content: string;
+  category?: string;
+  aiFlag?: boolean;
+  verified?: boolean;
+  moderationState?: ForumModerationState;
+}) {
   const content = input.content.trim();
+  const moderationState = input.moderationState ?? (input.verified ? 'verified' : input.aiFlag ? 'under_review' : 'live');
   const post: ForumPost = {
     id: crypto.randomUUID(),
     author: input.author?.trim() || 'Anonymous User',
     content,
     createdAt: new Date().toISOString(),
-    verified: false,
+    verified: Boolean(input.verified),
     aiFlag: Boolean(input.aiFlag),
     likes: 0,
+    reports: 0,
+    moderationState,
     replies: [],
     category: input.category?.trim() || inferCategory(content),
   };
@@ -120,10 +144,14 @@ export function reportForumPost(id: string) {
   const post = forumPosts.find((item) => item.id === id);
   if (!post) return null;
   post.aiFlag = true;
+  post.reports += 1;
+  if (post.moderationState === 'live') {
+    post.moderationState = 'under_review';
+  }
   return post;
 }
 
-export function createForumReply(id: string, input: { author?: string; content: string }) {
+export function createForumReply(id: string, input: { author?: string; content: string; official?: boolean }) {
   const post = forumPosts.find((item) => item.id === id);
   if (!post) return null;
   const reply: ForumReply = {
@@ -131,8 +159,63 @@ export function createForumReply(id: string, input: { author?: string; content: 
     author: input.author?.trim() || 'Anonymous User',
     content: input.content.trim(),
     createdAt: new Date().toISOString(),
+    official: Boolean(input.official),
   };
   post.replies.push(reply);
+  return post;
+}
+
+export function moderateForumPost(
+  id: string,
+  input: { action: 'verify' | 'hide' | 'review'; moderator?: string; note?: string },
+) {
+  const post = forumPosts.find((item) => item.id === id);
+  if (!post) return null;
+
+  const moderator = input.moderator?.trim() || 'Government Moderator';
+  if (input.action === 'verify') {
+    post.verified = true;
+    post.aiFlag = false;
+    post.reports = 0;
+    post.moderationState = 'verified';
+    if (input.note?.trim()) {
+      post.replies.push({
+        id: crypto.randomUUID(),
+        author: moderator,
+        content: input.note.trim(),
+        createdAt: new Date().toISOString(),
+        official: true,
+      });
+    }
+    return post;
+  }
+
+  if (input.action === 'hide') {
+    post.aiFlag = true;
+    post.moderationState = 'hidden';
+    if (input.note?.trim()) {
+      post.replies.push({
+        id: crypto.randomUUID(),
+        author: moderator,
+        content: input.note.trim(),
+        createdAt: new Date().toISOString(),
+        official: true,
+      });
+    }
+    return post;
+  }
+
+  post.aiFlag = true;
+  post.moderationState = 'under_review';
+  if (input.note?.trim()) {
+    post.replies.push({
+      id: crypto.randomUUID(),
+      author: moderator,
+      content: input.note.trim(),
+      createdAt: new Date().toISOString(),
+      official: true,
+    });
+  }
   return post;
 }
 

@@ -23,9 +23,6 @@ const registerSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
   displayName: z.string().trim().min(1).max(120).optional(),
-  actorType: z.enum(['citizen', 'government_user']).default('government_user'),
-  role: z.string().trim().min(1).max(80).optional(),
-  agencyCode: z.string().trim().min(1).max(40).optional(),
 });
 
 const loginSchema = z.object({
@@ -59,7 +56,13 @@ export function createAuthRouter(): Router {
     }
 
     try {
-      const user = await createPasswordUser(parsed.data);
+      const user = await createPasswordUser({
+        email: parsed.data.email,
+        password: parsed.data.password,
+        displayName: parsed.data.displayName,
+        actorType: 'citizen',
+        tags: ['Citizen'],
+      });
       if (!user) {
         response.status(500).json({ error: 'Unable to create user' });
         return;
