@@ -29,6 +29,7 @@ import {
   listAlerts,
   listCrises,
 } from './dashboardRepository.js';
+import { startExternalDashboardRefresh } from './externalDashboardRefresh.js';
 import { detectPotentialMisinformation } from './misinformationDetector.js';
 import { detectTicketUrgency } from './severityDetector.js';
 
@@ -471,6 +472,7 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
 
 app.listen(port, () => {
   console.log(`SiGnal backend listening on http://localhost:${port}`);
+  startExternalDashboardRefresh();
 });
 
 function stringParam(value: unknown) {

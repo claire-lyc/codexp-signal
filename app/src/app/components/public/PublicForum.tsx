@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { apiUrl } from '../../lib/api';
+import { API_REFRESH_INTERVAL_MS, apiUrl } from '../../lib/api';
 
 type ForumReply = {
   id: string;
@@ -113,24 +113,30 @@ export default function PublicForum() {
   useEffect(() => {
     let active = true;
 
-    fetch(apiUrl('/api/forum/posts'))
-      .then((response) => {
-        if (!response.ok) throw new Error('Forum API unavailable');
-        return response.json() as Promise<{ items: ForumPost[] }>;
-      })
-      .then((data) => {
-        if (!active) return;
-        setUsingBackend(true);
-        setPosts(data.items);
-      })
-      .catch(() => {
-        if (!active) return;
-        setUsingBackend(false);
-        setPosts(loadLocalPosts());
-      });
+    const loadForumPosts = () => {
+      fetch(apiUrl('/api/forum/posts'))
+        .then((response) => {
+          if (!response.ok) throw new Error('Forum API unavailable');
+          return response.json() as Promise<{ items: ForumPost[] }>;
+        })
+        .then((data) => {
+          if (!active) return;
+          setUsingBackend(true);
+          setPosts(data.items);
+        })
+        .catch(() => {
+          if (!active) return;
+          setUsingBackend(false);
+          setPosts(loadLocalPosts());
+        });
+    };
+
+    loadForumPosts();
+    const timer = window.setInterval(loadForumPosts, API_REFRESH_INTERVAL_MS);
 
     return () => {
       active = false;
+      window.clearInterval(timer);
     };
   }, []);
 

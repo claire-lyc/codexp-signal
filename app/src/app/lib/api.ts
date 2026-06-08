@@ -3,6 +3,7 @@ import cachedExternalDashboard from '../../data/dashboard-data.json';
 import dashboardUiData from '../../data/dashboard-ui-data.json';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
+export const API_REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_API_REFRESH_MS ?? 15000);
 
 type ApiState<T> = {
   data: T | null;
@@ -51,7 +52,12 @@ function fallbackFor<T>(path: string): T | null {
   return (fallbackResponses[normalizedPath] as T | undefined) ?? null;
 }
 
-export function useApi<T>(path: string): ApiState<T> {
+function authHeaders() {
+  const token = window.localStorage.getItem('signal-access-token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export function useApi<T>(path: string, refreshMs = API_REFRESH_INTERVAL_MS): ApiState<T> {
   const fallback = fallbackFor<T>(path);
   const [state, setState] = useState<ApiState<T>>({
     data: fallback,
@@ -60,32 +66,50 @@ export function useApi<T>(path: string): ApiState<T> {
   });
 
   useEffect(() => {
-    const controller = new AbortController();
+    let active = true;
+    let controller: AbortController | null = null;
     const fallback = fallbackFor<T>(path);
 
-    setState({ data: fallback, loading: !fallback, error: null });
+    const load = (quiet = false) => {
+      controller?.abort();
+      controller = new AbortController();
 
-    fetch(apiUrl(path), { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-        return response.json() as Promise<T>;
-      })
-      .then((data) => setState({ data, loading: false, error: null }))
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
-        if (fallback) {
-          setState({ data: fallback, loading: false, error: null });
-          return;
-        }
-        setState({
-          data: null,
-          loading: false,
-          error: error instanceof Error ? error.message : 'Request failed',
+      if (!quiet) {
+        setState({ data: fallback, loading: !fallback, error: null });
+      }
+
+      fetch(apiUrl(path), { headers: authHeaders(), signal: controller.signal })
+        .then((response) => {
+          if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+          return response.json() as Promise<T>;
+        })
+        .then((data) => {
+          if (!active) return;
+          setState({ data, loading: false, error: null });
+        })
+        .catch((error: unknown) => {
+          if (!active || controller?.signal.aborted) return;
+          if (fallback) {
+            setState({ data: fallback, loading: false, error: null });
+            return;
+          }
+          setState({
+            data: null,
+            loading: false,
+            error: error instanceof Error ? error.message : 'Request failed',
+          });
         });
-      });
+    };
 
-    return () => controller.abort();
-  }, [path]);
+    load(false);
+    const timer = refreshMs > 0 ? window.setInterval(() => load(true), refreshMs) : undefined;
+
+    return () => {
+      active = false;
+      controller?.abort();
+      if (timer) window.clearInterval(timer);
+    };
+  }, [path, refreshMs]);
 
   return state;
 }
