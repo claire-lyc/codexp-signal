@@ -14,8 +14,29 @@ type Preferences = {
 };
 
 type ProfileResponse = {
-  user: { displayName: string | null; username: string | null; email: string | null; tags: string[] };
-  preferences: Preferences;
+  user: {
+    actorType?: string;
+    displayName: string | null;
+    username: string | null;
+    email: string | null;
+    role?: string | null;
+    agencyCode?: string | null;
+    tags: string[];
+  };
+  preferences?: Preferences;
+};
+
+const agencyNames: Record<string, string> = {
+  MOH: 'Ministry of Health',
+  PUB: 'Public Utilities Board',
+  LTA: 'Land Transport Authority',
+  SPF: 'Singapore Police Force',
+  SCDF: 'Singapore Civil Defence Force',
+  NEA: 'National Environment Agency',
+  CSA: 'Cyber Security Agency of Singapore',
+  MSF: 'Ministry of Social and Family Development',
+  'Enterprise SG': 'Enterprise Singapore',
+  'GOV-OPS': 'Government Operations',
 };
 
 export default function PublicProfile() {
@@ -26,14 +47,14 @@ export default function PublicProfile() {
   const [phoneInvalid, setPhoneInvalid] = useState(false);
 
   useEffect(() => {
-    fetch(apiUrl('/api/auth/profile'), { headers: authHeaders() })
+    fetch(apiUrl('/api/auth/me'), { headers: authHeaders() })
       .then((response) => {
         if (!response.ok) throw new Error('Profile unavailable');
         return response.json() as Promise<ProfileResponse>;
       })
       .then((data) => {
         setProfile(data);
-        setPreferences(data.preferences);
+        setPreferences(data.preferences ?? null);
       })
       .catch(() => setNotice('Unable to load profile.'));
   }, []);
@@ -67,6 +88,18 @@ export default function PublicProfile() {
     navigate('/login?portal=public&redirect=%2Fpublic');
   };
 
+  const isGovernmentUser = profile?.user.actorType === 'government_user';
+  const agencyCode = profile?.user.agencyCode ?? null;
+  const agencyName = agencyCode ? agencyNames[agencyCode] ?? agencyCode : null;
+  const role = profile?.user.role && profile.user.role !== agencyCode ? profile.user.role : null;
+  const profileName = profile?.user.displayName ?? profile?.user.username ?? profile?.user.email ?? (isGovernmentUser ? 'Government User' : 'Citizen');
+  const profileSubtitle = isGovernmentUser
+    ? `${agencyName ?? 'Government agency'}${role ? ` - ${role}` : ''}`
+    : profile?.user.email ?? 'Signed in citizen';
+  const profileTags = profile?.user.tags?.length
+    ? profile.user.tags.map((tag) => agencyNames[tag] ?? tag)
+    : [isGovernmentUser ? agencyName ?? role ?? 'Government agency' : 'Citizen'];
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
@@ -82,12 +115,12 @@ export default function PublicProfile() {
             <UserCircle className="h-8 w-8" />
           </div>
           <div>
-            <div className="text-lg font-semibold">{profile?.user.displayName ?? profile?.user.username ?? 'Citizen'}</div>
-            <div className="text-sm text-zinc-500">{profile?.user.email ?? 'Signed in citizen'}</div>
+            <div className="text-lg font-semibold">{profileName}</div>
+            <div className="text-sm text-zinc-500">{profileSubtitle}</div>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {(profile?.user.tags?.length ? profile.user.tags : ['Citizen']).map((tag) => (
+          {profileTags.map((tag) => (
             <span key={tag} className="inline-flex items-center gap-1 rounded-lg border border-blue-800 bg-blue-950 px-2.5 py-1 text-sm text-blue-300">
               <Shield className="h-3.5 w-3.5" />
               {tag}

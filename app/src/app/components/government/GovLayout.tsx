@@ -1,5 +1,5 @@
-import { Outlet, Link, useLocation } from 'react-router';
-import { useState } from 'react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router';
+import { useEffect, useState } from 'react';
 import {
   LayoutDashboard,
   Activity,
@@ -17,9 +17,20 @@ import {
   AlertTriangle,
   Ticket,
   UserCircle,
+  LogOut,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import EmergencySnapshot from '../shared/EmergencySnapshot';
+import { apiUrl } from '../../lib/api';
+import { authHeaders, clearAuthTokens } from '../../lib/auth';
+
+type ProfileUser = {
+  displayName: string | null;
+  email: string | null;
+  username: string | null;
+  role: string | null;
+  agencyCode?: string | null;
+};
 
 const navItems = [
   { path: '/gov', label: 'Overview', icon: LayoutDashboard },
@@ -38,12 +49,34 @@ const navItems = [
 
 export default function GovLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileUser, setProfileUser] = useState<ProfileUser | null>(null);
   const currentTime = new Date().toLocaleString('en-SG', {
     timeZone: 'Asia/Singapore',
     dateStyle: 'medium',
     timeStyle: 'medium',
   });
+
+  useEffect(() => {
+    fetch(apiUrl('/api/auth/me'), { headers: authHeaders() })
+      .then((response) => {
+        if (!response.ok) throw new Error('Profile API unavailable');
+        return response.json() as Promise<{ user: ProfileUser | null }>;
+      })
+      .then((data) => setProfileUser(data.user))
+      .catch(() => setProfileUser(null));
+  }, []);
+
+  const profileName = profileUser?.displayName ?? profileUser?.username ?? profileUser?.email ?? 'Authorized User';
+  const profileSubtext = profileUser?.agencyCode ?? profileUser?.role ?? 'Government account';
+
+  const logout = () => {
+    clearAuthTokens();
+    setProfileOpen(false);
+    navigate('/login');
+  };
 
   return (
     <div className="flex h-screen bg-zinc-950 text-white overflow-hidden">
@@ -127,6 +160,37 @@ export default function GovLayout() {
               <div className="flex items-center gap-2 px-3 py-1.5 bg-green-950 border border-green-800 rounded-lg">
                 <div className="w-2 h-2 rounded-full bg-green-500"></div>
                 <span className="text-xs text-green-400">All Systems Active</span>
+              </div>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setProfileOpen((open) => !open)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-zinc-700 bg-zinc-800 text-zinc-300 transition-colors hover:bg-zinc-700"
+                  aria-label="Open profile menu"
+                >
+                  <UserCircle className="h-5 w-5" />
+                </button>
+                {profileOpen && (
+                  <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-lg border border-zinc-800 bg-zinc-900 p-3 shadow-2xl">
+                    <div className="mb-3 flex items-center gap-3 border-b border-zinc-800 pb-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-zinc-300">
+                        <UserCircle className="h-6 w-6" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-zinc-100">{profileName}</div>
+                        <div className="truncate text-xs text-zinc-500">{profileSubtext}</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={logout}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-300 transition-colors hover:bg-red-950/40"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Log out
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
