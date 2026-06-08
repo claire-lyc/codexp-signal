@@ -9,7 +9,6 @@ export type TicketComment = {
   visibility: 'public' | 'internal';
   body: string;
   createdAt: string;
-  images?: TicketImage[];
 };
 
 export type TicketImage = {
@@ -70,8 +69,6 @@ type CommentRow = {
   report_id: string;
   author_type: string;
   author_name: string | null;
-  author_label: string | null;
-  message_kind?: 'original' | 'reply' | 'system';
   visibility: 'public' | 'internal';
   body: string;
   created_at: string;
@@ -92,18 +89,6 @@ type ImageRow = {
 type PingRow = {
   report_id: string;
   agency_code: string;
-};
-
-type ChatAttachmentRow = {
-  id: string;
-  message_id: string;
-  report_image_id: string | null;
-  original_filename: string | null;
-  mime_type: string | null;
-  byte_size: number | null;
-  storage_key: string | null;
-  preview_url: string | null;
-  created_at: string;
 };
 
 export async function listTickets(filters: {
@@ -168,12 +153,19 @@ export async function listTickets(filters: {
       LEFT JOIN auth.government_agencies agency ON agency.id = reports.assigned_agency_id
       LEFT JOIN citizen.reports grouped ON grouped.id = reports.grouped_report_id
       ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
-      ORDER BY reports.created_at DESC
+      ORDER BY
+        CASE reports.severity
+          WHEN 'critical' THEN 1
+          WHEN 'high' THEN 2
+          WHEN 'medium' THEN 3
+          ELSE 4
+        END,
+        reports.created_at DESC
     `,
     values,
   );
 
-  return hydrateTickets(reports, { includeImagePreviews: false });
+  return hydrateTickets(reports);
 }
 
 export async function getTicketByPublicId(publicReportId: string) {
@@ -208,7 +200,7 @@ export async function getTicketByPublicId(publicReportId: string) {
     [publicReportId],
   );
 
-  const [ticket] = await hydrateTickets(reports, { includeImagePreviews: true });
+  const [ticket] = await hydrateTickets(reports);
   return ticket ?? null;
 }
 
@@ -244,7 +236,7 @@ export async function listTicketsForReporter(userId: string) {
     [userId],
   );
 
-  return hydrateTickets(reports, { includeImagePreviews: false });
+  return hydrateTickets(reports);
 }
 
 export async function createCitizenTicket(input: {
@@ -321,17 +313,8 @@ export async function createCitizenTicket(input: {
       [reportId, 'New citizen ticket opened from public report form.'],
     );
 
-    const insertedImages: TicketImage[] = [];
     for (const image of input.images ?? []) {
-      const imageResult = await client.query<{
-        id: string;
-        original_filename: string | null;
-        mime_type: string | null;
-        byte_size: number | null;
-        storage_key: string | null;
-        status: string;
-        created_at: string;
-      }>(
+      await client.query(
         `
           INSERT INTO citizen.report_images (
             report_id,
@@ -345,14 +328,6 @@ export async function createCitizenTicket(input: {
             processing_status
           )
           VALUES ($1, $2, $3, $4, 'local-dev', $5, $6, $7, 'uploaded')
-          RETURNING
-            id,
-            original_filename,
-            mime_type,
-            byte_size,
-            storage_key,
-            processing_status AS status,
-            created_at
         `,
         [
           reportId,
@@ -362,66 +337,6 @@ export async function createCitizenTicket(input: {
           image.storageKey ?? `${publicReportId}/${image.originalFilename ?? 'upload'}`,
           image.checksumSha256 ?? null,
           JSON.stringify({ previewUrl: image.previewUrl ?? null }),
-        ],
-      );
-      const inserted = imageResult.rows[0];
-      insertedImages.push({
-        id: inserted.id,
-        filename: inserted.original_filename,
-        mimeType: inserted.mime_type,
-        byteSize: inserted.byte_size,
-        storageKey: inserted.storage_key,
-        previewUrl: image.previewUrl ?? null,
-        status: inserted.status,
-        createdAt: inserted.created_at,
-      });
-    }
-
-    const originalChat = await client.query<{ id: string }>(
-      `
-        INSERT INTO citizen.report_chat_messages (
-          report_id,
-          author_user_id,
-          author_type,
-          author_label,
-          message_kind,
-          visibility,
-          body
-        )
-        VALUES ($1, $2, $3, $4, 'original', 'public', $5)
-        RETURNING id
-      `,
-      [
-        reportId,
-        input.reporterUserId ?? null,
-        input.reporterUserId ? 'citizen' : 'anonymous_citizen',
-        input.reporter?.trim() || (input.reporterUserId ? 'Authenticated citizen' : 'Citizen (Anonymous)'),
-        input.message.trim(),
-      ],
-    );
-
-    for (const image of insertedImages) {
-      await client.query(
-        `
-          INSERT INTO citizen.report_chat_attachments (
-            message_id,
-            report_image_id,
-            original_filename,
-            mime_type,
-            byte_size,
-            storage_key,
-            preview_url
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
-        `,
-        [
-          originalChat.rows[0].id,
-          image.id,
-          image.filename,
-          image.mimeType,
-          image.byteSize,
-          image.storageKey,
-          image.previewUrl,
         ],
       );
     }
@@ -437,7 +352,7 @@ export async function createCitizenTicket(input: {
 }
 
 export async function updateTicketStatus(id: string, status: TicketStatus) {
-  const rows = await query<{ id: string }>(
+  await query(
     `
       UPDATE citizen.reports
       SET
@@ -446,27 +361,15 @@ export async function updateTicketStatus(id: string, status: TicketStatus) {
         chat_enabled = CASE WHEN $2 = 'resolved' THEN false ELSE true END,
         chat_closed_at = CASE WHEN $2 = 'resolved' THEN now() ELSE NULL END
       WHERE public_report_id = $1
-      RETURNING id
     `,
     [id, toDbStatus(status) ?? 'submitted'],
   );
-  if (rows[0]) {
-    await query(
-      `
-        INSERT INTO citizen.report_chat_messages (
-          report_id,
-          author_user_id,
-          author_type,
-          author_label,
-          message_kind,
-          visibility,
-          body
-        )
-        VALUES ($1, NULL, 'system', 'SiGnal System', 'system', 'internal', $2)
-      `,
-      [rows[0].id, `Status changed to ${status}.`],
-    );
-  }
+  await addTicketComment(id, {
+    body: `Status changed to ${status}.`,
+    visibility: 'internal',
+    author: 'GOV-HANDLER-001',
+    authorType: 'government_user',
+  });
   return getTicketByPublicId(id);
 }
 
@@ -488,22 +391,13 @@ export async function addTicketComment(
 
   await query(
     `
-      INSERT INTO citizen.report_chat_messages (
-        report_id,
-        author_user_id,
-        author_type,
-        author_label,
-        message_kind,
-        visibility,
-        body
-      )
-      VALUES ($1, $2, $3, $4, 'reply', $5, $6)
+      INSERT INTO citizen.report_comments (report_id, author_user_id, author_type, visibility, body)
+      VALUES ($1, $2, $3, $4, $5)
     `,
     [
       ticket.id,
       input.authorUserId ?? null,
       input.authorType ?? 'government_user',
-      input.author ?? null,
       input.visibility,
       input.body.trim(),
     ],
@@ -557,89 +451,36 @@ export async function pingTicketAgencies(id: string, agencyCodes: string[], ping
   };
 }
 
-async function hydrateTickets(reports: ReportRow[], options: { includeImagePreviews?: boolean } = {}) {
+async function hydrateTickets(reports: ReportRow[]) {
   if (!reports.length) return [];
 
   const reportIds = reports.map((report) => report.id);
-  const includeImagePreviews = options.includeImagePreviews === true;
-  const [comments, images, chatAttachments, pings, childGroups] = await Promise.all([
+  const [comments, images, pings, childGroups] = await Promise.all([
     query<CommentRow>(
       `
         SELECT
-          messages.id,
-          messages.report_id,
-          messages.author_type,
+          comments.id,
+          comments.report_id,
+          comments.author_type,
           users.display_name AS author_name,
-          messages.author_label,
-          messages.message_kind,
-          messages.visibility,
-          messages.body,
-          messages.created_at
-        FROM citizen.report_chat_messages messages
-        LEFT JOIN auth.users users ON users.id = messages.author_user_id
-        WHERE messages.report_id = ANY($1::uuid[])
-          AND messages.message_kind <> 'original'
-        UNION ALL
-        SELECT
-          legacy.id,
-          legacy.report_id,
-          legacy.author_type,
-          users.display_name AS author_name,
-          NULL AS author_label,
-          'reply' AS message_kind,
-          legacy.visibility,
-          legacy.body,
-          legacy.created_at
-        FROM citizen.report_comments legacy
-        LEFT JOIN auth.users users ON users.id = legacy.author_user_id
-        WHERE legacy.report_id = ANY($1::uuid[])
-          AND NOT EXISTS (
-            SELECT 1
-            FROM citizen.report_chat_messages messages
-            WHERE messages.report_id = legacy.report_id
-              AND messages.body = legacy.body
-              AND messages.visibility = legacy.visibility
-          )
-        ORDER BY created_at ASC
+          comments.visibility,
+          comments.body,
+          comments.created_at
+        FROM citizen.report_comments comments
+        LEFT JOIN auth.users users ON users.id = comments.author_user_id
+        WHERE comments.report_id = ANY($1::uuid[])
+        ORDER BY comments.created_at ASC
       `,
       [reportIds],
     ),
     query<ImageRow>(
       `
-        SELECT
-          id,
-          report_id,
-          original_filename,
-          mime_type,
-          byte_size,
-          storage_key,
-          CASE WHEN $2 THEN processed_metadata ELSE '{}'::jsonb END AS processed_metadata,
-          processing_status,
-          created_at
+        SELECT id, report_id, original_filename, mime_type, byte_size, storage_key, processed_metadata, processing_status, created_at
         FROM citizen.report_images
         WHERE report_id = ANY($1::uuid[])
         ORDER BY created_at ASC
       `,
-      [reportIds, includeImagePreviews],
-    ),
-    query<ChatAttachmentRow>(
-      `
-        SELECT
-          attachments.id,
-          attachments.message_id,
-          attachments.report_image_id,
-          attachments.original_filename,
-          attachments.mime_type,
-          attachments.byte_size,
-          attachments.storage_key,
-          CASE WHEN $2 THEN attachments.preview_url ELSE NULL END AS preview_url,
-          attachments.created_at
-        FROM citizen.report_chat_attachments attachments
-        JOIN citizen.report_chat_messages messages ON messages.id = attachments.message_id
-        WHERE messages.report_id = ANY($1::uuid[])
-        ORDER BY attachments.created_at ASC
-      `,
-      [reportIds, includeImagePreviews],
+      [reportIds],
     ),
     query<PingRow>(
       `
@@ -663,11 +504,6 @@ async function hydrateTickets(reports: ReportRow[], options: { includeImagePrevi
 
   return reports.map((report) => {
     const ticketImages = images.filter((image) => image.report_id === report.id);
-    const attachmentPreviewByImageId = new Map(
-      chatAttachments
-        .filter((attachment) => attachment.report_image_id && attachment.preview_url)
-        .map((attachment) => [attachment.report_image_id, attachment.preview_url]),
-    );
     const relatedTickets = [
       ...(report.grouped_public_report_id ? [report.grouped_public_report_id] : []),
       ...childGroups.filter((item) => item.grouped_report_id === report.id).map((item) => item.public_report_id),
@@ -689,7 +525,7 @@ async function hydrateTickets(reports: ReportRow[], options: { includeImagePrevi
         .filter((comment) => comment.report_id === report.id)
         .map((comment) => ({
           id: comment.id,
-          author: comment.author_name ?? comment.author_label ?? authorLabel(comment.author_type),
+          author: comment.author_name ?? authorLabel(comment.author_type),
           visibility: comment.visibility,
           body: comment.body,
           createdAt: comment.created_at,
@@ -701,9 +537,7 @@ async function hydrateTickets(reports: ReportRow[], options: { includeImagePrevi
         mimeType: image.mime_type,
         byteSize: image.byte_size,
         storageKey: image.storage_key,
-        previewUrl:
-          attachmentPreviewByImageId.get(image.id) ??
-          (typeof image.processed_metadata?.previewUrl === 'string' ? image.processed_metadata.previewUrl : null),
+        previewUrl: typeof image.processed_metadata?.previewUrl === 'string' ? image.processed_metadata.previewUrl : null,
         status: image.processing_status,
         createdAt: image.created_at,
       })),

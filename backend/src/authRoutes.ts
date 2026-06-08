@@ -5,9 +5,7 @@ import { z } from 'zod';
 import {
   createPasswordUser,
   findActiveSessionByRefreshToken,
-  getNotificationPreferences,
   revokeSession,
-  updateNotificationPreferences,
   verifyPasswordUser,
 } from './authRepository.js';
 import {
@@ -27,6 +25,7 @@ const registerSchema = z.object({
   displayName: z.string().trim().min(1).max(120).optional(),
   actorType: z.enum(['citizen', 'government_user']).default('government_user'),
   role: z.string().trim().min(1).max(80).optional(),
+  agencyCode: z.string().trim().min(1).max(40).optional(),
 });
 
 const loginSchema = z.object({
@@ -36,21 +35,6 @@ const loginSchema = z.object({
 
 const refreshSchema = z.object({
   refreshToken: z.string().min(32).max(256),
-});
-
-const preferencesSchema = z.object({
-  alertNotifications: z.boolean().default(true),
-  replyNotifications: z.boolean().default(true),
-  agencyPingNotifications: z.boolean().default(true),
-  volunteerNotifications: z.boolean().default(false),
-  smsEnabled: z.boolean().default(false),
-  phoneNumber: z.string().trim().max(32).optional().nullable(),
-}).refine((value) => !value.smsEnabled || Boolean(value.phoneNumber?.trim()), {
-  message: 'Phone number is required when SMS is enabled',
-  path: ['phoneNumber'],
-}).refine((value) => !value.smsEnabled || /^\+?[0-9][0-9\s-]{6,20}$/.test(value.phoneNumber?.trim() ?? ''), {
-  message: 'Enter a valid phone number',
-  path: ['phoneNumber'],
 });
 
 export function createAuthRouter(): Router {
@@ -168,39 +152,6 @@ export function createAuthRouter(): Router {
     response.json({ user: request.user ? sanitizeUser(request.user) : null });
   });
 
-  router.get('/profile', authenticateJwt, async (request: AuthenticatedRequest, response, next) => {
-    try {
-      if (!request.user?.id) {
-        response.status(401).json({ error: 'Bearer token is required' });
-        return;
-      }
-      response.json({
-        user: sanitizeUser(request.user),
-        preferences: await getNotificationPreferences(request.user.id),
-      });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  router.patch('/profile/preferences', authenticateJwt, async (request: AuthenticatedRequest, response, next) => {
-    const parsed = preferencesSchema.safeParse(request.body);
-    if (!parsed.success) {
-      response.status(400).json({ error: 'Invalid preferences payload', details: parsed.error.flatten().fieldErrors });
-      return;
-    }
-
-    try {
-      if (!request.user?.id) {
-        response.status(401).json({ error: 'Bearer token is required' });
-        return;
-      }
-      response.json({ preferences: await updateNotificationPreferences(request.user.id, parsed.data) });
-    } catch (error) {
-      next(error);
-    }
-  });
-
   return router;
 }
 
@@ -214,6 +165,7 @@ function sanitizeUser(user: NonNullable<AuthenticatedRequest['user']>) {
     username: user.username,
     tags: user.tags,
     agencyId: user.agency_id,
+    agencyCode: user.agency_code,
     clearanceLevel: user.clearance_level,
   };
 }

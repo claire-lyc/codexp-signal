@@ -59,10 +59,27 @@ type Ticket = {
   chatEnabled?: boolean;
 };
 
-const agencies = ['All Agencies', 'MOH', 'PUB', 'LTA', 'Enterprise SG', 'SPF', 'SCDF', 'CSA', 'GOV-OPS'];
+type AuthUser = {
+  agencyCode: string | null;
+};
+type SortMode = 'priority' | 'newest' | 'oldest' | 'ticket-number';
+
+const agencies = ['All Agencies', 'MOH', 'PUB', 'LTA', 'Enterprise SG', 'SPF', 'SCDF', 'NEA', 'CSA', 'GOV-OPS'];
 const pingableAgencies = ['MOH', 'PUB', 'LTA', 'Enterprise SG', 'SPF', 'SCDF', 'NEA', 'MSF'];
 const statusOptions: Array<'All' | TicketStatus> = ['All', 'open', 'in-progress', 'grouped', 'resolved'];
 const crisisTypes = ['All', 'Health', 'Weather', 'Supply Chain', 'Infrastructure', 'Cybersecurity'];
+const sortOptions: Array<{ value: SortMode; label: string }> = [
+  { value: 'priority', label: 'Priority' },
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+  { value: 'ticket-number', label: 'Ticket number' },
+];
+const urgencyRank: Record<TicketUrgency, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+};
 
 const seedTickets: Ticket[] = [
   {
@@ -180,6 +197,7 @@ export default function GovFormHandling() {
   const [filterStatus, setFilterStatus] = useState<'All' | TicketStatus>('All');
   const [filterCrisis, setFilterCrisis] = useState('All');
   const [filterAgency, setFilterAgency] = useState('All Agencies');
+  const [sortMode, setSortMode] = useState<SortMode>('priority');
   const [comment, setComment] = useState('');
   const [commentType, setCommentType] = useState<'public' | 'internal'>('public');
   const [pingOpen, setPingOpen] = useState(false);
@@ -190,6 +208,21 @@ export default function GovFormHandling() {
   useEffect(() => {
     let active = true;
     const requestedTicket = searchParams.get('ticket');
+
+    fetch(apiUrl('/api/auth/me'), { headers: authHeaders() })
+      .then((response) => {
+        if (!response.ok) throw new Error('Profile API unavailable');
+        return response.json() as Promise<{ user: AuthUser | null }>;
+      })
+      .then((data) => {
+        if (!active) return;
+        const agencyCode = data.user?.agencyCode;
+        setFilterAgency(agencyCode && agencies.includes(agencyCode) ? agencyCode : 'All Agencies');
+      })
+      .catch(() => {
+        if (!active) return;
+        setFilterAgency('All Agencies');
+      });
 
     const loadTickets = () => {
       fetch(apiUrl('/api/tickets'), { headers: authHeaders() })
@@ -227,19 +260,21 @@ export default function GovFormHandling() {
 
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return tickets.filter((ticket) => {
-      const statusMatch = filterStatus === 'All' || ticket.status === filterStatus;
-      const crisisMatch = filterCrisis === 'All' || ticket.crisisType === filterCrisis;
-      const agencyMatch = filterAgency === 'All Agencies' || ticket.assignedAgency === filterAgency;
-      const queryMatch =
-        !normalizedQuery ||
-        ticket.id.toLowerCase().includes(normalizedQuery) ||
-        ticket.message.toLowerCase().includes(normalizedQuery) ||
-        ticket.location.toLowerCase().includes(normalizedQuery) ||
-        ticket.reporter.toLowerCase().includes(normalizedQuery);
-      return statusMatch && crisisMatch && agencyMatch && queryMatch;
-    });
-  }, [filterAgency, filterCrisis, filterStatus, query, tickets]);
+    return tickets
+      .filter((ticket) => {
+        const statusMatch = filterStatus === 'All' || ticket.status === filterStatus;
+        const crisisMatch = filterCrisis === 'All' || ticket.crisisType === filterCrisis;
+        const agencyMatch = filterAgency === 'All Agencies' || ticket.assignedAgency === filterAgency;
+        const queryMatch =
+          !normalizedQuery ||
+          ticket.id.toLowerCase().includes(normalizedQuery) ||
+          ticket.message.toLowerCase().includes(normalizedQuery) ||
+          ticket.location.toLowerCase().includes(normalizedQuery) ||
+          ticket.reporter.toLowerCase().includes(normalizedQuery);
+        return statusMatch && crisisMatch && agencyMatch && queryMatch;
+      })
+      .sort((a, b) => sortTickets(a, b, sortMode));
+  }, [filterAgency, filterCrisis, filterStatus, query, sortMode, tickets]);
 
   const selectedTicket = tickets.find((ticket) => ticket.id === selectedTicketId) ?? filtered[0] ?? tickets[0];
   const selectedTicketResolved = selectedTicket ? isResolved(selectedTicket) : false;
@@ -405,6 +440,9 @@ export default function GovFormHandling() {
             </select>
             <select value={filterAgency} onChange={(event) => setFilterAgency(event.target.value)} className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-red-600">
               {agencies.map((agency) => <option key={agency}>{agency}</option>)}
+            </select>
+            <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)} className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-red-600">
+              {sortOptions.map((option) => <option key={option.value} value={option.value}>Sort: {option.label}</option>)}
             </select>
           </div>
 
@@ -715,6 +753,27 @@ function groupComments(comments: TicketComment[]): CommentGroup[] {
 
 function isResolved(ticket: Ticket) {
   return ticket.status === 'resolved' || ticket.chatEnabled === false;
+}
+
+function sortTickets(a: Ticket, b: Ticket, sortMode: SortMode) {
+  if (sortMode === 'priority') {
+    const urgencyDifference = urgencyRank[a.urgency] - urgencyRank[b.urgency];
+    if (urgencyDifference !== 0) return urgencyDifference;
+    return ticketTime(b) - ticketTime(a);
+  }
+
+  if (sortMode === 'oldest') return ticketTime(a) - ticketTime(b);
+  if (sortMode === 'ticket-number') return ticketNumber(b) - ticketNumber(a);
+  return ticketTime(b) - ticketTime(a);
+}
+
+function ticketTime(ticket: Ticket) {
+  return new Date(ticket.timestamp).getTime();
+}
+
+function ticketNumber(ticket: Ticket) {
+  const match = ticket.id.match(/\d+/);
+  return match ? Number(match[0]) : 0;
 }
 
 function relativeTime(timestamp: string) {
