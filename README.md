@@ -1,8 +1,8 @@
-# codexp-signal
+﻿# codexp-signal
 
 ## Hackathon mission: Quick Aid
 
-SiGnal is a Singapore-focused fast response web application for disaster and health emergency coordination. It is designed to gather information from multiple sources — including outbreak signals, hospital capacity, weather and flood risks, medicine supply constraints, citizen reports, and volunteer readiness — so leaders, responders, and communities can make quicker, clearer decisions during crises.
+SiGnal is a Singapore-focused fast response web application for disaster and health emergency coordination. It is designed to gather information from multiple sources - including outbreak signals, hospital capacity, weather and flood risks, medicine supply constraints, citizen reports, and volunteer readiness - so leaders, responders, and communities can make quicker, clearer decisions during crises.
 
 Core product goals:
 
@@ -32,9 +32,9 @@ Open the Vite URL shown in the terminal, usually:
 http://localhost:5173
 ```
 
-## Run the full local system
+## Run the full system
 
-Use this only if you want the backend API and PostgreSQL database too.
+Use this if you want the backend API and PostgreSQL database too.
 
 1. Install dependencies in both folders:
 
@@ -46,9 +46,7 @@ cd ../app
 npm install
 ```
 
-2. Make sure Docker Desktop is running before starting the database.
-
-3. Create the backend `.env` file if it does not exist:
+2. Create the backend `.env` file if it does not exist:
 
 ```bash
 cd backend
@@ -62,9 +60,19 @@ cd backend
 Copy-Item .env.example .env
 ```
 
-4. Initialize the local database:
+3. Choose a database mode.
+
+Neon remote database, no Docker:
 
 ```bash
+cd backend
+npm run db:init:remote
+```
+
+Local Docker database:
+
+```bash
+cd backend
 npm run db:init
 ```
 
@@ -72,7 +80,14 @@ npm run db:init
 
 Use two terminals.
 
-Terminal 1, backend:
+Terminal 1, backend with Neon:
+
+```bash
+cd backend
+npm run dev
+```
+
+Terminal 1, backend with local Docker Postgres:
 
 ```bash
 cd backend
@@ -93,8 +108,7 @@ cd app
 npm run dev
 ```
 
-If the backend shows a database error, make sure Docker Desktop is running and
-run the backend database setup commands below.
+If the backend shows a database error, check that `backend/.env` has a valid `DATABASE_URL`. If you use local Docker Postgres, also make sure Docker Desktop is running.
 
 ## Backend database commands(internal)
 
@@ -143,6 +157,14 @@ $env:DEMO_ADMIN_EMAIL="admin@signal.local"
 $env:DEMO_ADMIN_PASSWORD="replace-with-temp-admin-password"
 npm run db:seed:auth
 ```
+
+Reset citizen/form-handling tickets to the committed demo set:
+
+```bash
+npm run db:seed:tickets
+```
+
+This clears `citizen.reports` and reloads `backend/data/ticket-seed.json`.
 
 Apply old SQL seed files:
 

@@ -8,7 +8,13 @@ These are the backend calls currently needed or hinted by the frontend.
 
 Used by: public report page.
 
-Purpose: citizen submits incident report with optional images and location.
+Purpose: citizen submits incident report with optional images and location. This creates a private ticket/chat thread between the citizen and government form handling team.
+
+Auth:
+
+- Optional `Authorization: Bearer <accessToken>`
+- If provided, backend stores `reporter_user_id`
+- If omitted, backend stores the report as anonymous
 
 Frontend sends:
 
@@ -21,6 +27,11 @@ Frontend sends:
 - `anonymous`
 - `images`
 
+Accepted formats:
+
+- `application/json`
+- `multipart/form-data` with `images` files
+
 Backend returns:
 
 - `id`
@@ -28,6 +39,7 @@ Backend returns:
 - `status`
 - `verificationStatus`
 - `createdAt`
+- `item` ticket shape used by the gov form handling page
 
 ### `GET /api/citizen/reports/{publicReportId}`
 
@@ -39,16 +51,20 @@ Backend returns:
 
 - `publicReportId`
 - `status`
-- `verificationStatus`
 - `assignedAgency`
 - `latestPublicMessage`
 - `updatedAt`
+- `item`
 
 ### `GET /api/tickets`
 
 Used by: government form handling page.
 
 Purpose: government handlers list citizen reports as tickets.
+
+Requires:
+
+- `Authorization: Bearer <accessToken>`
 
 Query params:
 
@@ -68,6 +84,10 @@ Used by: government form handling page.
 
 Purpose: update ticket status, verification status, or assigned agency.
 
+Requires:
+
+- `Authorization: Bearer <accessToken>`
+
 Frontend sends:
 
 - `status`
@@ -85,6 +105,12 @@ Used by: government form handling page.
 
 Purpose: add internal note or public reply.
 
+This is the current private ticket/chat thread mechanism.
+
+Requires:
+
+- `Authorization: Bearer <accessToken>`
+
 Frontend sends:
 
 - `visibility`
@@ -101,6 +127,10 @@ Backend returns:
 Used by: government form handling page.
 
 Purpose: notify related agencies that a ticket may affect them.
+
+Requires:
+
+- `Authorization: Bearer <accessToken>`
 
 Frontend sends:
 

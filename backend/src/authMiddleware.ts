@@ -97,6 +97,29 @@ export async function authenticateJwt(request: AuthenticatedRequest, response: R
   }
 }
 
+export async function optionalAuthenticateJwt(request: AuthenticatedRequest, _response: Response, next: NextFunction) {
+  const header = request.headers.authorization;
+  const token = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : null;
+
+  if (!token) {
+    next();
+    return;
+  }
+
+  try {
+    const payload = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] }) as AccessTokenPayload;
+    const user = await getUserById(payload.sub);
+    if (user) {
+      request.token = payload;
+      request.user = user;
+    }
+  } catch {
+    // Optional auth intentionally ignores invalid tokens and treats the request as anonymous.
+  }
+
+  next();
+}
+
 export function requireActor(...allowed: ActorType[]) {
   return (request: AuthenticatedRequest, response: Response, next: NextFunction) => {
     if (!request.user || !allowed.includes(request.user.actor_type)) {
