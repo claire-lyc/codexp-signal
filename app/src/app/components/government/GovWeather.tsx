@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import SingaporeRegionMap, { type MapMarker } from '../SingaporeRegionMap';
+import SingaporeRegionMap, { type HeatmapPalette, type MapHeatmapLayer, type MapMarker } from '../SingaporeRegionMap';
 import { useApi } from '../../lib/api';
 
 type LayerKey = 'Rainfall' | 'Temperature' | 'Wind' | 'PSI';
@@ -24,27 +24,12 @@ type WeatherLayerRow = {
   value: number;
 };
 
+type WeatherTrendPoint = {
+  time: string;
+  value: number;
+};
+
 const layers: LayerKey[] = ['Rainfall', 'Temperature', 'Wind', 'PSI'];
-
-const rainfallForecast = [
-  { time: '00:00', value: 2 },
-  { time: '04:00', value: 5 },
-  { time: '08:00', value: 12 },
-  { time: '12:00', value: 28 },
-  { time: '16:00', value: 45 },
-  { time: '20:00', value: 32 },
-  { time: '23:59', value: 18 },
-];
-
-const psiTrend = [
-  { time: '00:00', value: 98 },
-  { time: '04:00', value: 102 },
-  { time: '08:00', value: 118 },
-  { time: '12:00', value: 134 },
-  { time: '16:00', value: 156 },
-  { time: '20:00', value: 142 },
-  { time: '23:59', value: 128 },
-];
 
 function toKmPerHour(knots: number) {
   return knots * 1.852;
@@ -75,6 +60,33 @@ function statusBadge(label: string) {
   if (label === 'Alert') return 'bg-red-950 text-red-400';
   if (label === 'High') return 'bg-yellow-950 text-yellow-400';
   return 'bg-green-950 text-green-400';
+}
+
+function displayUnit(layer: LayerKey) {
+  if (layer === 'Wind') return 'km/h';
+  if (layer === 'Temperature') return 'deg C';
+  return layer === 'Rainfall' ? 'mm' : 'PSI';
+}
+
+function displayValue(layer: LayerKey, value: number) {
+  if (layer === 'Temperature') return `${value.toFixed(1)} deg C`;
+  if (layer === 'Wind') return `${Math.round(value)} km/h`;
+  if (layer === 'Rainfall') return `${value.toFixed(1)} mm`;
+  return `${Math.round(value)} PSI`;
+}
+
+function heatmapPalette(layer: LayerKey): HeatmapPalette {
+  if (layer === 'Temperature') return 'temperature';
+  if (layer === 'Rainfall') return 'rainfall';
+  if (layer === 'Wind') return 'wind';
+  return 'psi';
+}
+
+function heatmapScale(layer: LayerKey) {
+  if (layer === 'Temperature') return { min: 24, max: 36, radius: 62 };
+  if (layer === 'Rainfall') return { min: 0, max: 40, radius: 54 };
+  if (layer === 'Wind') return { min: 0, max: 45, radius: 62 };
+  return { min: 0, max: 200, radius: 105 };
 }
 
 function layerData(weather: any, layer: LayerKey): { unit: string; timestamp: string; rows: WeatherLayerRow[] } {
@@ -121,6 +133,44 @@ function layerData(weather: any, layer: LayerKey): { unit: string; timestamp: st
   };
 }
 
+function timeLabel(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function thinTrend(points: WeatherTrendPoint[], maxPoints = 24) {
+  if (points.length <= maxPoints) return points;
+  const interval = Math.ceil(points.length / maxPoints);
+  return points.filter((_, index) => index % interval === 0 || index === points.length - 1);
+}
+
+function rainfallTrendData(weather: any, fallbackPeak: number): WeatherTrendPoint[] {
+  const trend = Array.isArray(weather.rainfall?.trend) ? weather.rainfall.trend : [];
+  if (trend.length) {
+    return thinTrend(
+      trend
+        .map((point: any) => ({ time: timeLabel(point.time), value: Number(point.value) }))
+        .filter((point: WeatherTrendPoint) => Number.isFinite(point.value)),
+    );
+  }
+
+  return [{ time: timeLabel(weather.rainfall.timestamp), value: fallbackPeak }];
+}
+
+function psiTrendData(weather: any, fallbackAverage: number): WeatherTrendPoint[] {
+  const trend = Array.isArray(weather.psi?.trend) ? weather.psi.trend : [];
+  if (trend.length) {
+    return thinTrend(
+      trend
+        .map((point: any) => ({ time: timeLabel(point.time), value: Number(point.value) }))
+        .filter((point: WeatherTrendPoint) => Number.isFinite(point.value)),
+    );
+  }
+
+  return [{ time: timeLabel(weather.psi.timestamp), value: Math.round(fallbackAverage) }];
+}
+
 export default function GovWeather() {
   const { data: dashboardData, loading, error } = useApi<any>('/api/dashboard/cached-external');
   const [activeLayer, setActiveLayer] = useState<LayerKey>('Rainfall');
@@ -140,17 +190,40 @@ export default function GovWeather() {
   const maxTemperature = Math.max(...temperature.rows.map((row) => row.value));
   const maxWind = Math.max(...wind.rows.map((row) => row.value));
   const maxPsi = Math.max(...psi.rows.map((row) => row.value));
+  const averagePsi = psi.rows.reduce((sum, row) => sum + row.value, 0) / psi.rows.length;
   const average = current.rows.reduce((sum, row) => sum + row.value, 0) / current.rows.length;
+  const rainfallChartData = rainfallTrendData(weather, maxRainfall);
+  const psiChartData = psiTrendData(weather, averagePsi);
 
   const markers: MapMarker[] = current.rows.map((row) => ({
     id: `${activeLayer}-${row.id}`,
     name: row.name,
     latitude: row.latitude,
     longitude: row.longitude,
-    value: formatValue(activeLayer, row.value),
+    value: displayValue(activeLayer, row.value),
     detail: `Official ${activeLayer.toLowerCase()} reading`,
     severity: severity(activeLayer, row.value),
   }));
+  const scale = heatmapScale(activeLayer);
+  const heatmapLayer: MapHeatmapLayer = {
+    label: activeLayer,
+    unit: displayUnit(activeLayer),
+    palette: heatmapPalette(activeLayer),
+    points: current.rows.map((row) => ({
+      id: `${activeLayer}-${row.id}`,
+      name: row.name,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      value: row.value,
+    })),
+    min: scale.min,
+    max: scale.max,
+    radius: scale.radius,
+    opacity: activeLayer === 'Rainfall' ? 0.98 : 0.94,
+    cellSize: 7,
+    legendLabel: 'Low to high intensity',
+    currentValue: average,
+  };
 
   const summaryCards = [
     {
@@ -239,30 +312,26 @@ export default function GovWeather() {
         <div className="h-[500px]">
           <SingaporeRegionMap
             markers={markers}
-            emptyTitle={`${activeLayer} readings`}
-            emptyDetail="Hover a station marker for its latest published value"
+            heatmapLayer={heatmapLayer}
+            showMarkers={false}
+            emptyTitle={`Average ${activeLayer}`}
+            emptyDetail={displayValue(activeLayer, average)}
             problemLabel={`${activeLayer.toLowerCase()} monitoring points`}
           />
-        </div>
-        <div className="mt-3 flex flex-wrap gap-4 text-xs text-zinc-500">
-          <span><i className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full bg-red-500" />High</span>
-          <span><i className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full bg-yellow-500" />Medium</span>
-          <span><i className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full bg-blue-500" />Low</span>
-          <span>Layer unit: {formatUnit(activeLayer)}</span>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6 lg:col-span-2">
           <h2 className="mb-1 text-lg font-semibold">Highest Published Readings</h2>
-          <p className="mb-4 text-xs text-zinc-500">Top stations or regions in this snapshot · average {average.toFixed(1)} {current.unit}</p>
+          <p className="mb-4 text-xs text-zinc-500">Top stations or regions in this snapshot - average {displayValue(activeLayer, average)}</p>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={sorted.slice(0, 10)}>
               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
               <XAxis dataKey="name" stroke="#71717a" tick={{ fontSize: 10 }} interval={0} angle={-20} textAnchor="end" height={75} />
               <YAxis stroke="#71717a" />
               <Tooltip contentStyle={{ backgroundColor: '#18181b', border: '1px solid #3f3f46', borderRadius: 8 }} />
-              <Bar dataKey="value" fill="#3b82f6" radius={[6, 6, 0, 0]} name={`${activeLayer} (${current.unit})`} />
+              <Bar dataKey="value" fill="#3b82f6" radius={[6, 6, 0, 0]} name={`${activeLayer} (${displayUnit(activeLayer)})`} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -271,8 +340,8 @@ export default function GovWeather() {
           <dl className="space-y-4 text-sm">
             <div><dt className="text-zinc-500">Layer</dt><dd className="font-medium">{activeLayer}</dd></div>
             <div><dt className="text-zinc-500">Reporting locations</dt><dd className="font-medium">{current.rows.length}</dd></div>
-            <div><dt className="text-zinc-500">Highest reading</dt><dd className="font-medium">{formatValue(activeLayer, sorted[0]?.value ?? 0)}</dd></div>
-            <div><dt className="text-zinc-500">Average reading</dt><dd className="font-medium">{formatValue(activeLayer, average)}</dd></div>
+            <div><dt className="text-zinc-500">Highest reading</dt><dd className="font-medium">{displayValue(activeLayer, sorted[0]?.value ?? 0)}</dd></div>
+            <div><dt className="text-zinc-500">Average reading</dt><dd className="font-medium">{displayValue(activeLayer, average)}</dd></div>
           </dl>
         </div>
       </div>
@@ -281,10 +350,10 @@ export default function GovWeather() {
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
           <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
             <Droplets className="h-5 w-5 text-blue-500" />
-            24-Hour Rainfall Forecast
+            24-Hour Rainfall Readings
           </h2>
           <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={rainfallForecast}>
+            <AreaChart data={rainfallChartData}>
               <defs>
                 <linearGradient id="rainfallGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
@@ -303,10 +372,10 @@ export default function GovWeather() {
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
           <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
             <Cloud className="h-5 w-5 text-orange-500" />
-            Air Quality Trend (PSI)
+            24-Hour Air Quality Trend (PSI)
           </h2>
           <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={psiTrend}>
+            <AreaChart data={psiChartData}>
               <defs>
                 <linearGradient id="psiGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#f97316" stopOpacity={0.3} />

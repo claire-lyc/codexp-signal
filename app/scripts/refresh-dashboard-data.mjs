@@ -53,6 +53,44 @@ function latestReading(payload) {
   };
 }
 
+function rainfallTrend(payload) {
+  return payload.data.readings
+    .map((reading) => {
+      const values = reading.data.map((item) => Number(item.value)).filter(Number.isFinite);
+      const peak = values.length ? Math.max(...values) : 0;
+
+      return {
+        time: reading.timestamp,
+        value: Number(peak.toFixed(1)),
+      };
+    })
+    .filter((point) => Number.isFinite(point.value));
+}
+
+function psiTrend(payload) {
+  return payload.data.items
+    .map((item) => {
+      const readings = item.readings?.psi_twenty_four_hourly ?? {};
+      const values = Object.values(readings).map(Number).filter(Number.isFinite);
+      const average = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+
+      return {
+        time: item.timestamp,
+        value: Math.round(average),
+      };
+    })
+    .filter((point) => Number.isFinite(point.value));
+}
+
+function singaporeDate() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Singapore',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
 function featureCentroid(feature) {
   const points = feature.geometry.coordinates.flat(Infinity).filter((value) => typeof value === 'number');
   const coordinates = [];
@@ -82,21 +120,21 @@ function selectSeries(table, seriesNumbers) {
     });
 }
 
-const rainfall = await getJson(sources.rainfall);
-const temperature = await getJson(sources.temperature);
-const wind = await getJson(sources.wind);
-const psi = await getJson(sources.psi);
-const trafficImages = await getJson(sources.trafficImages);
-const denguePoll = await getJson(
-  `https://api-open.data.gov.sg/v1/public/api/datasets/${sources.dengueClusters}/poll-download`,
-);
-const diseaseTable = await getJson(
-  `https://data.gov.sg/api/action/datastore_search?resource_id=${sources.infectiousDiseases}&limit=25000`,
-);
-const [importPrices, retailSales] = await Promise.all([
-  getJson(sources.importPrices),
-  getJson(sources.retailSales),
-]);
+const sgtDate = singaporeDate();
+const [rainfall, rainfallDay, temperature, wind, psi, psiDay, trafficImages, denguePoll, diseaseTable, importPrices, retailSales] =
+  await Promise.all([
+    getJson(sources.rainfall),
+    getJson(`${sources.rainfall}?date=${sgtDate}`),
+    getJson(sources.temperature),
+    getJson(sources.wind),
+    getJson(sources.psi),
+    getJson(`${sources.psi}?date=${sgtDate}`),
+    getJson(sources.trafficImages),
+    getJson(`https://api-open.data.gov.sg/v1/public/api/datasets/${sources.dengueClusters}/poll-download`),
+    getJson(`https://data.gov.sg/api/action/datastore_search?resource_id=${sources.infectiousDiseases}&limit=25000`),
+    getJson(sources.importPrices),
+    getJson(sources.retailSales),
+  ]);
 
 const dengueGeoJson = await getJson(denguePoll.data.url);
 const dengueClusters = dengueGeoJson.features.map((feature) => ({
@@ -130,7 +168,10 @@ const database = {
     },
   },
   weather: {
-    rainfall: latestReading(rainfall),
+    rainfall: {
+      ...latestReading(rainfall),
+      trend: rainfallTrend(rainfallDay),
+    },
     temperature: latestReading(temperature),
     wind: latestReading(wind),
     psi: {
@@ -140,6 +181,7 @@ const database = {
         ...region,
         value: psiItem.readings.psi_twenty_four_hourly[region.name],
       })),
+      trend: psiTrend(psiDay),
     },
     source: {
       agency: 'National Environment Agency',

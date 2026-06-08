@@ -5,6 +5,30 @@ import mapData from '../../data/singapore-planning-areas.json';
 type RiskLevel = 'high' | 'medium' | 'low';
 type Point = [number, number];
 
+export type HeatmapPalette = 'temperature' | 'rainfall' | 'wind' | 'psi';
+
+export type MapHeatPoint = {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  value: number;
+};
+
+export type MapHeatmapLayer = {
+  label: string;
+  unit: string;
+  palette: HeatmapPalette;
+  points: MapHeatPoint[];
+  min?: number;
+  max?: number;
+  radius?: number;
+  opacity?: number;
+  cellSize?: number;
+  legendLabel?: string;
+  currentValue?: number;
+};
+
 export type MapMarker = {
   id: string;
   name: string;
@@ -21,6 +45,8 @@ type SingaporeRegionMapProps = {
   emptyTitle?: string;
   emptyDetail?: string;
   problemLabel?: string;
+  heatmapLayer?: MapHeatmapLayer;
+  showMarkers?: boolean;
 };
 
 type PlanningArea = {
@@ -70,6 +96,12 @@ const riskStyles: Record<RiskLevel, { dot: string; label: string; hover: string 
 
 const neutralStyle = { dot: '#71717a', label: 'No reported data', hover: '#3f3f46' };
 const severityRank: Record<RiskLevel, number> = { low: 1, medium: 2, high: 3 };
+const heatmapPalettes: Record<HeatmapPalette, string[]> = {
+  temperature: ['#38bdf8', '#22c55e', '#facc15', '#f97316', '#ef4444'],
+  rainfall: ['#1e3a8a', '#2563eb', '#06b6d4', '#facc15', '#ef4444'],
+  wind: ['#14b8a6', '#22c55e', '#a3e635', '#f59e0b', '#ef4444'],
+  psi: ['#22c55e', '#a3e635', '#facc15', '#f97316', '#ef4444'],
+};
 
 function polygonPath(polygons: Point[][][]) {
   return polygons
@@ -117,12 +149,85 @@ function projectCoordinates(latitude: number, longitude: number): Point {
   return [x, y];
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function hexToRgb(hex: string) {
+  const normalized = hex.replace('#', '');
+  return {
+    r: parseInt(normalized.slice(0, 2), 16),
+    g: parseInt(normalized.slice(2, 4), 16),
+    b: parseInt(normalized.slice(4, 6), 16),
+  };
+}
+
+function rgbToHex({ r, g, b }: { r: number; g: number; b: number }) {
+  return `#${[r, g, b].map((channel) => Math.round(channel).toString(16).padStart(2, '0')).join('')}`;
+}
+
+function interpolateColor(from: string, to: string, amount: number) {
+  const start = hexToRgb(from);
+  const end = hexToRgb(to);
+
+  return rgbToHex({
+    r: start.r + (end.r - start.r) * amount,
+    g: start.g + (end.g - start.g) * amount,
+    b: start.b + (end.b - start.b) * amount,
+  });
+}
+
+function heatColor(palette: HeatmapPalette, value: number, min: number, max: number) {
+  const stops = heatmapPalettes[palette];
+  const range = max - min || 1;
+  const normalized = clamp((value - min) / range, 0, 1);
+  const scaled = normalized * (stops.length - 1);
+  const index = Math.min(Math.floor(scaled), stops.length - 2);
+  const localAmount = scaled - index;
+
+  return interpolateColor(stops[index], stops[index + 1], localAmount);
+}
+
+function interpolatedHeatValue(
+  point: Point,
+  heatPoints: Array<MapHeatPoint & { coordinates: Point }>,
+  fallbackValue: number,
+) {
+  if (heatPoints.length === 0) return fallbackValue;
+
+  let weightedTotal = 0;
+  let weightTotal = 0;
+
+  for (const heatPoint of heatPoints) {
+    const [x, y] = heatPoint.coordinates;
+    const distanceSquared = (point[0] - x) ** 2 + (point[1] - y) ** 2;
+    const weight = 1 / Math.max(distanceSquared, 900);
+
+    weightedTotal += heatPoint.value * weight;
+    weightTotal += weight;
+  }
+
+  return weightTotal ? weightedTotal / weightTotal : fallbackValue;
+}
+
+function formatHeatValue(value: number, unit: string) {
+  const precision = unit === 'PSI' || unit === 'km/h' ? 0 : 1;
+  return `${value.toFixed(precision)} ${unit}`;
+}
+
+function heatmapGradient(palette: HeatmapPalette, direction: 'vertical' | 'horizontal' = 'vertical') {
+  const angle = direction === 'vertical' ? 'to top' : 'to right';
+  return `linear-gradient(${angle}, ${heatmapPalettes[palette].join(', ')})`;
+}
+
 export default function SingaporeRegionMap({
   markers = [],
   showAreaLabels = true,
   emptyTitle = 'Singapore planning areas',
   emptyDetail = 'Hover or focus any outlined area',
   problemLabel = 'reported readings',
+  heatmapLayer,
+  showMarkers = true,
 }: SingaporeRegionMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [activeAreaId, setActiveAreaId] = useState<string | null>(null);
@@ -153,6 +258,65 @@ export default function SingaporeRegionMap({
   const activeArea = planningAreas.find((area) => area.id === activeAreaId);
   const activeStatus = activeArea ? areaStatuses.get(activeArea.id) : null;
   const activeMarker = markers.find((marker) => marker.id === activeMarkerId);
+  const projectedHeatPoints = useMemo(() => {
+    if (!heatmapLayer) return [];
+
+    return heatmapLayer.points.map((point) => ({
+      ...point,
+      coordinates: projectCoordinates(point.latitude, point.longitude),
+    }));
+  }, [heatmapLayer]);
+  const heatBounds = useMemo(() => {
+    if (!heatmapLayer || projectedHeatPoints.length === 0) return null;
+    const values = projectedHeatPoints.map((point) => point.value);
+
+    return {
+      min: heatmapLayer.min ?? Math.min(...values),
+      max: heatmapLayer.max ?? Math.max(...values),
+    };
+  }, [heatmapLayer, projectedHeatPoints]);
+  const heatCells = useMemo(() => {
+    if (!heatmapLayer || !heatBounds || projectedHeatPoints.length === 0) return [];
+
+    const cellSize = heatmapLayer.cellSize ?? 7;
+    const fallbackValue =
+      projectedHeatPoints.reduce((sum, point) => sum + point.value, 0) / projectedHeatPoints.length;
+    const cells: Array<{ id: string; x: number; y: number; size: number; value: number; color: string }> = [];
+
+    for (let y = 0; y < mapData.height; y += cellSize) {
+      for (let x = 0; x < mapData.width; x += cellSize) {
+        const center: Point = [x + cellSize / 2, y + cellSize / 2];
+        const value = interpolatedHeatValue(center, projectedHeatPoints, fallbackValue);
+
+        cells.push({
+          id: `${x}-${y}`,
+          x,
+          y,
+          size: cellSize + 0.8,
+          value,
+          color: heatColor(heatmapLayer.palette, value, heatBounds.min, heatBounds.max),
+        });
+      }
+    }
+
+    return cells;
+  }, [heatmapLayer, heatBounds, projectedHeatPoints]);
+  const activeHeatStats = useMemo(() => {
+    if (!activeArea || !heatmapLayer || projectedHeatPoints.length === 0) return null;
+    const areaPoints = heatmapLayer.points.filter((point) =>
+      pointInArea(projectCoordinates(point.latitude, point.longitude), activeArea.polygons),
+    );
+    if (areaPoints.length === 0) {
+      const estimatedValue = interpolatedHeatValue(activeArea.label, projectedHeatPoints, 0);
+
+      return { count: 0, average: estimatedValue, peak: null, estimated: true };
+    }
+
+    const average = areaPoints.reduce((sum, point) => sum + point.value, 0) / areaPoints.length;
+    const peak = areaPoints.reduce((highest, point) => (point.value > highest.value ? point : highest), areaPoints[0]);
+
+    return { count: areaPoints.length, average, peak, estimated: false };
+  }, [activeArea, heatmapLayer, projectedHeatPoints]);
   const zoom = mapData.width / viewport.width;
 
   const clampViewport = (next: Viewport): Viewport => ({
@@ -281,21 +445,69 @@ export default function SingaporeRegionMap({
         onPointerUp={stopPanning}
         onPointerCancel={stopPanning}
       >
+        <defs>
+          <clipPath id="singapore-map-land-clip">
+            {planningAreas.map((area) => (
+              <path
+                key={`${area.id}-clip`}
+                d={polygonPath(area.polygons)}
+                fillRule="evenodd"
+                clipRule="evenodd"
+              />
+            ))}
+          </clipPath>
+          <filter id="singapore-map-surface-blur" x="-8%" y="-8%" width="116%" height="116%">
+            <feGaussianBlur stdDeviation="2.4" />
+          </filter>
+          <filter id="singapore-map-heat-blur" x="-35%" y="-35%" width="170%" height="170%">
+            <feGaussianBlur stdDeviation="13" />
+          </filter>
+        </defs>
+
+        {heatmapLayer && heatBounds && (
+          <g clipPath="url(#singapore-map-land-clip)" className="pointer-events-none">
+            <g filter="url(#singapore-map-surface-blur)" opacity={heatmapLayer.opacity ?? 0.96}>
+              {heatCells.map((cell) => (
+                <rect
+                  key={cell.id}
+                  x={cell.x}
+                  y={cell.y}
+                  width={cell.size}
+                  height={cell.size}
+                  fill={cell.color}
+                />
+              ))}
+            </g>
+            <g filter="url(#singapore-map-heat-blur)" opacity="0.22">
+              {projectedHeatPoints.map((point) => {
+                const [x, y] = point.coordinates;
+                const color = heatColor(heatmapLayer.palette, point.value, heatBounds.min, heatBounds.max);
+                const radius = heatmapLayer.radius ?? 54;
+
+                return <circle key={`${point.id}-glow`} cx={x} cy={y} r={radius} fill={color} />;
+              })}
+            </g>
+          </g>
+        )}
+
         <g>
           {planningAreas.map((area) => {
             const isActive = activeAreaId === area.id;
             const status = areaStatuses.get(area.id);
             const style = status?.severity ? riskStyles[status.severity] : neutralStyle;
+            const fillOpacity = heatmapLayer ? (isActive ? 0.2 : 0.03) : 1;
 
             return (
               <path
                 key={area.id}
                 d={polygonPath(area.polygons)}
                 fill={isActive ? style.hover : '#52525b'}
+                fillOpacity={fillOpacity}
                 fillRule="evenodd"
                 clipRule="evenodd"
-                stroke="#18181b"
-                strokeWidth="1.35"
+                stroke={heatmapLayer ? '#0b1120' : '#18181b'}
+                strokeOpacity={heatmapLayer ? 0.72 : 1}
+                strokeWidth={heatmapLayer ? '1.05' : '1.35'}
                 strokeLinejoin="round"
                 vectorEffect="non-scaling-stroke"
                 className="outline-none transition-colors duration-150"
@@ -330,7 +542,7 @@ export default function SingaporeRegionMap({
           />
         )}
 
-        <g>
+        {showMarkers && <g>
           {markers.map((marker) => {
             const [x, y] = projectCoordinates(marker.latitude, marker.longitude);
             const isActive = activeMarkerId === marker.id;
@@ -375,7 +587,7 @@ export default function SingaporeRegionMap({
               </g>
             );
           })}
-        </g>
+        </g>}
 
         {showAreaLabels && <g className="pointer-events-none">
           {planningAreas.map((area) => {
@@ -455,10 +667,25 @@ export default function SingaporeRegionMap({
       </div>
 
       <div className="pointer-events-none absolute bottom-3 right-3 rounded-md border border-zinc-700 bg-zinc-950/85 px-2 py-1 text-[10px] text-zinc-400 backdrop-blur">
-        Pinch to zoom · Drag to move
+        Pinch to zoom - Drag to move
       </div>
 
-      <div className="pointer-events-none absolute left-3 top-3 max-w-[240px] rounded-lg border border-zinc-700 bg-zinc-950/95 px-3 py-2 shadow-xl backdrop-blur">
+      {heatmapLayer && heatBounds && (
+        <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 rounded-lg border border-zinc-700 bg-zinc-950/90 p-2 shadow-xl backdrop-blur">
+          <div className="flex flex-col items-center">
+            <span className="mb-1 text-[10px] font-semibold text-zinc-200">{formatHeatValue(heatBounds.max, heatmapLayer.unit)}</span>
+            <div className="h-36">
+              <div
+                className="h-full w-3 rounded-full border border-white/20"
+                style={{ background: heatmapGradient(heatmapLayer.palette) }}
+              />
+            </div>
+            <span className="mt-1 text-[10px] font-semibold text-zinc-200">{formatHeatValue(heatBounds.min, heatmapLayer.unit)}</span>
+          </div>
+        </div>
+      )}
+
+      <div className={`pointer-events-none absolute ${heatmapLayer ? 'left-3 top-[calc(50%-13rem)]' : 'left-3 top-3'} max-w-[240px] rounded-lg border border-zinc-700 bg-zinc-950/95 px-3 py-2 shadow-xl backdrop-blur`}>
         {activeMarker ? (
           <>
             <div className="flex items-center gap-2 text-sm font-semibold text-white">
@@ -486,11 +713,25 @@ export default function SingaporeRegionMap({
             </div>
             <div className="mt-0.5 text-[11px] text-zinc-500">{activeArea.region}</div>
             <div className="mt-1 text-xs text-zinc-300">
-              {activeStatus.markers.length
-                ? `${activeStatus.markers.length} ${problemLabel} · Highest level: ${
-                    riskStyles[activeStatus.severity ?? 'low'].label
-                  }`
-                : `No ${problemLabel} mapped in this area`}
+              {activeHeatStats && heatmapLayer ? (
+                <>
+                  {activeHeatStats.estimated
+                    ? `Estimated reading: ${formatHeatValue(activeHeatStats.average, heatmapLayer.unit)}`
+                    : `${activeHeatStats.count} readings - avg ${formatHeatValue(activeHeatStats.average, heatmapLayer.unit)}`}
+                  {activeHeatStats.peak && (
+                    <>
+                      <br />
+                      Peak: {activeHeatStats.peak.name} ({formatHeatValue(activeHeatStats.peak.value, heatmapLayer.unit)})
+                    </>
+                  )}
+                </>
+              ) : activeStatus.markers.length ? (
+                `${activeStatus.markers.length} ${problemLabel} - Highest level: ${
+                  riskStyles[activeStatus.severity ?? 'low'].label
+                }`
+              ) : (
+                `No ${problemLabel} mapped in this area`
+              )}
             </div>
           </>
         ) : (

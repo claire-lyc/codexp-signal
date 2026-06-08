@@ -57,12 +57,15 @@ export function startExternalDashboardRefresh() {
 }
 
 async function buildExternalDashboardSnapshot() {
-  const [rainfall, temperature, wind, psi, trafficImages, denguePoll, diseaseTable, importPrices, retailSales] =
+  const sgtDate = singaporeDate();
+  const [rainfall, rainfallDay, temperature, wind, psi, psiDay, trafficImages, denguePoll, diseaseTable, importPrices, retailSales] =
     await Promise.all([
       getJson<any>(sources.rainfall),
+      getJson<any>(`${sources.rainfall}?date=${sgtDate}`),
       getJson<any>(sources.temperature),
       getJson<any>(sources.wind),
       getJson<any>(sources.psi),
+      getJson<any>(`${sources.psi}?date=${sgtDate}`),
       getJson<any>(sources.trafficImages),
       getJson<any>(`https://api-open.data.gov.sg/v1/public/api/datasets/${sources.dengueClusters}/poll-download`),
       getJson<any>(`https://data.gov.sg/api/action/datastore_search?resource_id=${sources.infectiousDiseases}&limit=25000`),
@@ -103,7 +106,10 @@ async function buildExternalDashboardSnapshot() {
       },
     },
     weather: {
-      rainfall: latestReading(rainfall),
+      rainfall: {
+        ...latestReading(rainfall),
+        trend: rainfallTrend(rainfallDay),
+      },
       temperature: latestReading(temperature),
       wind: latestReading(wind),
       psi: {
@@ -113,6 +119,7 @@ async function buildExternalDashboardSnapshot() {
           ...region,
           value: psiItem.readings.psi_twenty_four_hourly[region.name],
         })),
+        trend: psiTrend(psiDay),
       },
       source: {
         agency: 'National Environment Agency',
@@ -191,6 +198,44 @@ function latestReading(payload: any) {
       .map((item: any) => ({ ...(stations.get(item.stationId) ?? {}), value: item.value }))
       .filter((item: any) => item.location),
   };
+}
+
+function rainfallTrend(payload: any) {
+  return payload.data.readings
+    .map((reading: any) => {
+      const values = reading.data.map((item: any) => Number(item.value)).filter(Number.isFinite);
+      const peak = values.length ? Math.max(...values) : 0;
+
+      return {
+        time: reading.timestamp,
+        value: Number(peak.toFixed(1)),
+      };
+    })
+    .filter((point: any) => Number.isFinite(point.value));
+}
+
+function psiTrend(payload: any) {
+  return payload.data.items
+    .map((item: any) => {
+      const readings = item.readings?.psi_twenty_four_hourly ?? {};
+      const values = Object.values(readings).map(Number).filter(Number.isFinite);
+      const average = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+
+      return {
+        time: item.timestamp,
+        value: Math.round(average),
+      };
+    })
+    .filter((point: any) => Number.isFinite(point.value));
+}
+
+function singaporeDate() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Singapore',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
 }
 
 function featureCentroid(feature: any) {

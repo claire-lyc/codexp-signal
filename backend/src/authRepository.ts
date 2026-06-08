@@ -232,6 +232,77 @@ export async function upsertPasswordUser(input: {
   }
 }
 
+export async function upsertCitizenPasswordUser(input: {
+  username: string;
+  password: string;
+  displayName?: string;
+  email?: string;
+  tags?: string[];
+}) {
+  const username = input.username.trim();
+  const email = input.email ? normalizeEmail(input.email) : `${username.toLowerCase().replace(/\s+/g, '-')}.demo@signal.local`;
+  const passwordHash = await bcrypt.hash(input.password, 12);
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const existingUser = await client.query<{ id: string }>(
+      `
+        SELECT id
+        FROM auth.users
+        WHERE lower(username) = lower($1)
+        LIMIT 1
+      `,
+      [username],
+    );
+
+    const userResult = existingUser.rows[0]
+      ? await client.query<AuthUser>(
+          `
+            UPDATE auth.users
+            SET
+              actor_type = 'citizen',
+              display_name = $2,
+              email = $3,
+              username = $4,
+              tags = $5,
+              updated_at = now()
+            WHERE id = $1
+            RETURNING id, actor_type, display_name, email, username, tags, created_at, updated_at
+          `,
+          [existingUser.rows[0].id, input.displayName ?? username, email, username, input.tags ?? ['Citizen']],
+        )
+      : await client.query<AuthUser>(
+          `
+            INSERT INTO auth.users (actor_type, display_name, email, username, tags)
+            VALUES ('citizen', $1, $2, $3, $4)
+            RETURNING id, actor_type, display_name, email, username, tags, created_at, updated_at
+          `,
+          [input.displayName ?? username, email, username, input.tags ?? ['Citizen']],
+        );
+    const user = userResult.rows[0];
+
+    await client.query(
+      `
+        INSERT INTO auth.password_credentials (user_id, password_hash)
+        VALUES ($1, $2)
+        ON CONFLICT (user_id)
+        DO UPDATE SET password_hash = EXCLUDED.password_hash, password_updated_at = now()
+      `,
+      [user.id, passwordHash],
+    );
+
+    await client.query('COMMIT');
+    return getUserById(user.id);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function createSession(input: {
   userId: string;
   refreshToken: string;

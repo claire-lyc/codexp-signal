@@ -29,7 +29,7 @@ import {
   listAlerts,
   listCrises,
 } from './dashboardRepository.js';
-import { startExternalDashboardRefresh } from './externalDashboardRefresh.js';
+import { refreshExternalDashboardSnapshot, startExternalDashboardRefresh } from './externalDashboardRefresh.js';
 import {
   createBroadcast,
   listBroadcasts,
@@ -523,6 +523,15 @@ app.get(['/api/citizen/incidents', '/api/public/incidents'], async (_request, re
 
 app.get('/api/dashboard/cached-external', ...requireGovUser, async (_request, response, next) => {
   try {
+    response.json(await getSnapshotResponse('dashboard_cached_external'));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/dashboard/cached-external/refresh', ...requireGovUser, async (_request, response, next) => {
+  try {
+    await refreshExternalDashboardSnapshot();
     response.json(await getSnapshotResponse('dashboard_cached_external'));
   } catch (error) {
     next(error);
