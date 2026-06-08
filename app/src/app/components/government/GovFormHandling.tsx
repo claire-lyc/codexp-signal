@@ -58,8 +58,8 @@ type Ticket = {
   chatEnabled?: boolean;
 };
 
-const agencies = ['All Agencies', 'MOH', 'PUB', 'LTA', 'Enterprise SG', 'SPF', 'SCDF'];
-const pingableAgencies = ['MOH', 'PUB', 'LTA', 'Enterprise SG', 'SPF', 'SCDF', 'NEA', 'MSF'];
+const agencies = ['All Agencies', 'MOH', 'PUB', 'LTA', 'Enterprise SG', 'SPF', 'SCDF', 'CSA', 'GOV-OPS'];
+const pingableAgencies = ['MOH', 'PUB', 'LTA', 'Enterprise SG', 'SPF', 'SCDF', 'CSA', 'GOV-OPS'];
 const statusOptions: Array<'All' | TicketStatus> = ['All', 'open', 'in-progress', 'grouped', 'resolved'];
 const crisisTypes = ['All', 'Health', 'Weather', 'Supply Chain', 'Infrastructure', 'Cybersecurity'];
 
@@ -197,9 +197,10 @@ export default function GovFormHandling() {
         setSelectedTicketId((current) => current || data.items[0]?.id || '');
       })
       .catch(() => {
+        const localTickets = loadLocalTickets();
         setUsingBackend(false);
-        setTickets(seedTickets);
-        setSelectedTicketId((current) => current || seedTickets[0]?.id || '');
+        setTickets(localTickets);
+        setSelectedTicketId((current) => current || localTickets[0]?.id || '');
       });
   }, []);
 
@@ -580,7 +581,17 @@ function updateLocalTickets(updater: (current: Ticket[]) => Ticket[], setTickets
 }
 
 function loadLocalTickets() {
-  return seedTickets;
+  try {
+    const stored = localStorage.getItem('signal-tickets');
+    if (!stored) return seedTickets;
+    const parsed = JSON.parse(stored) as Ticket[];
+    if (!Array.isArray(parsed)) return seedTickets;
+
+    const seedIds = new Set(parsed.map((ticket) => ticket.id));
+    return [...parsed, ...seedTickets.filter((ticket) => !seedIds.has(ticket.id))];
+  } catch {
+    return seedTickets;
+  }
 }
 
 

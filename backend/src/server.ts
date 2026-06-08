@@ -29,6 +29,7 @@ import {
   listAlerts,
   listCrises,
 } from './dashboardRepository.js';
+import { detectTicketUrgency } from './severityDetector.js';
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
@@ -157,6 +158,7 @@ app.post(
 
       const files = Array.isArray(request.files) ? request.files : [];
       const bodyImages = parseImageMetadata(request.body?.images);
+      const urgency = await detectTicketUrgency(crisisType, message);
       const ticket = await createCitizenTicket({
         reporterUserId: request.user?.id ?? null,
         reporter: stringBody(request.body?.reporter),
@@ -166,6 +168,7 @@ app.post(
         latitude: numberBody(request.body?.latitude),
         longitude: numberBody(request.body?.longitude),
         crisisType,
+        urgency,
         reportType: stringBody(request.body?.reportType),
         images: [
           ...files.map((file) => ({

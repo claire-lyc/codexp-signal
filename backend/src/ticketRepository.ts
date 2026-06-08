@@ -256,6 +256,7 @@ export async function createCitizenTicket(input: {
   latitude?: number | null;
   longitude?: number | null;
   crisisType: string;
+  urgency: TicketUrgency;
   reportType?: string;
   images?: Array<{
     originalFilename?: string | null;
@@ -272,9 +273,8 @@ export async function createCitizenTicket(input: {
 
     const publicReportId = await nextPublicReportId(client);
     const dbCrisisType = toDbCrisisType(input.crisisType);
-    const agency = agencyFor(dbCrisisType);
+    const agency = agencyForReport(input.crisisType, input.reportType, input.message, dbCrisisType);
     const agencyId = await upsertAgency(client, agency);
-    const severity = urgencyFor(input.crisisType, input.message);
 
     const reportResult = await client.query<{ id: string }>(
       `
@@ -307,7 +307,7 @@ export async function createCitizenTicket(input: {
         input.location?.trim() || null,
         input.latitude ?? null,
         input.longitude ?? null,
-        severity,
+        input.urgency,
         agencyId,
       ],
     );
@@ -773,12 +773,18 @@ function agencyFor(crisisType: DbCrisisType) {
   return { code: 'GOV-OPS', name: 'Government Operations' };
 }
 
-function urgencyFor(crisisType: string, message: string): TicketUrgency {
-  const normalized = `${crisisType} ${message}`.toLowerCase();
-  if (normalized.includes('knee-deep') || normalized.includes('danger') || normalized.includes('fire')) return 'critical';
-  if (normalized.includes('flood') || normalized.includes('hospital') || normalized.includes('out of stock')) return 'high';
-  if (normalized.includes('delay') || normalized.includes('shortage') || normalized.includes('symptom')) return 'medium';
-  return 'low';
+function agencyForReport(crisisType: string, reportType: string | undefined, message: string, dbCrisisType: DbCrisisType) {
+  const normalized = `${reportType ?? ''} ${crisisType} ${message}`.toLowerCase();
+  if (normalized.includes('fire')) {
+    return { code: 'SCDF', name: 'Singapore Civil Defence Force' };
+  }
+  if (normalized.includes('hospital') || normalized.includes('clinic') || normalized.includes('medical')) {
+    return { code: 'MOH', name: 'Ministry of Health' };
+  }
+  if (normalized.includes('crime') || normalized.includes('police')) {
+    return { code: 'SPF', name: 'Singapore Police Force' };
+  }
+  return agencyFor(dbCrisisType);
 }
 
 function formatTimestamp(date: Date) {

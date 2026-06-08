@@ -28,6 +28,8 @@ type CreatedTicket = {
   item?: TicketRecord;
 };
 
+type TicketUrgency = 'critical' | 'high' | 'medium' | 'low';
+
 type TicketComment = {
   id: string;
   author: string;
@@ -55,7 +57,7 @@ type TicketRecord = {
   crisisType: string;
   status: string;
   assignedAgency: string;
-  urgency: string;
+  urgency: TicketUrgency;
   hasImage: boolean;
   comments?: TicketComment[];
   images?: TicketImage[];
@@ -821,12 +823,19 @@ function labelForReportType(value: string) {
   return 'General';
 }
 
-function urgencyFor(reportType: string, description: string) {
-  const text = `${reportType} ${description}`.toLowerCase();
-  if (text.includes('knee-deep') || text.includes('danger') || text.includes('fire')) return 'critical';
-  if (text.includes('flood') || text.includes('out of stock') || text.includes('hospital')) return 'high';
-  if (text.includes('delay') || text.includes('shortage') || text.includes('symptom')) return 'medium';
-  return 'low';
+function agencyForReportType(value: string) {
+  if (value === 'health') return 'MOH';
+  if (value === 'flood' || value === 'environment') return 'PUB';
+  if (value === 'supply') return 'Enterprise SG';
+  if (value === 'infrastructure' || value === 'transport') return 'LTA';
+  return 'GOV-OPS';
+}
+
+function urgencyFor(crisisType: string, message: string): TicketUrgency {
+  void crisisType;
+  void message;
+  return 'medium';
+
 }
 
 function formatCommentTime(value: string) {
