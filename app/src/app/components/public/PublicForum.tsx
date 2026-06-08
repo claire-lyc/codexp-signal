@@ -33,6 +33,8 @@ type ForumPost = {
 };
 
 const storageKey = 'signal-forum-posts';
+const cooldownStorageKey = 'signal-forum-post-cooldown-until';
+const forumCooldownMs = Number(import.meta.env.VITE_FORUM_POST_COOLDOWN_MS ?? 60_000);
 const categories = ['All', 'Health', 'Weather', 'Infrastructure', 'Supply', 'Community'];
 
 const seedPosts: ForumPost[] = [
@@ -109,6 +111,14 @@ export default function PublicForum() {
   const [replyText, setReplyText] = useState('');
   const [status, setStatus] = useState<{ tone: 'success' | 'warning' | 'error'; message: string } | null>(null);
   const [usingBackend, setUsingBackend] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [postCooldownUntil, setPostCooldownUntil] = useState(() => loadCooldownUntil());
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -153,16 +163,31 @@ export default function PublicForum() {
     });
   }, [activeCategory, posts, query]);
 
+  const postCooldownSeconds = Math.max(0, Math.ceil((postCooldownUntil - now) / 1000));
+
   const replacePost = (updatedPost: ForumPost) => {
     setPosts((current) => current.map((post) => (post.id === updatedPost.id ? updatedPost : post)));
   };
 
   const handleSubmitPost = async () => {
+    if (posting) return;
+    if (postCooldownSeconds > 0) {
+      setStatus({
+        tone: 'warning',
+        message: `Please wait ${postCooldownSeconds} seconds before posting again.`,
+      });
+      return;
+    }
+
     const content = newPost.trim();
     if (!content) {
       setStatus({ tone: 'error', message: 'Write something before posting.' });
       return;
     }
+
+    setPosting(true);
+    setNewPost('');
+    startPostCooldown(forumCooldownMs, setPostCooldownUntil);
 
     const optimisticPost = createLocalPost({
       author: author.trim() || 'Anonymous User',
@@ -184,7 +209,18 @@ export default function PublicForum() {
           ? 'Post submitted, but it was flagged for moderator review.'
           : 'Post published to the community forum.',
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof CooldownError) {
+        setUsingBackend(true);
+        setNewPost(content);
+        startPostCooldown(error.retryAfterSeconds * 1000, setPostCooldownUntil);
+        setStatus({
+          tone: 'warning',
+          message: `Please wait ${error.retryAfterSeconds} seconds before posting again.`,
+        });
+        return;
+      }
+
       setUsingBackend(false);
       updateLocalPosts((current) => [optimisticPost, ...current], setPosts);
       setStatus({
@@ -193,9 +229,9 @@ export default function PublicForum() {
           ? 'Saved locally and flagged for review. Start the backend to sync it later.'
           : 'Saved locally. Start the backend to share it across devices.',
       });
+    } finally {
+      setPosting(false);
     }
-
-    setNewPost('');
   };
 
   const handleLike = async (postId: string) => {
@@ -332,10 +368,15 @@ export default function PublicForum() {
           <button
             type="button"
             onClick={handleSubmitPost}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 transition-colors hover:bg-blue-700"
+            disabled={posting || postCooldownSeconds > 0 || !newPost.trim()}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
           >
             <Send className="h-4 w-4" />
-            Post to Community
+            {posting
+              ? 'Posting...'
+              : postCooldownSeconds > 0
+                ? `Wait ${postCooldownSeconds}s`
+                : 'Post to Community'}
           </button>
         </div>
       </div>
@@ -477,8 +518,20 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
 
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { error?: string; retryAfterSeconds?: number } | null;
+    if (response.status === 429 && payload?.retryAfterSeconds) {
+      throw new CooldownError(payload.error ?? 'Please wait before posting again.', payload.retryAfterSeconds);
+    }
+    throw new Error(payload?.error ?? `${response.status} ${response.statusText}`);
+  }
   return response.json() as Promise<T>;
+}
+
+class CooldownError extends Error {
+  constructor(message: string, readonly retryAfterSeconds: number) {
+    super(message);
+  }
 }
 
 function loadLocalPosts() {
@@ -490,6 +543,17 @@ function loadLocalPosts() {
   } catch {
     return seedPosts;
   }
+}
+
+function loadCooldownUntil() {
+  const stored = Number(localStorage.getItem(cooldownStorageKey));
+  return Number.isFinite(stored) ? stored : 0;
+}
+
+function startPostCooldown(ms: number, setPostCooldownUntil: Dispatch<SetStateAction<number>>) {
+  const until = Date.now() + ms;
+  localStorage.setItem(cooldownStorageKey, String(until));
+  setPostCooldownUntil(until);
 }
 
 function updateLocalPosts(

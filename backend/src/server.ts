@@ -35,6 +35,8 @@ import { detectTicketUrgency } from './severityDetector.js';
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
+const forumPostCooldownMs = Number(process.env.FORUM_POST_COOLDOWN_MS ?? 60_000);
+const forumPostCooldowns = new Map<string, number>();
 const requireGovUser: express.RequestHandler[] = [
   authenticateJwt as express.RequestHandler,
   requireActor('government_user', 'system') as express.RequestHandler,
@@ -74,14 +76,28 @@ app.post('/api/forum/posts', async (request, response, next) => {
     return;
   }
 
+  const author = stringBody(request.body?.author);
+  const cooldownKey = forumCooldownKey(request, author);
+  const cooldown = forumCooldownRemaining(cooldownKey);
+  if (cooldown > 0) {
+    response.setHeader('Retry-After', String(Math.ceil(cooldown / 1000)));
+    response.status(429).json({
+      error: 'Please wait before posting again.',
+      retryAfterMs: cooldown,
+      retryAfterSeconds: Math.ceil(cooldown / 1000),
+    });
+    return;
+  }
+
   try {
     const aiFlag = await detectPotentialMisinformation(content);
     const post = createForumPost({
-      author: stringBody(request.body?.author),
+      author,
       content,
       category: stringBody(request.body?.category),
       aiFlag,
     });
+    forumPostCooldowns.set(cooldownKey, Date.now() + forumPostCooldownMs);
     response.status(201).json({ item: post });
   } catch (error) {
     next(error);
@@ -527,4 +543,23 @@ async function getSnapshotResponse(snapshotKey: string) {
 
 function asObject(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function forumCooldownKey(request: express.Request, author?: string) {
+  const forwardedFor = stringParam(request.headers['x-forwarded-for']);
+  const clientIp = forwardedFor?.split(',')[0]?.trim() || request.ip || request.socket.remoteAddress || 'unknown';
+  return `${clientIp}:${(author ?? 'Anonymous User').trim().toLowerCase()}`;
+}
+
+function forumCooldownRemaining(key: string) {
+  const expiresAt = forumPostCooldowns.get(key);
+  if (!expiresAt) return 0;
+
+  const remaining = expiresAt - Date.now();
+  if (remaining <= 0) {
+    forumPostCooldowns.delete(key);
+    return 0;
+  }
+
+  return remaining;
 }
