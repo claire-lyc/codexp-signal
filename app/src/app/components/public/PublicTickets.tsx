@@ -11,6 +11,8 @@ type CreatedTicket = {
   item?: TicketRecord;
 };
 
+type TicketUrgency = 'critical' | 'high' | 'medium' | 'low';
+
 type TicketRecord = {
   id: string;
   reporter: string;
@@ -19,7 +21,7 @@ type TicketRecord = {
   crisisType: string;
   status: string;
   assignedAgency: string;
-  urgency: string;
+  urgency: TicketUrgency;
   hasImage: boolean;
 };
 

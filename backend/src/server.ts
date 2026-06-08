@@ -129,38 +129,6 @@ app.get('/api/tickets', ...requireGovUser, async (request, response, next) => {
   }
 });
 
-app.post('/api/citizen/reports', async (request, response, next) => {
-  const message = stringBody(request.body?.description) ?? stringBody(request.body?.message);
-  const crisisType = stringBody(request.body?.crisisType) ?? stringBody(request.body?.reportType) ?? 'general';
-  if (!message) {
-    response.status(400).json({ error: 'Report description is required' });
-    return;
-  }
-
-  try {
-    const urgency = await detectTicketUrgency(crisisType, message);
-    const ticket = createCitizenTicket({
-      reporter: stringBody(request.body?.reporter),
-      message,
-      location: stringBody(request.body?.locationText) ?? stringBody(request.body?.location),
-      crisisType,
-      urgency,
-      hasImage: Boolean(request.body?.hasImage),
-    });
-
-    response.status(201).json({
-      id: ticket.id,
-      publicReportId: ticket.id,
-      status: ticket.status,
-      assignedAgency: ticket.assignedAgency,
-      createdAt: new Date().toISOString(),
-      item: ticket,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
 app.post(
   '/api/citizen/reports',
   optionalAuthenticateJwt as express.RequestHandler,
@@ -176,6 +144,7 @@ app.post(
 
       const files = Array.isArray(request.files) ? request.files : [];
       const bodyImages = parseImageMetadata(request.body?.images);
+      const urgency = await detectTicketUrgency(crisisType, message);
       const ticket = await createCitizenTicket({
         reporterUserId: request.user?.id ?? null,
         reporter: stringBody(request.body?.reporter),
@@ -185,6 +154,7 @@ app.post(
         latitude: numberBody(request.body?.latitude),
         longitude: numberBody(request.body?.longitude),
         crisisType,
+        urgency,
         reportType: stringBody(request.body?.reportType),
         images: [
           ...files.map((file) => ({

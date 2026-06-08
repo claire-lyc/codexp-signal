@@ -204,28 +204,7 @@ export async function createCitizenTicket(input: {
   latitude?: number | null;
   longitude?: number | null;
   crisisType: string;
-<<<<<<< HEAD
-  hasImage?: boolean;
   urgency: TicketUrgency;
-}) {
-  const ticket: Ticket = {
-    id: nextTicketId(),
-    timestamp: formatTimestamp(new Date()),
-    reporter: input.reporter?.trim() || 'Citizen (Anonymous)',
-    message: input.message.trim(),
-    location: input.location?.trim() || 'Location not provided',
-    crisisType: normalizeCrisisType(input.crisisType),
-    status: 'open',
-    assignedAgency: agencyFor(input.crisisType),
-    urgency: input.urgency,
-    hasImage: Boolean(input.hasImage),
-    relatedTickets: [],
-    comments: [internalNote('New citizen report opened from public portal.', 0)],
-    pingedAgencies: [],
-  };
-  tickets.unshift(ticket);
-  return ticket;
-=======
   reportType?: string;
   images?: Array<{
     originalFilename?: string | null;
@@ -243,7 +222,6 @@ export async function createCitizenTicket(input: {
     const dbCrisisType = toDbCrisisType(input.crisisType);
     const agency = agencyFor(dbCrisisType);
     const agencyId = await upsertAgency(client, agency);
-    const severity = urgencyFor(input.crisisType, input.message);
 
     const reportResult = await client.query<{ id: string }>(
       `
@@ -276,7 +254,7 @@ export async function createCitizenTicket(input: {
         input.location?.trim() || null,
         input.latitude ?? null,
         input.longitude ?? null,
-        severity,
+        input.urgency,
         agencyId,
       ],
     );
@@ -324,7 +302,6 @@ export async function createCitizenTicket(input: {
   } finally {
     client.release();
   }
->>>>>>> cf2eaeb25c035522cff6104fbfe718fc120e9fbc
 }
 
 export async function updateTicketStatus(id: string, status: TicketStatus) {
@@ -577,16 +554,6 @@ function agencyFor(crisisType: DbCrisisType) {
   if (crisisType === 'cybersecurity') return { code: 'CSA', name: 'Cyber Security Agency of Singapore' };
   return { code: 'GOV-OPS', name: 'Government Operations' };
 }
-<<<<<<< HEAD
-=======
-
-function urgencyFor(crisisType: string, message: string): TicketUrgency {
-  const normalized = `${crisisType} ${message}`.toLowerCase();
-  if (normalized.includes('knee-deep') || normalized.includes('danger') || normalized.includes('fire')) return 'critical';
-  if (normalized.includes('flood') || normalized.includes('hospital') || normalized.includes('out of stock')) return 'high';
-  if (normalized.includes('delay') || normalized.includes('shortage') || normalized.includes('symptom')) return 'medium';
-  return 'low';
-}
 
 function formatTimestamp(date: Date) {
   const pad = (value: number) => String(value).padStart(2, '0');
@@ -598,4 +565,3 @@ function authorLabel(actorType: string) {
   if (actorType === 'citizen') return 'Citizen';
   return 'GOV-HANDLER-001';
 }
->>>>>>> cf2eaeb25c035522cff6104fbfe718fc120e9fbc
