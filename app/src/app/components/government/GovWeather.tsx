@@ -150,9 +150,11 @@ function rainfallTrendData(weather: any, fallbackPeak: number): WeatherTrendPoin
   if (trend.length) {
     return thinTrend(
       trend
+        .slice()
+        .sort((a: any, b: any) => new Date(a.time).getTime() - new Date(b.time).getTime())
         .map((point: any) => ({ time: timeLabel(point.time), value: Number(point.value) }))
         .filter((point: WeatherTrendPoint) => Number.isFinite(point.value)),
-    );
+      );
   }
 
   return [{ time: timeLabel(weather.rainfall.timestamp), value: fallbackPeak }];
@@ -163,9 +165,11 @@ function psiTrendData(weather: any, fallbackAverage: number): WeatherTrendPoint[
   if (trend.length) {
     return thinTrend(
       trend
+        .slice()
+        .sort((a: any, b: any) => new Date(a.time).getTime() - new Date(b.time).getTime())
         .map((point: any) => ({ time: timeLabel(point.time), value: Number(point.value) }))
         .filter((point: WeatherTrendPoint) => Number.isFinite(point.value)),
-    );
+      );
   }
 
   return [{ time: timeLabel(weather.psi.timestamp), value: Math.round(fallbackAverage) }];
@@ -225,17 +229,18 @@ export default function GovWeather() {
     currentValue: average,
   };
 
-  const summaryCards = [
-    {
-      key: 'psi',
-      icon: Cloud,
-      iconClass: 'bg-orange-950 text-orange-500',
-      value: `${Math.round(maxPsi)}`,
-      label: 'PSI (Air Quality)',
-      badge: maxPsi >= 101 ? 'Unhealthy' : 'Normal',
-    },
+  const summaryCards: Array<{
+    key: string;
+    layer: LayerKey;
+    icon: typeof Cloud;
+    iconClass: string;
+    value: string;
+    label: string;
+    badge: string;
+  }> = [
     {
       key: 'rainfall',
+      layer: 'Rainfall',
       icon: Droplets,
       iconClass: 'bg-blue-950 text-blue-500',
       value: `${maxRainfall.toFixed(1)}mm`,
@@ -244,6 +249,7 @@ export default function GovWeather() {
     },
     {
       key: 'heat',
+      layer: 'Temperature',
       icon: ThermometerSun,
       iconClass: 'bg-red-950 text-red-500',
       value: `${maxTemperature.toFixed(1)}°C`,
@@ -252,11 +258,21 @@ export default function GovWeather() {
     },
     {
       key: 'wind',
+      layer: 'Wind',
       icon: Wind,
       iconClass: 'bg-green-950 text-green-500',
       value: `${Math.round(maxWind)} km/h`,
       label: 'Wind Speed',
       badge: maxWind >= 25 ? 'Alert' : 'Normal',
+    },
+    {
+      key: 'psi',
+      layer: 'PSI',
+      icon: Cloud,
+      iconClass: 'bg-orange-950 text-orange-500',
+      value: `${Math.round(maxPsi)}`,
+      label: 'PSI (Air Quality)',
+      badge: maxPsi >= 101 ? 'Unhealthy' : 'Normal',
     },
   ];
 
@@ -277,8 +293,17 @@ export default function GovWeather() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        {summaryCards.map(({ key, icon: Icon, iconClass, value, label, badge }) => (
-          <div key={key} className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+        {summaryCards.map(({ key, layer, icon: Icon, iconClass, value, label, badge }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setActiveLayer(layer)}
+            className={`rounded-xl border bg-zinc-900 p-5 text-left transition-colors ${
+              activeLayer === layer
+                ? 'border-blue-600 ring-1 ring-blue-600'
+                : 'border-zinc-800 hover:border-zinc-700'
+            }`}
+          >
             <div className="mb-3 flex items-center justify-between">
               <div className={`rounded-lg p-2 ${iconClass}`}>
                 <Icon className="h-5 w-5" />
@@ -287,7 +312,7 @@ export default function GovWeather() {
             </div>
             <div className="mb-1 text-2xl font-bold">{value}</div>
             <div className="text-sm text-zinc-400">{label}</div>
-          </div>
+          </button>
         ))}
       </div>
 

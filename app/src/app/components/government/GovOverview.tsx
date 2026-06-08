@@ -1,11 +1,11 @@
 // GET /api/crises?status=active
 // GET /api/alerts?status=active&type=&region=
 // GET /api/heatmap?crisisId=&layer=
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { AlertCircle, MapPin, Activity, Cloud, Package, Shield, ChevronRight, Filter, Pin } from 'lucide-react';
 import { Link } from 'react-router';
-import SingaporeRegionMap from '../SingaporeRegionMap';
+import SingaporeRegionMap, { type MapMarker } from '../SingaporeRegionMap';
 import { useApi } from '../../lib/api';
 
 const iconMap = { Activity, Cloud, Package, Shield };
@@ -44,12 +44,22 @@ const trendData: Array<{ date: string; incidents: number }> = [];
 const filterTypes = ['All', 'Health', 'Weather', 'Supply', 'Infrastructure', 'Cybersecurity'];
 const filterSeverities = ['All', 'High', 'Medium', 'Low'];
 const filterRegions = ['All', 'North', 'South', 'East', 'West', 'Central', 'Nationwide'];
+const regionCoordinates: Record<string, { latitude: number; longitude: number }> = {
+  Nationwide: { latitude: 1.3521, longitude: 103.8198 },
+  North: { latitude: 1.4291, longitude: 103.8354 },
+  South: { latitude: 1.276, longitude: 103.8457 },
+  East: { latitude: 1.3529, longitude: 103.9441 },
+  West: { latitude: 1.3456, longitude: 103.7019 },
+  Central: { latitude: 1.3021, longitude: 103.8398 },
+};
 
 export default function GovOverview() {
   const { data, loading, error } = useApi<OverviewData>('/api/gov/overview');
   const [filterType, setFilterType] = useState('All');
   const [filterSeverity, setFilterSeverity] = useState('All');
   const [filterRegion, setFilterRegion] = useState('All');
+  const [selectedAlertId, setSelectedAlertId] = useState<string | number | null>(null);
+  const mapSectionRef = useRef<HTMLDivElement | null>(null);
   const crisisCards = data?.overview?.crisisCards ?? [];
   const alerts = data?.alerts ?? [];
   const trendData = data?.overview?.incidentTrend ?? [];
@@ -61,6 +71,28 @@ export default function GovOverview() {
     const regMatch = filterRegion === 'All' || a.region.includes(filterRegion);
     return typeMatch && sevMatch && regMatch;
   });
+
+  const mapMarkers = useMemo<MapMarker[]>(() => {
+    const baseAlerts = selectedAlertId ? filteredAlerts.filter((alert) => alert.id === selectedAlertId) : filteredAlerts;
+    return baseAlerts.map((alert) => {
+      const regionName = filterRegions.find((region) => alert.region?.includes(region) && region !== 'All') ?? 'Nationwide';
+      const coordinates = regionCoordinates[regionName] ?? regionCoordinates.Nationwide;
+      return {
+        id: String(alert.id),
+        name: alert.region || 'Nationwide',
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+        value: alert.severity.toUpperCase(),
+        detail: alert.message,
+        severity: alert.severity as 'high' | 'medium' | 'low',
+      };
+    });
+  }, [filteredAlerts, selectedAlertId]);
+
+  const focusAlertOnMap = (alert: (typeof filteredAlerts)[number]) => {
+    setSelectedAlertId(alert.id);
+    mapSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
     <div className="space-y-6">
@@ -122,7 +154,7 @@ export default function GovOverview() {
 
       {/* Heatmap + Active Alerts — GET /api/heatmap?layer=crises & GET /api/alerts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+        <div ref={mapSectionRef} className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <MapPin className="w-5 h-5 text-red-600" />
@@ -131,7 +163,7 @@ export default function GovOverview() {
             <span className="text-xs text-zinc-500">Pins linked to Active Alerts</span>
           </div>
           <div className="h-[440px]">
-            <SingaporeRegionMap />
+            <SingaporeRegionMap markers={mapMarkers} />
           </div>
           <div className="flex items-center gap-4 mt-3 text-xs text-zinc-500">
             <div className="flex items-center gap-1.5"><div className="w-3 h-3 rounded-full bg-red-500" />High Risk</div>
@@ -208,15 +240,17 @@ export default function GovOverview() {
               <div className="text-center py-8 text-zinc-600 text-sm">No alerts match filters</div>
             )}
             {filteredAlerts.map((alert) => (
-              <div
+              <button
                 key={alert.id}
+                type="button"
+                onClick={() => focusAlertOnMap(alert)}
                 className={`p-3 rounded-lg border ${
                   alert.severity === 'high'
                     ? 'bg-red-950/30 border-red-800'
                     : alert.severity === 'medium'
                     ? 'bg-yellow-950/30 border-yellow-800'
                     : 'bg-blue-950/30 border-blue-800'
-                }`}
+                } ${selectedAlertId === alert.id ? 'ring-1 ring-white/60' : ''} w-full text-left transition-colors hover:bg-zinc-800/60`}
               >
                 <div className="flex items-start gap-2">
                   <AlertCircle
@@ -236,7 +270,7 @@ export default function GovOverview() {
                     </div>
                   </div>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </div>

@@ -4,7 +4,9 @@
 // PATCH /api/volunteers/applications/{id}/verify
 // POST /api/volunteers/assignments
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle, ChevronDown, Clock, Lock, MapPin, Plus, ShieldCheck, UserCheck, Users, X } from 'lucide-react';
+import { AlertCircle, ChevronDown, Clock, Lock, MapPin, Plus, ShieldCheck, UserCheck, Users, X } from 'lucide-react';
+import { apiUrl } from '../../lib/api';
+import { authHeaders } from '../../lib/auth';
 import {
   demoVolunteerProfiles,
   opportunityCapacity,
@@ -12,18 +14,17 @@ import {
   readVolunteerProfile,
   saveCustomVolunteerOpportunities,
   saveVolunteerProfile,
-  readVolunteerNotifications,
-  saveVolunteerNotifications,
   scoreVolunteerBreakdown,
   scoreVolunteerForOpportunity,
   statusLabel,
   volunteerSkills,
   type VolunteerAssignment,
-  type VolunteerNotification,
   type VolunteerOpportunity,
   type VolunteerProfile,
   type VolunteerRoleSlot,
 } from '../../lib/volunteerFlow';
+
+type RemoteVolunteerProfile = VolunteerProfile & { userId: string; remote: true };
 
 type NeedForm = {
   title: string;
@@ -42,7 +43,7 @@ type NeedForm = {
   specialRequirements: string;
 };
 
-const agencies = ['LTA', 'MOH', 'PUB', 'SCDF', 'SPF', 'NEA', 'Enterprise SG', 'MSF', 'GOV-ADMIN'];
+const agencies = ['All agencies', 'LTA', 'MOH', 'PUB', 'SCDF', 'SPF', 'NEA', 'Enterprise SG', 'MSF'];
 
 const emptyNeedForm: NeedForm = {
   title: 'Traffic Diversion Support',
@@ -74,8 +75,9 @@ const urgencyBadge: Record<string, string> = {
 };
 
 export default function GovVolunteers() {
-  const [currentAgency, setCurrentAgency] = useState('LTA');
+  const [currentAgency, setCurrentAgency] = useState('All agencies');
   const [citizenProfile, setCitizenProfile] = useState<VolunteerProfile | null>(null);
+  const [remoteProfiles, setRemoteProfiles] = useState<RemoteVolunteerProfile[]>([]);
   const [demoProfiles, setDemoProfiles] = useState<VolunteerProfile[]>(demoVolunteerProfiles);
   const [customNeeds, setCustomNeeds] = useState<VolunteerOpportunity[]>(() => readCustomNeeds());
   const [expandedId, setExpandedId] = useState<number | null>(1);
@@ -84,13 +86,32 @@ export default function GovVolunteers() {
   const [allocateModal, setAllocateModal] = useState<VolunteerOpportunity | null>(null);
   const [additionalSlots, setAdditionalSlots] = useState(5);
   const [activityLog, setActivityLog] = useState<string[]>([]);
+  const [pageMode, setPageMode] = useState<'assignment' | 'profiles'>('assignment');
   const [boardTab, setBoardTab] = useState<'open' | 'full'>('open');
-  const [sideTab, setSideTab] = useState<'queue' | 'skills'>('queue');
 
   const loadCitizenProfile = () => setCitizenProfile(readVolunteerProfile());
+  const loadRemoteProfiles = () =>
+    fetch(apiUrl('/api/gov/volunteers/profiles'), { headers: authHeaders() })
+      .then((response) => {
+        if (!response.ok) throw new Error('Volunteer profiles unavailable');
+        return response.json() as Promise<{ items: Array<{ userId: string; profile: VolunteerProfile }> }>;
+      })
+      .then((data) => {
+        setRemoteProfiles(
+          data.items.map((item) => ({
+            ...item.profile,
+            userId: item.userId,
+            remote: true as const,
+          })),
+        );
+      })
+      .catch(() => {
+        setRemoteProfiles([]);
+      });
 
   useEffect(() => {
     loadCitizenProfile();
+    loadRemoteProfiles();
     const refreshNeeds = () => setCustomNeeds(readCustomNeeds());
     window.addEventListener('storage', loadCitizenProfile);
     window.addEventListener('storage', refreshNeeds);
@@ -105,7 +126,20 @@ export default function GovVolunteers() {
   }, []);
 
   const allBaseOpportunities = useMemo(() => readVolunteerOpportunities(), [customNeeds]);
-  const rawApplicants = useMemo(() => citizenProfile ? [citizenProfile, ...demoProfiles] : demoProfiles, [citizenProfile, demoProfiles]);
+  const rawApplicants = useMemo(() => {
+    const seen = new Set<string>();
+    const combined = [
+      ...remoteProfiles,
+      ...(citizenProfile ? [citizenProfile] : []),
+      ...demoProfiles,
+    ].filter((profile) => {
+      const key = 'userId' in profile ? profile.userId : profile.id;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return combined;
+  }, [citizenProfile, demoProfiles, remoteProfiles]);
 
   const applicants = useMemo(() => rawApplicants.map((profile) => {
     const bestMatch = allBaseOpportunities
@@ -115,7 +149,7 @@ export default function GovVolunteers() {
   }), [allBaseOpportunities, rawApplicants]);
 
   const agencyOpportunities = useMemo(
-    () => currentAgency === 'GOV-ADMIN' ? allBaseOpportunities : allBaseOpportunities.filter((opportunity) => opportunity.authorisedAgency === currentAgency),
+    () => currentAgency === 'All agencies' ? allBaseOpportunities : allBaseOpportunities.filter((opportunity) => opportunity.authorisedAgency === currentAgency),
     [allBaseOpportunities, currentAgency],
   );
 
@@ -144,12 +178,18 @@ export default function GovVolunteers() {
   const openOpportunities = opportunities.filter((opportunity) => opportunity.filled < opportunity.needed);
   const fullOpportunities = opportunities.filter((opportunity) => opportunity.filled >= opportunity.needed);
   const visibleOpportunities = boardTab === 'open' ? openOpportunities : fullOpportunities;
+  const visibleOpportunityIds = new Set(agencyOpportunities.map((opportunity) => opportunity.id));
+
+  const pendingVerification = applicants.filter((profile) => profile.status === 'pending_review');
+  const waitingList = applicants.filter((profile) => profile.status !== 'pending_review' && countPendingApplications(profile, visibleOpportunityIds) > 0);
+  const readyPool = applicants.filter((profile) => profile.status === 'verified' && countPendingApplications(profile, visibleOpportunityIds) === 0);
+  const deployed = applicants.filter((profile) => profile.status === 'assigned' || profile.status === 'checked_in');
 
   const stats = {
-    active: applicants.filter((profile) => profile.status === 'verified' || profile.status === 'assigned' || profile.status === 'checked_in').length + 1244,
-    available: applicants.filter((profile) => profile.status === 'verified').length + 381,
-    pending: applicants.filter((profile) => profile.status === 'pending_review').length,
-    deployed: applicants.filter((profile) => profile.status === 'assigned' || profile.status === 'checked_in').length + 862,
+    ready: readyPool.length,
+    pending: pendingVerification.length,
+    waiting: waitingList.length,
+    deployed: deployed.length,
   };
 
   const verifyVolunteer = (profile: VolunteerProfile) => {
@@ -157,12 +197,12 @@ export default function GovVolunteers() {
     pushActivity(`${profile.name} verified`);
   };
 
-  const makeAssignment = (opportunity: VolunteerOpportunity, role: VolunteerRoleSlot): VolunteerAssignment => ({
+  const makeAssignment = (opportunity: VolunteerOpportunity, role: VolunteerRoleSlot, status: VolunteerAssignment['status'] = 'offered'): VolunteerAssignment => ({
     id: `ASN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     opportunityId: opportunity.id,
     roleId: role.id,
     roleTitle: role.title,
-    status: 'offered',
+    status,
     assignedAt: new Date().toISOString(),
     note: role.specialRequirements ? `${role.specialRequirements}. Report to ${opportunity.reportingPoint}` : `Report to ${opportunity.reportingPoint}`,
   });
@@ -173,76 +213,14 @@ export default function GovVolunteers() {
       return;
     }
 
-    const assignment = makeAssignment(opportunity, role);
+    const assignment = makeAssignment(opportunity, role, 'accepted');
 
     updateProfile(profile, {
       status: 'assigned',
       appliedOpportunityIds: Array.from(new Set([...profile.appliedOpportunityIds, opportunity.id])),
       assignments: [...profile.assignments.filter((item) => item.opportunityId !== opportunity.id), assignment],
     });
-    pushActivity(`${profile.name} assigned: ${role.title}`);
-  };
-
-  const callBackSuitablePeople = (opportunity: VolunteerOpportunity, role: VolunteerRoleSlot) => {
-    if (!canAllocate(opportunity)) {
-      pushActivity(`${currentAgency} cannot call back for ${opportunity.title}`);
-      return;
-    }
-
-    const suitable = rawApplicants
-      .filter((profile) => isSuitableForRole(profile, opportunity, role))
-      .filter((profile) => !profile.assignments.some((assignment) => assignment.opportunityId === opportunity.id && assignment.status !== 'declined'))
-      .slice(0, Math.max(1, role.needed - role.assigned));
-
-    if (!suitable.length) {
-      pushActivity(`No suitable volunteers found for ${role.title}`);
-      return;
-    }
-
-    const notifications: VolunteerNotification[] = [];
-    const assignmentByVolunteer = new Map<string, VolunteerAssignment>();
-
-    suitable.forEach((profile) => {
-      const assignment = makeAssignment(opportunity, role);
-      assignmentByVolunteer.set(profile.id, assignment);
-      notifications.push({
-        id: `CB-${Date.now()}-${profile.id}`,
-        volunteerId: profile.id,
-        opportunityId: opportunity.id,
-        roleId: role.id,
-        roleTitle: role.title,
-        agency: currentAgency,
-        message: `${currentAgency} has offered you ${role.title} for ${opportunity.title}. Please accept or reject the assignment.`,
-        status: 'sent',
-        createdAt: new Date().toISOString(),
-      });
-    });
-
-    if (citizenProfile && assignmentByVolunteer.has(citizenProfile.id)) {
-      const assignment = assignmentByVolunteer.get(citizenProfile.id)!;
-      const nextProfile: VolunteerProfile = {
-        ...citizenProfile,
-        status: 'assigned',
-        appliedOpportunityIds: Array.from(new Set([...citizenProfile.appliedOpportunityIds, opportunity.id])),
-        assignments: [...citizenProfile.assignments.filter((item) => item.opportunityId !== opportunity.id), assignment],
-      };
-      saveVolunteerProfile(nextProfile);
-      setCitizenProfile(nextProfile);
-    }
-
-    setDemoProfiles((current) => current.map((profile) => {
-      const assignment = assignmentByVolunteer.get(profile.id);
-      if (!assignment) return profile;
-      return {
-        ...profile,
-        status: 'assigned',
-        appliedOpportunityIds: Array.from(new Set([...profile.appliedOpportunityIds, opportunity.id])),
-        assignments: [...profile.assignments.filter((item) => item.opportunityId !== opportunity.id), assignment],
-      };
-    }));
-
-    saveVolunteerNotifications([...notifications, ...readVolunteerNotifications()]);
-    pushActivity(`Called back ${suitable.length} suitable volunteer${suitable.length > 1 ? 's' : ''} for ${role.title}`);
+    pushActivity(`${profile.name} accepted for ${role.title}`);
   };
 
   const rejectVolunteer = (profile: VolunteerProfile, opportunity: VolunteerOpportunity, role: VolunteerRoleSlot) => {
@@ -267,6 +245,17 @@ export default function GovVolunteers() {
 
   const updateProfile = (profile: VolunteerProfile, patch: Partial<VolunteerProfile>) => {
     const nextProfile = { ...profile, ...patch };
+    if ('userId' in profile) {
+      setRemoteProfiles((current) => current.map((item) => (item.userId === profile.userId ? { ...item, ...patch } : item)));
+      fetch(apiUrl(`/api/gov/volunteers/profiles/${profile.userId}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify(patch),
+      }).catch(() => {
+        // Keep local optimistic state even if backend sync is temporarily unavailable.
+      });
+      return;
+    }
     if (profile.id === citizenProfile?.id) {
       saveVolunteerProfile(nextProfile);
       setCitizenProfile(nextProfile);
@@ -329,22 +318,14 @@ export default function GovVolunteers() {
     setAllocateModal(null);
   };
 
-  const canAllocate = (opportunity: VolunteerOpportunity) => currentAgency === opportunity.authorisedAgency || currentAgency === 'GOV-ADMIN';
-
-  const isSuitableForRole = (profile: VolunteerProfile, opportunity: VolunteerOpportunity, role: VolunteerRoleSlot) => {
-    if (profile.status !== 'verified') return false;
-    const score = scoreVolunteerForOpportunity(profile, opportunity);
-    const skillHits = role.requiredSkills.filter((skill) => profile.skills.includes(skill)).length;
-    const hasNeededSkills = role.specialRequirements ? skillHits === role.requiredSkills.length : skillHits > 0;
-    return score >= 60 && hasNeededSkills;
-  };
+  const canAllocate = (opportunity: VolunteerOpportunity) => currentAgency === 'All agencies' || currentAgency === opportunity.authorisedAgency;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Volunteers & Resources</h1>
-          <p className="text-zinc-400">Create needs, verify applicants, call back matching volunteers, and assign roles.</p>
+          <p className="text-zinc-400">Review incoming volunteer profiles, approve waiting applicants, and keep the clearest live needs front and center.</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <button onClick={() => setShowNeedForm(true)} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-700">
@@ -352,7 +333,7 @@ export default function GovVolunteers() {
             New Need
           </button>
           <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-400">
-            <label className="mb-1 block text-xs text-zinc-500">Demo agency</label>
+            <label className="mb-1 block text-xs text-zinc-500">Agency filter</label>
             <select value={currentAgency} onChange={(event) => setCurrentAgency(event.target.value)} className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100">
               {agencies.map((agency) => <option key={agency}>{agency}</option>)}
             </select>
@@ -361,10 +342,15 @@ export default function GovVolunteers() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <Metric icon={<Users className="h-5 w-5 text-green-500" />} label="Active Volunteers" value={stats.active} badge="Active" />
-        <Metric icon={<Clock className="h-5 w-5 text-blue-500" />} label="Available Now" value={stats.available} badge="Available" />
-        <Metric icon={<AlertCircle className="h-5 w-5 text-yellow-500" />} label="Pending Review" value={stats.pending} badge="Review" />
-        <Metric icon={<UserCheck className="h-5 w-5 text-purple-500" />} label="Currently Deployed" value={stats.deployed} badge="Deployed" />
+        <Metric icon={<Clock className="h-5 w-5 text-blue-500" />} label="Ready Now" value={stats.ready} badge="Ready" />
+        <Metric icon={<AlertCircle className="h-5 w-5 text-yellow-500" />} label="Pending Verification" value={stats.pending} badge="Review" />
+        <Metric icon={<Users className="h-5 w-5 text-orange-500" />} label="Waiting List" value={stats.waiting} badge="Manual" />
+        <Metric icon={<UserCheck className="h-5 w-5 text-purple-500" />} label="Deployed" value={stats.deployed} badge="Live" />
+      </div>
+
+      <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-1">
+        <button onClick={() => setPageMode('assignment')} className={`rounded-md px-3 py-1.5 text-sm ${pageMode === 'assignment' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'}`}>Opportunity Assignment</button>
+        <button onClick={() => setPageMode('profiles')} className={`rounded-md px-3 py-1.5 text-sm ${pageMode === 'profiles' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}>Volunteer Profiles & Certs</button>
       </div>
 
       {showNeedForm && (
@@ -405,12 +391,13 @@ export default function GovVolunteers() {
       </section>
       )}
 
+      {pageMode === 'assignment' ? (
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold">Opportunity Assignment Board</h2>
-              <p className="text-xs text-zinc-500">{currentAgency === 'GOV-ADMIN' ? 'Showing all agencies.' : `Showing ${currentAgency} needs only.`} Match = skills 50 pts, region 30 pts, availability 20 pts.</p>
+              <p className="text-xs text-zinc-500">{currentAgency === 'All agencies' ? 'Showing all agencies.' : `Showing ${currentAgency} needs only.`} Volunteers who fully match a role can be accepted directly; everyone else stays on the waiting list for review.</p>
             </div>
             <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-1">
               <button onClick={() => setBoardTab('open')} className={`rounded-md px-3 py-1.5 text-sm ${boardTab === 'open' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'}`}>Open ({openOpportunities.length})</button>
@@ -458,16 +445,11 @@ export default function GovVolunteers() {
                           <div>
                             <div className="font-medium">{role.title}</div>
                             <div className="mt-1 text-xs text-zinc-500">
-                              {opportunity.candidates.filter((candidate) => isSuitableForRole(candidate.profile, opportunity, role)).length} suitable verified volunteers
+                              {opportunity.candidates.filter((candidate) => candidate.applied && !candidate.assigned).length} waiting or unassigned applicants
                             </div>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
                             <div className="text-xs text-zinc-500">{role.assigned}/{role.needed} role slots</div>
-                            {canAllocate(opportunity) && (
-                              <button onClick={() => callBackSuitablePeople(opportunity, role)} className="rounded bg-green-700 px-3 py-1.5 text-xs font-medium hover:bg-green-600">
-                                Call back suitable people
-                              </button>
-                            )}
                           </div>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -500,32 +482,56 @@ export default function GovVolunteers() {
         </div>
 
         <aside className="space-y-4">
-          <RecentActivity items={activityLog} />
-          <div className="inline-flex w-full rounded-lg border border-zinc-800 bg-zinc-950 p-1">
-            <button onClick={() => setSideTab('queue')} className={`flex-1 rounded-md px-3 py-1.5 text-sm ${sideTab === 'queue' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'}`}>Queue</button>
-            <button onClick={() => setSideTab('skills')} className={`flex-1 rounded-md px-3 py-1.5 text-sm ${sideTab === 'skills' ? 'bg-yellow-700 text-white' : 'text-zinc-400 hover:text-white'}`}>Skill Verification</button>
-          </div>
+          <ActionSection
+            title="Waiting list"
+            description="These volunteers applied but need manual approval because they were not instantly matched."
+            emptyMessage="No volunteers are waiting for manual approval."
+          >
+            {waitingList.map((profile) => (
+              <ApplicantCard key={profile.id} profile={profile} onVerify={verifyVolunteer} />
+            ))}
+          </ActionSection>
 
-          {sideTab === 'queue' ? (
-            <>
-              <h2 className="text-lg font-semibold">Application Queue</h2>
-              {applicants.map((profile) => (
-                <ApplicantCard key={profile.id} profile={profile} onVerify={verifyVolunteer} />
-              ))}
-            </>
-          ) : (
-            <>
-              <h2 className="text-lg font-semibold">Skill Verification</h2>
-              {applicants.filter((profile) => profile.status === 'pending_review').map((profile) => (
-                <SkillVerificationCard key={profile.id} profile={profile} onVerify={verifyVolunteer} />
-              ))}
-              {!applicants.some((profile) => profile.status === 'pending_review') && (
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-500">No pending skill verification.</div>
-              )}
-            </>
-          )}
+          <ActionSection
+            title="Ready pool"
+            description="Verified volunteers without pending applications stay available for manual role approval."
+            emptyMessage="No verified volunteers are idle right now."
+          >
+            {readyPool.slice(0, 6).map((profile) => (
+              <ApplicantCard key={profile.id} profile={profile} onVerify={verifyVolunteer} />
+            ))}
+          </ActionSection>
+
+          <RecentActivity items={activityLog} />
         </aside>
       </section>
+      ) : (
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="space-y-4">
+          <ActionSection
+            title="Pending profile approval"
+            description="Review submitted skills, contact details, and certification notes before moving volunteers into the live pool."
+            emptyMessage="No volunteer profiles are awaiting approval."
+          >
+            {pendingVerification.map((profile) => (
+              <SkillVerificationCard key={profile.id} profile={profile} onVerify={verifyVolunteer} />
+            ))}
+          </ActionSection>
+        </div>
+        <aside className="space-y-4">
+          <ActionSection
+            title="Verified volunteers"
+            description="Approved volunteers stay searchable here even when they are not currently on the waiting list."
+            emptyMessage="No verified volunteer profiles yet."
+          >
+            {readyPool.concat(deployed).slice(0, 8).map((profile) => (
+              <ApplicantCard key={profile.id} profile={profile} onVerify={verifyVolunteer} />
+            ))}
+          </ActionSection>
+          <RecentActivity items={activityLog} />
+        </aside>
+      </section>
+      )}
 
       {allocateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -573,6 +579,29 @@ function Metric({ icon, label, value, badge }: { icon: React.ReactNode; label: s
   );
 }
 
+function ActionSection({
+  title,
+  description,
+  emptyMessage,
+  children,
+}: {
+  title: string;
+  description: string;
+  emptyMessage: string;
+  children: React.ReactNode;
+}) {
+  const items = Array.isArray(children) ? children.filter(Boolean) : [children].filter(Boolean);
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+      <div className="mb-3">
+        <h2 className="font-semibold">{title}</h2>
+        <p className="mt-1 text-sm text-zinc-500">{description}</p>
+      </div>
+      {items.length ? <div className="space-y-3">{children}</div> : <div className="rounded-lg bg-zinc-950/60 px-3 py-3 text-sm text-zinc-500">{emptyMessage}</div>}
+    </div>
+  );
+}
+
 function RecentActivity({ items }: { items: string[] }) {
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
@@ -612,14 +641,22 @@ function ApplicantCard({
       <div className="mb-3 flex flex-wrap gap-1.5">
         {profile.skills.slice(0, 4).map((skill) => <span key={skill} className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">{skill}</span>)}
       </div>
-      <div className="mb-3 text-sm text-zinc-400">Best fit: {profile.bestMatch.opportunity.title} - {profile.bestMatch.match}%</div>
+      <div className="mb-3 text-sm text-zinc-400">
+        {profile.status === 'pending_review'
+          ? 'Pending identity and skills review.'
+          : countPendingApplications(profile) > 0
+          ? `Waiting list: ${countPendingApplications(profile)} application${countPendingApplications(profile) > 1 ? 's' : ''} under review.`
+          : `Best fit: ${profile.bestMatch.opportunity.title} - ${profile.bestMatch.match}%`}
+      </div>
       {profile.status === 'pending_review' ? (
         <button onClick={() => onVerify(profile)} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium hover:bg-green-700">
           <ShieldCheck className="h-4 w-4" />
-          Verify
+          Approve profile
         </button>
       ) : (
-        <div className="rounded-lg bg-zinc-950/60 px-3 py-2 text-xs text-zinc-500">Eligible for role-level call-back from the assignment board.</div>
+        <div className="rounded-lg bg-zinc-950/60 px-3 py-2 text-xs text-zinc-500">
+          {countPendingApplications(profile) > 0 ? 'Use the assignment board to accept them into a specific role.' : 'Eligible for role-level offers from the assignment board.'}
+        </div>
       )}
     </div>
   );
@@ -643,7 +680,7 @@ function SkillVerificationCard({ profile, onVerify }: { profile: VolunteerProfil
       </div>
       <button onClick={() => onVerify(profile)} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium hover:bg-green-700">
         <ShieldCheck className="h-4 w-4" />
-        Verify skills
+        Approve volunteer
       </button>
     </div>
   );
@@ -760,14 +797,20 @@ function CandidateRow({
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs font-medium text-zinc-300">
                   {role.title}
-                  {role.specialRequirements ? <span className="ml-2 text-yellow-300">special review</span> : null}
+                  {role.specialRequirements ? <span className="ml-2 text-yellow-300">manual review</span> : null}
                 </span>
                 <div className="flex flex-wrap gap-2">
-                  {role.specialRequirements && <button onClick={() => onAssign(profile, opportunity, role)} className="rounded bg-blue-600 px-2.5 py-1 text-xs hover:bg-blue-700">Manual assign</button>}
-                  <button onClick={() => onReject(profile, opportunity, role)} className="rounded bg-zinc-700 px-2.5 py-1 text-xs text-zinc-200 hover:bg-zinc-600">Reject</button>
+                  <button onClick={() => onAssign(profile, opportunity, role)} className="rounded bg-blue-600 px-2.5 py-1 text-xs hover:bg-blue-700">
+                    {role.requiredSkills.every((skill) => profile.skills.includes(skill)) ? 'Accept to role' : 'Approve manually'}
+                  </button>
+                  <button onClick={() => onReject(profile, opportunity, role)} className="rounded bg-zinc-700 px-2.5 py-1 text-xs text-zinc-200 hover:bg-zinc-600">Not selected</button>
                 </div>
               </div>
-              <div className="text-xs text-zinc-500">Batch call-back is handled from the role header above.</div>
+              <div className="text-xs text-zinc-500">
+                {role.requiredSkills.every((skill) => profile.skills.includes(skill))
+                  ? 'This volunteer meets the listed role skills.'
+                  : 'This volunteer can still be accepted manually if operational needs justify it.'}
+              </div>
             </div>
           ))}
           {!openRoles.length && <span className="text-xs text-zinc-500">All role slots are filled.</span>}
@@ -775,4 +818,15 @@ function CandidateRow({
       )}
     </div>
   );
+}
+
+function countPendingApplications(profile: VolunteerProfile, opportunityIds?: Set<number>) {
+  const relevantApplications = opportunityIds
+    ? profile.appliedOpportunityIds.filter((id) => opportunityIds.has(id))
+    : profile.appliedOpportunityIds;
+
+  return relevantApplications.filter((opportunityId) => {
+    const resolved = profile.assignments.some((assignment) => assignment.opportunityId === opportunityId);
+    return !resolved;
+  }).length;
 }

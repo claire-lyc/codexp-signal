@@ -14,6 +14,8 @@ import {
   Users,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { apiUrl } from '../../lib/api';
+import { authHeaders } from '../../lib/auth';
 import {
   clearVolunteerProfile,
   makeVolunteerId,
@@ -31,6 +33,7 @@ import {
   type VolunteerNotification,
   type VolunteerOpportunity,
   type VolunteerProfile,
+  type VolunteerRoleSlot,
 } from '../../lib/volunteerFlow';
 
 type FormState = {
@@ -64,33 +67,71 @@ const lifecycle = [
 ];
 
 export default function PublicVolunteer() {
-  const [authenticated, setAuthenticated] = useState(false);
+  const [authenticated] = useState(true);
   const [profile, setProfile] = useState<VolunteerProfile | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
   const [message, setMessage] = useState('');
   const [opportunityTab, setOpportunityTab] = useState<'available' | 'unavailable'>('available');
   const [pageTab, setPageTab] = useState<'volunteer' | 'donate'>('volunteer');
   const [opportunities, setOpportunities] = useState<VolunteerOpportunity[]>(() => readVolunteerOpportunities());
   const [notifications, setNotifications] = useState<VolunteerNotification[]>(() => readVolunteerNotifications());
 
+  const hydrateProfile = (nextProfile: VolunteerProfile) => {
+    setProfile(nextProfile);
+    setForm({
+      name: nextProfile.name,
+      phone: nextProfile.phone,
+      email: nextProfile.email,
+      region: nextProfile.region,
+      skills: nextProfile.skills,
+      availability: nextProfile.availability,
+      certifications: nextProfile.certifications,
+      emergencyContact: nextProfile.emergencyContact,
+    });
+  };
+
+  const saveVolunteerRemote = async (nextProfile: VolunteerProfile) => {
+    const response = await fetch(apiUrl('/api/volunteers/profile'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(nextProfile),
+    });
+    if (!response.ok) throw new Error('Volunteer profile sync failed');
+    saveVolunteerProfile(nextProfile);
+    hydrateProfile(nextProfile);
+    return response.json();
+  };
+
+  const persistVolunteerProfile = (nextProfile: VolunteerProfile, nextMessage?: string) => {
+    saveVolunteerProfile(nextProfile);
+    hydrateProfile(nextProfile);
+    saveVolunteerRemote(nextProfile).catch(() => {
+      // Keep local fallback state when backend sync fails.
+    });
+    if (nextMessage) setMessage(nextMessage);
+  };
+
   useEffect(() => {
     const saved = readVolunteerProfile();
-    if (saved) {
-      setAuthenticated(true);
-      setProfile(saved);
-      setForm({
-        name: saved.name,
-        phone: saved.phone,
-        email: saved.email,
-        region: saved.region,
-        skills: saved.skills,
-        availability: saved.availability,
-        certifications: saved.certifications,
-        emergencyContact: saved.emergencyContact,
+    if (saved) hydrateProfile(saved);
+
+    fetch(apiUrl('/api/volunteers/profile'), { headers: authHeaders() })
+      .then((response) => {
+        if (!response.ok) throw new Error('Volunteer profile unavailable');
+        return response.json() as Promise<{ item: { userId: string; profile: VolunteerProfile } | null }>;
+      })
+      .then((data) => {
+        if (data.item?.profile) {
+          saveVolunteerProfile(data.item.profile);
+          hydrateProfile(data.item.profile);
+        }
+      })
+      .catch(() => {
+        // Keep local fallback profile if backend is unavailable.
       });
-    }
 
     const refreshNeeds = () => setOpportunities(readVolunteerOpportunities());
     const refreshNotifications = () => setNotifications(readVolunteerNotifications());
@@ -156,47 +197,87 @@ export default function PublicVolunteer() {
     if (nextErrors.length) return;
 
     setSubmitting(true);
-    window.setTimeout(() => {
-      const nextProfile: VolunteerProfile = {
-        id: makeVolunteerId(),
-        name: form.name.trim(),
-        phone: form.phone.trim(),
-        email: form.email.trim(),
-        region: form.region,
-        skills: form.skills,
-        availability: form.availability,
-        certifications: form.certifications.trim(),
-        emergencyContact: form.emergencyContact.trim(),
-        status: 'pending_review',
-        registeredAt: new Date().toISOString(),
-        appliedOpportunityIds: [],
-        assignments: [],
-      };
-      saveVolunteerProfile(nextProfile);
-      setProfile(nextProfile);
-      setSubmitting(false);
-      setMessage('Registration submitted. Government operators can now review and assign you from the volunteer console.');
-    }, 600);
+    const nextProfile: VolunteerProfile = {
+      id: profile?.id ?? makeVolunteerId(),
+      name: form.name.trim(),
+      phone: form.phone.trim(),
+      email: form.email.trim(),
+      region: form.region,
+      skills: form.skills,
+      availability: form.availability,
+      certifications: form.certifications.trim(),
+      emergencyContact: form.emergencyContact.trim(),
+      status: 'pending_review',
+      registeredAt: profile?.registeredAt ?? new Date().toISOString(),
+      appliedOpportunityIds: profile?.appliedOpportunityIds ?? [],
+      assignments: profile?.assignments ?? [],
+    };
+
+    saveVolunteerRemote(nextProfile)
+      .then(() => {
+        setMessage('Registration submitted. Your volunteer dashboard will update as agencies review your profile.');
+      })
+      .catch(() => {
+        setMessage('Registration saved on this device. Start the backend to sync it across operators.');
+      })
+      .finally(() => setSubmitting(false));
   };
 
   const quickVerify = () => {
     if (!profile) return;
-    const nextProfile = { ...profile, status: 'verified' as const };
-    saveVolunteerProfile(nextProfile);
-    setProfile(nextProfile);
-    setMessage('Demo verification complete. You can now apply for matched opportunities.');
+    fetch(apiUrl('/api/volunteers/profile'), { headers: authHeaders() })
+      .then((response) => {
+        if (!response.ok) throw new Error('Volunteer profile unavailable');
+        return response.json() as Promise<{ item: { userId: string; profile: VolunteerProfile } | null }>;
+      })
+      .then((data) => {
+        if (data.item?.profile) {
+          saveVolunteerProfile(data.item.profile);
+          hydrateProfile(data.item.profile);
+          setMessage(data.item.profile.status === 'verified' ? 'Your profile has been approved and is ready for matching.' : 'Your profile is still under review.');
+          return;
+        }
+        setMessage('We could not find a synced volunteer profile yet.');
+      })
+      .catch(() => {
+        setMessage('Unable to refresh status right now. Please try again once the backend is available.');
+      });
   };
 
   const applyForOpportunity = (opportunityId: number) => {
     if (!profile) return;
+    const opportunity = opportunities.find((item) => item.id === opportunityId);
+    if (!opportunity) return;
+
+    const matchedRole = findImmediateMatch(profile, opportunity);
+    if (matchedRole) {
+      const nextAssignment: VolunteerAssignment = {
+        id: `ASN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        opportunityId: opportunity.id,
+        roleId: matchedRole.id,
+        roleTitle: matchedRole.title,
+        status: 'accepted',
+        assignedAt: new Date().toISOString(),
+        note: matchedRole.specialRequirements
+          ? `${matchedRole.specialRequirements}. Report to ${opportunity.reportingPoint}`
+          : `Report to ${opportunity.reportingPoint}`,
+      };
+      const nextProfile = {
+        ...profile,
+        status: 'assigned' as const,
+        appliedOpportunityIds: Array.from(new Set([...profile.appliedOpportunityIds, opportunityId])),
+        assignments: [...profile.assignments.filter((assignment) => assignment.opportunityId !== opportunity.id), nextAssignment],
+      };
+      persistVolunteerProfile(nextProfile, `Accepted immediately for ${matchedRole.title}. Your reporting details are ready.`);
+      return;
+    }
+
     const nextProfile = {
       ...profile,
       status: profile.status === 'pending_review' ? profile.status : 'verified' as const,
       appliedOpportunityIds: Array.from(new Set([...profile.appliedOpportunityIds, opportunityId])),
     };
-    saveVolunteerProfile(nextProfile);
-    setProfile(nextProfile);
-    setMessage('Application sent to the coordinating agency for assignment.');
+    persistVolunteerProfile(nextProfile, 'Application received. You are now on the waiting list while the coordinating agency reviews fit and availability.');
   };
 
   const acceptAssignment = (assignment: VolunteerAssignment) => updateAssignment(assignment.id, 'accepted', 'Shift accepted. Reporting details are now shown in your schedule.');
@@ -210,15 +291,47 @@ export default function PublicVolunteer() {
       ...profile,
       status: 'verified',
     };
-    saveVolunteerProfile(nextProfile);
-    setProfile(nextProfile);
+    persistVolunteerProfile(nextProfile);
     setOpportunityTab('available');
     setMessage('You are back in the verified pool and can apply for more opportunities.');
   };
 
+  const saveProfileUpdates = () => {
+    if (!profile) return;
+    const nextErrors = [];
+    if (!form.name.trim()) nextErrors.push('Full name is required.');
+    if (!form.phone.trim()) nextErrors.push('Contact number is required.');
+    if (!form.region) nextErrors.push('Choose a preferred region.');
+    if (!form.skills.length) nextErrors.push('Select at least one skill.');
+    if (!form.availability.length) nextErrors.push('Select at least one availability window.');
+    setErrors(nextErrors);
+    if (nextErrors.length) return;
+
+    setSavingProfile(true);
+    const nextProfile: VolunteerProfile = {
+      ...profile,
+      name: form.name.trim(),
+      phone: form.phone.trim(),
+      email: form.email.trim(),
+      region: form.region,
+      skills: form.skills,
+      availability: form.availability,
+      certifications: form.certifications.trim(),
+      emergencyContact: form.emergencyContact.trim(),
+    };
+
+    saveVolunteerRemote(nextProfile)
+      .then(() => {
+        setMessage('Volunteer profile updated. Agencies will use your latest skills and availability for matching.');
+      })
+      .catch(() => {
+        persistVolunteerProfile(nextProfile, 'Profile updated on this device. Start the backend to sync the latest changes.');
+      })
+      .finally(() => setSavingProfile(false));
+  };
+
   const resetDemoProfile = () => {
     clearVolunteerProfile();
-    setAuthenticated(false);
     setProfile(null);
     setForm(emptyForm);
     setErrors([]);
@@ -228,7 +341,6 @@ export default function PublicVolunteer() {
 
   const goBackStep = () => {
     if (!profile) {
-      setAuthenticated(false);
       return;
     }
     if (activeAssignment) {
@@ -246,8 +358,7 @@ export default function PublicVolunteer() {
       status: status === 'checked_in' ? 'checked_in' : status === 'completed' ? 'completed' : status === 'declined' ? 'verified' : 'assigned',
       assignments: profile.assignments.map((assignment) => assignment.id === assignmentId ? { ...assignment, status } : assignment),
     };
-    saveVolunteerProfile(nextProfile);
-    setProfile(nextProfile);
+    persistVolunteerProfile(nextProfile);
     setMessage(nextMessage);
   };
 
@@ -272,45 +383,31 @@ export default function PublicVolunteer() {
         </div>
       </div>
 
-      {pageTab === 'donate' && <DonationPanel authenticated={authenticated} onLogin={() => setAuthenticated(true)} />}
+      {pageTab === 'donate' && <DonationPanel authenticated={authenticated} />}
 
       {pageTab === 'volunteer' && (
         <>
-      <button onClick={goBackStep} className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800">
-        <ArrowLeft className="h-4 w-4" />
-        Back
-      </button>
+      {!profile ? (
+        <>
+          <button onClick={goBackStep} className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800">
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </button>
 
-      <div className="grid gap-3 md:grid-cols-5">
-        {lifecycle.map((item, index) => {
-          const Icon = item.icon;
-          const isActive = index <= currentStepIndex;
-          return (
-            <div key={item.label} className={`rounded-lg border p-3 ${isActive ? 'border-blue-800 bg-blue-950/30 text-blue-200' : 'border-zinc-800 bg-zinc-900 text-zinc-500'}`}>
-              <Icon className="mb-2 h-5 w-5" />
-              <div className="text-sm font-medium">{item.label}</div>
-            </div>
-          );
-        })}
-      </div>
-
-      {!authenticated && (
-        <section className="rounded-xl border border-blue-900/50 bg-blue-950/20 p-6">
-          <div className="flex items-start gap-4">
-            <div className="rounded-lg bg-blue-900/50 p-3">
-              <Shield className="h-6 w-6 text-blue-400" />
-            </div>
-            <div className="flex-1">
-              <h2 className="mb-2 font-semibold">Singpass Authentication Required</h2>
-              <p className="mb-4 text-sm text-zinc-300">Sign in to create a verified readiness profile. Agencies can then match you to future needs based on your experience.</p>
-              <button onClick={() => setAuthenticated(true)} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-medium transition-colors hover:bg-blue-700">
-                <Shield className="h-4 w-4" />
-                Login with Singpass
-              </button>
-            </div>
+          <div className="grid gap-3 md:grid-cols-5">
+            {lifecycle.map((item, index) => {
+              const Icon = item.icon;
+              const isActive = index <= currentStepIndex;
+              return (
+                <div key={item.label} className={`rounded-lg border p-3 ${isActive ? 'border-blue-800 bg-blue-950/30 text-blue-200' : 'border-zinc-800 bg-zinc-900 text-zinc-500'}`}>
+                  <Icon className="mb-2 h-5 w-5" />
+                  <div className="text-sm font-medium">{item.label}</div>
+                </div>
+              );
+            })}
           </div>
-        </section>
-      )}
+        </>
+      ) : null}
 
       {authenticated && !profile && (
         <section className="rounded-xl border border-zinc-800 bg-zinc-900">
@@ -373,6 +470,14 @@ export default function PublicVolunteer() {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
           <section className="space-y-4">
             <StatusPanel profile={profile} activeAssignment={activeAssignment} onVerify={quickVerify} onContinue={continueVolunteering} onReset={resetDemoProfile} />
+            <ProfileEditor
+              form={form}
+              setForm={setForm}
+              errors={errors}
+              saving={savingProfile}
+              onToggle={toggleValue}
+              onSave={saveProfileUpdates}
+            />
             <NotificationPanel notifications={myNotifications} opportunities={opportunities} />
             {message && <div className="rounded-lg border border-green-800 bg-green-950/40 p-3 text-sm text-green-300">{message}</div>}
             <OpportunityList profile={profile} opportunities={rankedOpportunities} tab={opportunityTab} setTab={setOpportunityTab} onApply={applyForOpportunity} />
@@ -412,6 +517,65 @@ function ToggleGroup({ title, values, selected, onToggle }: { title: string; val
   );
 }
 
+function ProfileEditor({
+  form,
+  setForm,
+  errors,
+  saving,
+  onToggle,
+  onSave,
+}: {
+  form: FormState;
+  setForm: React.Dispatch<React.SetStateAction<FormState>>;
+  errors: string[];
+  saving: boolean;
+  onToggle: (field: 'skills' | 'availability', value: string) => void;
+  onSave: () => void;
+}) {
+  return (
+    <section className="rounded-xl border border-zinc-800 bg-zinc-900">
+      <div className="border-b border-zinc-800 p-5">
+        <h2 className="text-lg font-semibold">Update Skills & Availability</h2>
+        <p className="mt-1 text-sm text-zinc-500">Keep your volunteer profile current so matching stays accurate.</p>
+      </div>
+      <div className="space-y-5 p-5">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Full Name" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} placeholder="As per NRIC" />
+          <Field label="Contact Number" value={form.phone} onChange={(value) => setForm((current) => ({ ...current, phone: value }))} placeholder="+65 XXXX XXXX" />
+          <Field label="Email" value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} placeholder="Optional" />
+          <Field label="Emergency Contact" value={form.emergencyContact} onChange={(value) => setForm((current) => ({ ...current, emergencyContact: value }))} placeholder="+65 XXXX XXXX" />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium">Preferred Region</label>
+          <select value={form.region} onChange={(event) => setForm((current) => ({ ...current, region: event.target.value }))} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            {['Central', 'North', 'South', 'East', 'West', 'Any Region'].map((region) => <option key={region}>{region}</option>)}
+          </select>
+        </div>
+
+        <ToggleGroup title="Skills & Qualifications" values={volunteerSkills} selected={form.skills} onToggle={(skill) => onToggle('skills', skill)} />
+        <ToggleGroup title="Availability" values={volunteerAvailability} selected={form.availability} onToggle={(slot) => onToggle('availability', slot)} />
+
+        <div>
+          <label className="mb-2 block text-sm font-medium">Experience & Certification Notes</label>
+          <textarea value={form.certifications} onChange={(event) => setForm((current) => ({ ...current, certifications: event.target.value }))} rows={3} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600" />
+        </div>
+
+        {errors.length > 0 && (
+          <div className="rounded-lg border border-red-800 bg-red-950/40 p-3 text-sm text-red-200">
+            {errors.map((error) => <div key={error}>{error}</div>)}
+          </div>
+        )}
+
+        <button onClick={onSave} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-700 disabled:opacity-60">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+          Save profile updates
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function StatusPanel({
   profile,
   activeAssignment,
@@ -436,11 +600,11 @@ function StatusPanel({
             <h2 className="font-semibold">{activeAssignment ? statusLabel(profile.status) : pending ? 'Pending review' : 'Verified readiness profile'}</h2>
             <p className="text-sm text-zinc-300">
               {pending
-                ? 'Your readiness profile is queued for review. Demo mode lets you fast-forward verification.'
+                ? 'Your readiness profile is queued for agency review. Once approved, you can be matched directly to suitable roles.'
                 : activeAssignment
                 ? 'You have an active agency offer or assignment. You can still browse other opportunities below.'
                 : completedCount
-                ? `You completed ${completedCount} assignment${completedCount > 1 ? 's' : ''}. You can keep browsing or reset the demo.`
+                ? `You completed ${completedCount} assignment${completedCount > 1 ? 's' : ''}. You can keep browsing for more roles.`
                 : 'You are verified. You can access live opportunities and agencies can match you to future calls.'}
             </p>
           </div>
@@ -451,7 +615,7 @@ function StatusPanel({
           </div>
         )}
         <div className="flex flex-wrap gap-2">
-          {pending && <button onClick={onVerify} className="rounded-lg bg-yellow-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-yellow-700">Demo verify</button>}
+          {pending && <button onClick={onVerify} className="rounded-lg bg-yellow-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-yellow-700">Refresh status</button>}
           {!pending && !activeAssignment && completedCount > 0 && <button onClick={onContinue} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-700">Continue volunteering</button>}
           <button onClick={onReset} className="rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-700">Start over</button>
         </div>
@@ -569,7 +733,7 @@ function OpportunityList({
                     {opportunity.assigned.status === 'declined' ? 'Not selected for this role' : `Assignment ${opportunity.assigned.status}`}
                   </span>
                 ) : opportunity.applied ? (
-                  <span className="rounded-lg bg-blue-950 px-3 py-2 text-sm text-blue-300">Applied, awaiting agency assignment</span>
+                  <span className="rounded-lg bg-blue-950 px-3 py-2 text-sm text-blue-300">On waiting list for agency review</span>
                 ) : (
                   <button onClick={() => onApply(opportunity.id)} disabled={!canApply} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-500">
                     {profile.status === 'pending_review' ? 'Verification required' : opportunity.filled >= opportunity.needed ? 'Fully staffed' : 'Apply for Assignment'}
@@ -609,7 +773,7 @@ function ScheduleCard({
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
       <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold"><Calendar className="h-5 w-5 text-purple-400" />Assignment Details</h2>
       {!assignment || !opportunity ? (
-        <p className="text-sm text-zinc-400">{profile.status === 'pending_review' ? 'Get verified first. Assignment details appear here after an agency offer.' : 'No accepted assignment yet. Details will appear here after an agency offer.'}</p>
+        <p className="text-sm text-zinc-400">{profile.status === 'pending_review' ? 'Get verified first. Assignment details appear here after approval.' : 'No confirmed assignment yet. If you do not meet the immediate match criteria, your application stays on the waiting list for agency review.'}</p>
       ) : (
         <div className="space-y-4">
           <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
@@ -633,7 +797,7 @@ function ScheduleCard({
   );
 }
 
-function DonationPanel({ authenticated, onLogin }: { authenticated: boolean; onLogin: () => void }) {
+function DonationPanel({ authenticated }: { authenticated: boolean }) {
   return (
     <div className="rounded-xl border border-green-800/70 bg-green-950/20 p-6">
       <div className="mb-5 flex items-start gap-3">
@@ -654,11 +818,20 @@ function DonationPanel({ authenticated, onLogin }: { authenticated: boolean; onL
         ))}
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button onClick={authenticated ? undefined : onLogin} className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium hover:bg-green-700">
-          {authenticated ? 'Continue Donation' : 'Login to Donate'}
-        </button>
+        <button className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium hover:bg-green-700">{authenticated ? 'Continue Donation' : 'Donate'}</button>
         <span className="text-xs text-zinc-500">Donation flow is demo-only until payment integration is added.</span>
       </div>
     </div>
   );
+}
+
+function findImmediateMatch(profile: VolunteerProfile, opportunity: VolunteerOpportunity): VolunteerRoleSlot | null {
+  if (profile.status === 'pending_review') return null;
+
+  return opportunity.roleSlots.find((role) => {
+    const slotOpen = role.assigned < role.needed;
+    const hasAllSkills = role.requiredSkills.every((skill) => profile.skills.includes(skill));
+    const strongOverallMatch = scoreVolunteerForOpportunity(profile, opportunity) >= 60;
+    return slotOpen && hasAllSkills && strongOverallMatch;
+  }) ?? null;
 }
