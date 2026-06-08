@@ -112,6 +112,8 @@ async function detectWithOpenRouter(apiKey: string, crisisType: string, message:
       },
       body: JSON.stringify({
         model: process.env.OPENROUTER_SEVERITY_MODEL ?? 'openai/gpt-4.1-mini',
+        max_tokens: Number(process.env.OPENROUTER_SEVERITY_MAX_TOKENS ?? 50),
+        temperature: 0,
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: severityInstructions },
