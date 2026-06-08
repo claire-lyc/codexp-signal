@@ -28,9 +28,8 @@ type CreatedTicket = {
   item?: TicketRecord;
 };
 
-<<<<<<< HEAD
 type TicketUrgency = 'critical' | 'high' | 'medium' | 'low';
-=======
+
 type TicketComment = {
   id: string;
   author: string;
@@ -49,7 +48,6 @@ type TicketImage = {
   status: string;
   createdAt: string;
 };
->>>>>>> 7dc8313eafcfcf24392e28c71d0140c3d765c5be
 
 type TicketRecord = {
   id: string;
@@ -825,7 +823,6 @@ function labelForReportType(value: string) {
   return 'General';
 }
 
-<<<<<<< HEAD
 function agencyForReportType(value: string) {
   if (value === 'health') return 'MOH';
   if (value === 'flood' || value === 'environment') return 'PUB';
@@ -838,14 +835,7 @@ function urgencyFor(crisisType: string, message: string): TicketUrgency {
   void crisisType;
   void message;
   return 'medium';
-=======
-function urgencyFor(reportType: string, description: string) {
-  const text = `${reportType} ${description}`.toLowerCase();
-  if (text.includes('knee-deep') || text.includes('danger') || text.includes('fire')) return 'critical';
-  if (text.includes('flood') || text.includes('out of stock') || text.includes('hospital')) return 'high';
-  if (text.includes('delay') || text.includes('shortage') || text.includes('symptom')) return 'medium';
-  return 'low';
->>>>>>> 7dc8313eafcfcf24392e28c71d0140c3d765c5be
+
 }
 
 function formatCommentTime(value: string) {
