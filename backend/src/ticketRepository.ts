@@ -258,7 +258,7 @@ export async function createCitizenTicket(input: {
 
     const publicReportId = await nextPublicReportId(client);
     const dbCrisisType = toDbCrisisType(input.crisisType);
-    const agency = agencyFor(dbCrisisType);
+    const agency = agencyForReport(input.crisisType, input.reportType, input.message, dbCrisisType);
     const agencyId = await upsertAgency(client, agency);
 
     const reportResult = await client.query<{ id: string }>(
@@ -608,6 +608,20 @@ function agencyFor(crisisType: DbCrisisType) {
   if (crisisType === 'infrastructure') return { code: 'LTA', name: 'Land Transport Authority' };
   if (crisisType === 'cybersecurity') return { code: 'CSA', name: 'Cyber Security Agency of Singapore' };
   return { code: 'GOV-OPS', name: 'Government Operations' };
+}
+
+function agencyForReport(crisisType: string, reportType: string | undefined, message: string, dbCrisisType: DbCrisisType) {
+  const normalized = `${reportType ?? ''} ${crisisType} ${message}`.toLowerCase();
+  if (normalized.includes('fire')) {
+    return { code: 'SCDF', name: 'Singapore Civil Defence Force' };
+  }
+  if (normalized.includes('hospital') || normalized.includes('clinic') || normalized.includes('medical')) {
+    return { code: 'MOH', name: 'Ministry of Health' };
+  }
+  if (normalized.includes('crime') || normalized.includes('police')) {
+    return { code: 'SPF', name: 'Singapore Police Force' };
+  }
+  return agencyFor(dbCrisisType);
 }
 
 function formatTimestamp(date: Date) {
