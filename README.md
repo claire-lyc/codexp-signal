@@ -114,6 +114,12 @@ Apply schema files:
 npm run db:schema
 ```
 
+Apply schema files through Node using `DATABASE_URL` instead of Docker:
+
+```bash
+npm run db:schema:node
+```
+
 Load dashboard data from committed backend JSON files:
 
 ```bash
@@ -132,6 +138,12 @@ Start database, apply schemas, and seed from JSON:
 npm run db:init
 ```
 
+Apply schemas and seed JSON into a remote Postgres database such as Neon:
+
+```bash
+npm run db:init:remote
+```
+
 Fully wipe and rebuild the local database:
 
 ```bash
@@ -139,6 +151,27 @@ npm run db:reset
 ```
 
 Use `db:reset` when `db:init` fails because schemas/types already exist and you want a clean database.
+
+## Neon database setup
+
+Neon does not need Docker Desktop. Create a Neon project, then copy the Postgres connection string from Neon's **Connect** modal.
+
+Use the pooled connection string if this backend is deployed as serverless functions. It usually has `-pooler` in the hostname.
+
+Put the connection string in `backend/.env`:
+
+```env
+DATABASE_URL=postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require
+```
+
+Then initialize Neon from `backend/`:
+
+```bash
+npm run db:init:remote
+npm run dev
+```
+
+You do not need to share a Neon API token for normal app setup. The app only needs `DATABASE_URL`.
 
 ## Data refresh
 

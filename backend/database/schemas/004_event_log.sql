@@ -1,4 +1,4 @@
-CREATE TABLE audit.events (
+CREATE TABLE IF NOT EXISTS audit.events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   actor_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   actor_type public.actor_type NOT NULL,
@@ -12,12 +12,12 @@ CREATE TABLE audit.events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX events_created_at_idx ON audit.events (created_at DESC);
-CREATE INDEX events_entity_idx ON audit.events (entity_type, entity_id);
-CREATE INDEX events_event_type_idx ON audit.events (event_type);
-CREATE INDEX events_metadata_gin_idx ON audit.events USING GIN (metadata);
+CREATE INDEX IF NOT EXISTS events_created_at_idx ON audit.events (created_at DESC);
+CREATE INDEX IF NOT EXISTS events_entity_idx ON audit.events (entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS events_event_type_idx ON audit.events (event_type);
+CREATE INDEX IF NOT EXISTS events_metadata_gin_idx ON audit.events USING GIN (metadata);
 
-CREATE TABLE audit.external_api_calls (
+CREATE TABLE IF NOT EXISTS audit.external_api_calls (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   source_code TEXT NOT NULL,
   method TEXT NOT NULL,
@@ -30,5 +30,4 @@ CREATE TABLE audit.external_api_calls (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX external_api_calls_source_idx ON audit.external_api_calls (source_code, created_at DESC);
-
+CREATE INDEX IF NOT EXISTS external_api_calls_source_idx ON audit.external_api_calls (source_code, created_at DESC);

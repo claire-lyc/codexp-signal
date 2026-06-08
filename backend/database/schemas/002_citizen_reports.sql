@@ -1,22 +1,30 @@
-CREATE TYPE citizen.report_status AS ENUM (
-  'submitted',
-  'triage',
-  'in_progress',
-  'grouped',
-  'resolved',
-  'rejected'
-);
+DO $$
+BEGIN
+  CREATE TYPE citizen.report_status AS ENUM (
+    'submitted',
+    'triage',
+    'in_progress',
+    'grouped',
+    'resolved',
+    'rejected'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE citizen.image_processing_status AS ENUM (
-  'uploaded',
-  'queued',
-  'processing',
-  'processed',
-  'failed',
-  'rejected'
-);
+DO $$
+BEGIN
+  CREATE TYPE citizen.image_processing_status AS ENUM (
+    'uploaded',
+    'queued',
+    'processing',
+    'processed',
+    'failed',
+    'rejected'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TABLE citizen.reports (
+CREATE TABLE IF NOT EXISTS citizen.reports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   public_report_id TEXT NOT NULL UNIQUE,
   reporter_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -39,11 +47,11 @@ CREATE TABLE citizen.reports (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX reports_status_created_at_idx ON citizen.reports (status, created_at DESC);
-CREATE INDEX reports_crisis_type_idx ON citizen.reports (crisis_type);
-CREATE INDEX reports_planning_area_idx ON citizen.reports (planning_area_id);
+CREATE INDEX IF NOT EXISTS reports_status_created_at_idx ON citizen.reports (status, created_at DESC);
+CREATE INDEX IF NOT EXISTS reports_crisis_type_idx ON citizen.reports (crisis_type);
+CREATE INDEX IF NOT EXISTS reports_planning_area_idx ON citizen.reports (planning_area_id);
 
-CREATE TABLE citizen.report_images (
+CREATE TABLE IF NOT EXISTS citizen.report_images (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   report_id UUID NOT NULL REFERENCES citizen.reports(id) ON DELETE CASCADE,
   original_filename TEXT,
@@ -59,10 +67,10 @@ CREATE TABLE citizen.report_images (
   processed_at TIMESTAMPTZ
 );
 
-CREATE INDEX report_images_report_id_idx ON citizen.report_images (report_id);
-CREATE INDEX report_images_processing_status_idx ON citizen.report_images (processing_status);
+CREATE INDEX IF NOT EXISTS report_images_report_id_idx ON citizen.report_images (report_id);
+CREATE INDEX IF NOT EXISTS report_images_processing_status_idx ON citizen.report_images (processing_status);
 
-CREATE TABLE citizen.report_comments (
+CREATE TABLE IF NOT EXISTS citizen.report_comments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   report_id UUID NOT NULL REFERENCES citizen.reports(id) ON DELETE CASCADE,
   author_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -72,9 +80,9 @@ CREATE TABLE citizen.report_comments (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX report_comments_report_id_idx ON citizen.report_comments (report_id, created_at);
+CREATE INDEX IF NOT EXISTS report_comments_report_id_idx ON citizen.report_comments (report_id, created_at);
 
-CREATE TABLE citizen.report_agency_pings (
+CREATE TABLE IF NOT EXISTS citizen.report_agency_pings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   report_id UUID NOT NULL REFERENCES citizen.reports(id) ON DELETE CASCADE,
   agency_id UUID NOT NULL REFERENCES auth.government_agencies(id),
@@ -84,9 +92,9 @@ CREATE TABLE citizen.report_agency_pings (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX report_agency_pings_report_id_idx ON citizen.report_agency_pings (report_id);
+CREATE INDEX IF NOT EXISTS report_agency_pings_report_id_idx ON citizen.report_agency_pings (report_id);
 
-CREATE TABLE citizen.broadcasts (
+CREATE TABLE IF NOT EXISTS citizen.broadcasts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   source_report_id UUID REFERENCES citizen.reports(id) ON DELETE SET NULL,
   created_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -102,5 +110,4 @@ CREATE TABLE citizen.broadcasts (
   resolved_at TIMESTAMPTZ
 );
 
-CREATE INDEX broadcasts_status_created_at_idx ON citizen.broadcasts (status, created_at DESC);
-
+CREATE INDEX IF NOT EXISTS broadcasts_status_created_at_idx ON citizen.broadcasts (status, created_at DESC);

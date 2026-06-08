@@ -1,4 +1,4 @@
-CREATE TABLE auth.users (
+CREATE TABLE IF NOT EXISTS auth.users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   actor_type public.actor_type NOT NULL,
   display_name TEXT,
@@ -8,11 +8,11 @@ CREATE TABLE auth.users (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX users_email_unique
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique
   ON auth.users (lower(email))
   WHERE email IS NOT NULL;
 
-CREATE TABLE auth.singpass_identities (
+CREATE TABLE IF NOT EXISTS auth.singpass_identities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   singpass_subject TEXT NOT NULL UNIQUE,
@@ -22,7 +22,7 @@ CREATE TABLE auth.singpass_identities (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE auth.government_agencies (
+CREATE TABLE IF NOT EXISTS auth.government_agencies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   code TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
@@ -30,7 +30,7 @@ CREATE TABLE auth.government_agencies (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE auth.government_user_profiles (
+CREATE TABLE IF NOT EXISTS auth.government_user_profiles (
   user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   agency_id UUID REFERENCES auth.government_agencies(id),
   role TEXT NOT NULL,
@@ -39,7 +39,7 @@ CREATE TABLE auth.government_user_profiles (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE auth.sessions (
+CREATE TABLE IF NOT EXISTS auth.sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   refresh_token_hash TEXT NOT NULL,
@@ -49,4 +49,3 @@ CREATE TABLE auth.sessions (
   revoked_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-

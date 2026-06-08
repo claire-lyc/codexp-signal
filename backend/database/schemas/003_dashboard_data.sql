@@ -1,11 +1,15 @@
-CREATE TYPE dashboard.source_kind AS ENUM (
-  'official_api',
-  'citizen_reports',
-  'manual',
-  'model_output'
-);
+DO $$
+BEGIN
+  CREATE TYPE dashboard.source_kind AS ENUM (
+    'official_api',
+    'citizen_reports',
+    'manual',
+    'model_output'
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TABLE dashboard.data_sources (
+CREATE TABLE IF NOT EXISTS dashboard.data_sources (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   code TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
@@ -16,7 +20,7 @@ CREATE TABLE dashboard.data_sources (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE dashboard.data_snapshots (
+CREATE TABLE IF NOT EXISTS dashboard.data_snapshots (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   source_id UUID NOT NULL REFERENCES dashboard.data_sources(id),
   crisis_type public.crisis_type NOT NULL,
@@ -27,10 +31,10 @@ CREATE TABLE dashboard.data_snapshots (
   UNIQUE (source_id, snapshot_key, captured_at)
 );
 
-CREATE INDEX data_snapshots_crisis_type_idx ON dashboard.data_snapshots (crisis_type, captured_at DESC);
-CREATE INDEX data_snapshots_payload_gin_idx ON dashboard.data_snapshots USING GIN (payload);
+CREATE INDEX IF NOT EXISTS data_snapshots_crisis_type_idx ON dashboard.data_snapshots (crisis_type, captured_at DESC);
+CREATE INDEX IF NOT EXISTS data_snapshots_payload_gin_idx ON dashboard.data_snapshots USING GIN (payload);
 
-CREATE TABLE dashboard.crises (
+CREATE TABLE IF NOT EXISTS dashboard.crises (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   crisis_type public.crisis_type NOT NULL,
@@ -43,9 +47,9 @@ CREATE TABLE dashboard.crises (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX crises_status_idx ON dashboard.crises (status, severity);
+CREATE INDEX IF NOT EXISTS crises_status_idx ON dashboard.crises (status, severity);
 
-CREATE TABLE dashboard.alerts (
+CREATE TABLE IF NOT EXISTS dashboard.alerts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   crisis_id UUID REFERENCES dashboard.crises(id) ON DELETE SET NULL,
   title TEXT NOT NULL,
@@ -59,10 +63,10 @@ CREATE TABLE dashboard.alerts (
   resolved_at TIMESTAMPTZ
 );
 
-CREATE INDEX alerts_status_idx ON dashboard.alerts (status, created_at DESC);
-CREATE INDEX alerts_crisis_type_region_idx ON dashboard.alerts (crisis_type, region);
+CREATE INDEX IF NOT EXISTS alerts_status_idx ON dashboard.alerts (status, created_at DESC);
+CREATE INDEX IF NOT EXISTS alerts_crisis_type_region_idx ON dashboard.alerts (crisis_type, region);
 
-CREATE TABLE dashboard.map_layers (
+CREATE TABLE IF NOT EXISTS dashboard.map_layers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   layer_key TEXT NOT NULL,
   crisis_id UUID REFERENCES dashboard.crises(id) ON DELETE CASCADE,
@@ -71,5 +75,4 @@ CREATE TABLE dashboard.map_layers (
   generated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX map_layers_layer_key_idx ON dashboard.map_layers (layer_key, generated_at DESC);
-
+CREATE INDEX IF NOT EXISTS map_layers_layer_key_idx ON dashboard.map_layers (layer_key, generated_at DESC);
