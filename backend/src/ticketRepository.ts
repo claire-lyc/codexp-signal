@@ -151,6 +151,7 @@ export function createCitizenTicket(input: {
   location?: string;
   crisisType: string;
   hasImage?: boolean;
+  urgency: TicketUrgency;
 }) {
   const ticket: Ticket = {
     id: nextTicketId(),
@@ -161,7 +162,7 @@ export function createCitizenTicket(input: {
     crisisType: normalizeCrisisType(input.crisisType),
     status: 'open',
     assignedAgency: agencyFor(input.crisisType),
-    urgency: urgencyFor(input.crisisType, input.message),
+    urgency: input.urgency,
     hasImage: Boolean(input.hasImage),
     relatedTickets: [],
     comments: [internalNote('New citizen report opened from public portal.', 0)],
@@ -261,12 +262,4 @@ function agencyFor(crisisType: string) {
   if (normalized === 'Infrastructure') return 'LTA';
   if (normalized === 'Cybersecurity') return 'CSA';
   return 'GOV-OPS';
-}
-
-function urgencyFor(crisisType: string, message: string): TicketUrgency {
-  const normalized = `${crisisType} ${message}`.toLowerCase();
-  if (normalized.includes('knee-deep') || normalized.includes('danger') || normalized.includes('fire')) return 'critical';
-  if (normalized.includes('flood') || normalized.includes('hospital') || normalized.includes('out of stock')) return 'high';
-  if (normalized.includes('delay') || normalized.includes('shortage') || normalized.includes('symptom')) return 'medium';
-  return 'low';
 }

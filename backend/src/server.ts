@@ -25,6 +25,7 @@ import {
   listAlerts,
   listCrises,
 } from './dashboardRepository.js';
+import { detectTicketUrgency } from './severityDetector.js';
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
@@ -108,7 +109,7 @@ app.get('/api/tickets', ...requireGovUser, (request, response) => {
   });
 });
 
-app.post('/api/citizen/reports', (request, response) => {
+app.post('/api/citizen/reports', async (request, response, next) => {
   const message = stringBody(request.body?.description) ?? stringBody(request.body?.message);
   const crisisType = stringBody(request.body?.crisisType) ?? stringBody(request.body?.reportType) ?? 'general';
   if (!message) {
@@ -116,22 +117,28 @@ app.post('/api/citizen/reports', (request, response) => {
     return;
   }
 
-  const ticket = createCitizenTicket({
-    reporter: stringBody(request.body?.reporter),
-    message,
-    location: stringBody(request.body?.locationText) ?? stringBody(request.body?.location),
-    crisisType,
-    hasImage: Boolean(request.body?.hasImage),
-  });
+  try {
+    const urgency = await detectTicketUrgency(crisisType, message);
+    const ticket = createCitizenTicket({
+      reporter: stringBody(request.body?.reporter),
+      message,
+      location: stringBody(request.body?.locationText) ?? stringBody(request.body?.location),
+      crisisType,
+      urgency,
+      hasImage: Boolean(request.body?.hasImage),
+    });
 
-  response.status(201).json({
-    id: ticket.id,
-    publicReportId: ticket.id,
-    status: ticket.status,
-    assignedAgency: ticket.assignedAgency,
-    createdAt: new Date().toISOString(),
-    item: ticket,
-  });
+    response.status(201).json({
+      id: ticket.id,
+      publicReportId: ticket.id,
+      status: ticket.status,
+      assignedAgency: ticket.assignedAgency,
+      createdAt: new Date().toISOString(),
+      item: ticket,
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get('/api/citizen/reports/:publicReportId', (request, response) => {

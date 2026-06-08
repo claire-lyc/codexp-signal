@@ -312,10 +312,8 @@ function agencyForReportType(value: string) {
   return 'GOV-OPS';
 }
 
-function urgencyFor(reportType: string, description: string) {
-  const text = `${reportType} ${description}`.toLowerCase();
-  if (text.includes('knee-deep') || text.includes('danger') || text.includes('fire')) return 'critical';
-  if (text.includes('flood') || text.includes('out of stock') || text.includes('hospital')) return 'high';
-  if (text.includes('delay') || text.includes('shortage') || text.includes('symptom')) return 'medium';
-  return 'low';
+function urgencyFor(crisisType: string, message: string): TicketUrgency {
+  void crisisType;
+  void message;
+  return 'medium';
 }
