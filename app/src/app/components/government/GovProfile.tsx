@@ -35,7 +35,7 @@ export default function GovProfile() {
 
   const logout = () => {
     clearAuthTokens();
-    navigate('/gov');
+    navigate('/login?portal=gov&redirect=%2Fgov');
   };
 
   return (

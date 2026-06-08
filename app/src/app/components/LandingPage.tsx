@@ -60,14 +60,14 @@ export default function LandingPage() {
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
-                to="/gov"
+                to="/login?portal=gov&redirect=%2Fgov"
                 className="group inline-flex items-center justify-center gap-3 rounded-xl bg-red-600 px-6 py-4 font-semibold text-white shadow-2xl shadow-red-950/60 transition-all hover:-translate-y-0.5 hover:bg-red-500"
               >
                 <Radio className="h-5 w-5" />
                 Open Command Centre
               </Link>
               <Link
-                to="/public"
+                to="/login?portal=public&redirect=%2Fpublic"
                 className="inline-flex items-center justify-center gap-3 rounded-xl border border-zinc-700 bg-zinc-900/70 px-6 py-4 font-semibold text-zinc-100 transition-all hover:-translate-y-0.5 hover:border-white hover:bg-zinc-800"
               >
                 <Users className="h-5 w-5" />
