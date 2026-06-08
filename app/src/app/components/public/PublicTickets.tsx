@@ -227,7 +227,7 @@ export default function PublicTickets() {
 
   const validate = () => {
     const nextErrors: FieldErrors = {};
-    if (!authUser) nextErrors.auth = 'Sign in before opening a ticket.';
+    if (!authUser) nextErrors.auth = 'Sign in before submitting a report.';
     if (!reportType) nextErrors.reportType = 'Choose a tag.';
     if (!description.trim()) nextErrors.description = 'Describe what happened.';
     if (files.some((file) => file.size > 5 * 1024 * 1024)) nextErrors.image = 'Each image must be 5 MB or smaller.';
@@ -273,7 +273,7 @@ export default function PublicTickets() {
       setFiles([]);
       setFieldErrors({});
       setSubmitState('success');
-      setSubmitMessage(`Ticket ${data.publicReportId} opened and sent to ${data.assignedAgency}.`);
+      setSubmitMessage(`Report ${data.publicReportId} submitted and sent to ${data.assignedAgency}.`);
       loadMyTickets(true);
     } catch {
       setSubmitState('error');
@@ -294,7 +294,7 @@ export default function PublicTickets() {
       setSelectedTicket(data.item);
     } catch {
       setSubmitState('error');
-      setSubmitMessage(`Could not find ticket ${normalizedId}.`);
+      setSubmitMessage(`Could not find report ${normalizedId}.`);
     }
   };
 
@@ -331,14 +331,15 @@ export default function PublicTickets() {
     return (
       <div className="mx-auto max-w-xl space-y-6">
         <EmergencyBanner />
+        <ReportGuidanceCard />
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
           <div className="mb-5 flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-950 text-blue-300">
               <Shield className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold">Sign in to access tickets</h1>
-              <p className="text-sm text-zinc-400">Your user ID is attached to new tickets and discussion replies.</p>
+              <h1 className="text-2xl font-bold">Sign in to submit a report</h1>
+              <p className="text-sm text-zinc-400">Your account is attached to reports and any follow-up replies from agencies.</p>
             </div>
           </div>
           <div className="space-y-3">
@@ -375,10 +376,11 @@ export default function PublicTickets() {
     <div className="space-y-6">
       <div className="mx-auto max-w-7xl">
         <div className="mb-5">
-          <h1 className="text-3xl font-bold">Tickets</h1>
-          <p className="text-zinc-400">Open and discuss non-emergency government tickets</p>
+          <h1 className="text-3xl font-bold">Report an Issue</h1>
+          <p className="text-zinc-400">Send non-emergency reports and receive follow-up updates from the relevant agency</p>
         </div>
         <EmergencyBanner />
+        <ReportGuidanceCard />
       </div>
 
       <div className="mx-auto grid max-w-7xl gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.85fr)]">
@@ -388,7 +390,7 @@ export default function PublicTickets() {
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <Ticket className="h-5 w-5 text-blue-400" />
-                  <h2 className="font-semibold">Open a Ticket</h2>
+                  <h2 className="font-semibold">Submit a Report</h2>
                 </div>
                 <div className="text-xs text-zinc-500">{authUser.username ?? authUser.email}</div>
               </div>
@@ -503,7 +505,7 @@ export default function PublicTickets() {
                   className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium transition-colors hover:bg-blue-700 disabled:opacity-60"
                 >
                   {submitState === 'submitting' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  Post Ticket
+                  Submit Report
                 </button>
                 {submitMessage && (
                   <div className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${submitState === 'success' ? 'border border-green-800 bg-green-950/40 text-green-300' : 'border border-red-800 bg-red-950/40 text-red-300'}`}>
@@ -519,7 +521,7 @@ export default function PublicTickets() {
             <input
               value={trackId}
               onChange={(event) => setTrackId(event.target.value)}
-              placeholder="Find ticket, e.g. TKT-0042"
+              placeholder="Find report, e.g. TKT-0042"
               className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
             />
             <button onClick={handleTrack} className="rounded-lg bg-zinc-800 px-3 py-2 hover:bg-zinc-700">
@@ -533,12 +535,12 @@ export default function PublicTickets() {
             ))}
             {ticketsLoading && (
               <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
-                Loading your tickets...
+                Loading your reports...
               </div>
             )}
             {!ticketsLoading && !tickets.length && !createdTicket?.item && (
               <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
-                Your opened or tracked tickets will appear here.
+                Your submitted or tracked reports will appear here.
               </div>
             )}
           </div>
@@ -558,7 +560,7 @@ function EmergencyBanner() {
         <div>
           <div className="mb-1 font-semibold text-red-300">Immediate Life-Threatening Emergency?</div>
           <p className="mb-3 text-sm text-zinc-300">
-            Call emergency services directly. Tickets are for non-life-threatening issues.
+            Call emergency services directly. Reports submitted here are not a replacement for emergency calls.
           </p>
           <div className="flex flex-wrap gap-2">
             <a href="tel:995" className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-red-700">
@@ -568,8 +570,27 @@ function EmergencyBanner() {
             <a href="tel:1777" className="inline-flex items-center gap-2 rounded-lg bg-zinc-700 px-4 py-2 text-sm transition-colors hover:bg-zinc-600">
               Non-Emergency: 1777
             </a>
+            <a href="tel:18002550000" className="inline-flex items-center gap-2 rounded-lg bg-zinc-700 px-4 py-2 text-sm transition-colors hover:bg-zinc-600">
+              Police: 1800-255-0000
+            </a>
+            <a href="tel:1767" className="inline-flex items-center gap-2 rounded-lg bg-zinc-700 px-4 py-2 text-sm transition-colors hover:bg-zinc-600">
+              Crisis Hotline: 1767
+            </a>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ReportGuidanceCard() {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-blue-800/50 bg-blue-950/20 px-4 py-3 text-sm text-zinc-300">
+        Use this page to report issues, upload photos, and follow agency updates in one place.
+      </div>
+      <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-xs text-zinc-400">
+        False reports may delay response to real incidents.
       </div>
     </div>
   );
@@ -615,8 +636,8 @@ function DiscussionPanel({
       <aside className="min-h-[560px] rounded-xl border border-zinc-800 bg-zinc-900 p-6">
         <div className="flex h-full flex-col items-center justify-center text-center text-zinc-500">
           <MessageCircle className="mb-4 h-12 w-12" />
-          <h2 className="text-lg font-semibold text-zinc-300">Select a ticket</h2>
-          <p className="mt-2 text-sm">Opened or tracked tickets expand here for discussion.</p>
+          <h2 className="text-lg font-semibold text-zinc-300">Select a report</h2>
+          <p className="mt-2 text-sm">Submitted or tracked reports expand here for updates and discussion.</p>
         </div>
       </aside>
     );
@@ -679,7 +700,7 @@ function DiscussionPanel({
             onChange={(event) => setReply(event.target.value)}
             onKeyDown={(event) => event.key === 'Enter' && sendReply()}
             disabled={resolved}
-            placeholder={resolved ? 'Discussion closed after resolution' : `Send a message in ${ticket.id}`}
+            placeholder={resolved ? 'Discussion closed after resolution' : `Send an update in ${ticket.id}`}
             className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-zinc-600"
           />
           <button disabled={resolved} onClick={sendReply} className="rounded-md bg-blue-600 p-1.5 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-500">
