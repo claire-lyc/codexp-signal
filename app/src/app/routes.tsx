@@ -30,6 +30,10 @@ export const router = createBrowserRouter([
     ],
   },
   {
+    path: "/gov-profile",
+    lazy: lazyRoute(() => import("./components/government/GovProfile")),
+  },
+  {
     path: "/public",
     lazy: lazyRoute(() => import("./components/public/PublicLayout")),
     children: [

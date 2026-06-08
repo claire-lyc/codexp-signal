@@ -9,6 +9,8 @@ export type AuthUser = {
   actor_type: ActorType;
   display_name: string | null;
   email: string | null;
+  username: string | null;
+  tags: string[];
   created_at: string;
   updated_at: string;
 };
@@ -23,6 +25,8 @@ export async function createPasswordUser(input: {
   email: string;
   password: string;
   displayName?: string;
+  username?: string;
+  tags?: string[];
   actorType: Extract<ActorType, 'citizen' | 'government_user'>;
   role?: string;
 }) {
@@ -34,11 +38,11 @@ export async function createPasswordUser(input: {
     await client.query('BEGIN');
     const userResult = await client.query<AuthUser>(
       `
-        INSERT INTO auth.users (actor_type, display_name, email)
-        VALUES ($1, $2, $3)
-        RETURNING id, actor_type, display_name, email, created_at, updated_at
+        INSERT INTO auth.users (actor_type, display_name, email, username, tags)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, actor_type, display_name, email, username, tags, created_at, updated_at
       `,
-      [input.actorType, input.displayName ?? null, email],
+      [input.actorType, input.displayName ?? null, email, input.username ?? null, input.tags ?? []],
     );
     const user = userResult.rows[0];
 
@@ -73,7 +77,7 @@ export async function createPasswordUser(input: {
 }
 
 export async function verifyPasswordUser(emailInput: string, password: string) {
-  const email = normalizeEmail(emailInput);
+  const identifier = normalizeIdentifier(emailInput);
   const rows = await query<AuthenticatedUser & { password_hash: string }>(
     `
       SELECT
@@ -81,6 +85,8 @@ export async function verifyPasswordUser(emailInput: string, password: string) {
         users.actor_type,
         users.display_name,
         users.email,
+        users.username,
+        users.tags,
         users.created_at,
         users.updated_at,
         credentials.password_hash,
@@ -91,9 +97,10 @@ export async function verifyPasswordUser(emailInput: string, password: string) {
       JOIN auth.password_credentials credentials ON credentials.user_id = users.id
       LEFT JOIN auth.government_user_profiles profiles ON profiles.user_id = users.id
       WHERE lower(users.email) = lower($1)
+         OR lower(users.username) = lower($1)
       LIMIT 1
     `,
-    [email],
+    [identifier],
   );
   const user = rows[0];
   if (!user) return null;
@@ -113,6 +120,8 @@ export async function getUserById(id: string): Promise<AuthenticatedUser | null>
         users.actor_type,
         users.display_name,
         users.email,
+        users.username,
+        users.tags,
         users.created_at,
         users.updated_at,
         profiles.role,
@@ -126,6 +135,104 @@ export async function getUserById(id: string): Promise<AuthenticatedUser | null>
     [id],
   );
   return rows[0] ?? null;
+}
+
+export async function upsertPasswordUser(input: {
+  username: string;
+  password: string;
+  displayName?: string;
+  email?: string;
+  tags?: string[];
+  role?: string;
+  agencyCode?: string | null;
+}) {
+  const username = input.username.trim();
+  const email = input.email ? normalizeEmail(input.email) : `${username.toLowerCase().replace(/\s+/g, '-')}.demo@signal.local`;
+  const passwordHash = await bcrypt.hash(input.password, 12);
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    let agencyId: string | null = null;
+    if (input.agencyCode) {
+      const agency = await client.query<{ id: string }>(
+        `
+          INSERT INTO auth.government_agencies (code, name)
+          VALUES ($1, $1)
+          ON CONFLICT (code)
+          DO UPDATE SET name = EXCLUDED.name
+          RETURNING id
+        `,
+        [input.agencyCode],
+      );
+      agencyId = agency.rows[0].id;
+    }
+
+    const existingUser = await client.query<{ id: string }>(
+      `
+        SELECT id
+        FROM auth.users
+        WHERE lower(username) = lower($1)
+        LIMIT 1
+      `,
+      [username],
+    );
+
+    const userResult = existingUser.rows[0]
+      ? await client.query<AuthUser>(
+          `
+            UPDATE auth.users
+            SET
+              actor_type = 'government_user',
+              display_name = $2,
+              email = $3,
+              username = $4,
+              tags = $5,
+              updated_at = now()
+            WHERE id = $1
+            RETURNING id, actor_type, display_name, email, username, tags, created_at, updated_at
+          `,
+          [existingUser.rows[0].id, input.displayName ?? username, email, username, input.tags ?? [username]],
+        )
+      : await client.query<AuthUser>(
+          `
+            INSERT INTO auth.users (actor_type, display_name, email, username, tags)
+            VALUES ('government_user', $1, $2, $3, $4)
+            RETURNING id, actor_type, display_name, email, username, tags, created_at, updated_at
+          `,
+          [input.displayName ?? username, email, username, input.tags ?? [username]],
+        );
+    const user = userResult.rows[0];
+
+    await client.query(
+      `
+        INSERT INTO auth.password_credentials (user_id, password_hash)
+        VALUES ($1, $2)
+        ON CONFLICT (user_id)
+        DO UPDATE SET password_hash = EXCLUDED.password_hash, password_updated_at = now()
+      `,
+      [user.id, passwordHash],
+    );
+
+    await client.query(
+      `
+        INSERT INTO auth.government_user_profiles (user_id, agency_id, role)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (user_id)
+        DO UPDATE SET agency_id = EXCLUDED.agency_id, role = EXCLUDED.role
+      `,
+      [user.id, agencyId, input.role ?? username],
+    );
+
+    await client.query('COMMIT');
+    return getUserById(user.id);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function createSession(input: {
@@ -188,4 +295,8 @@ export function hashRefreshToken(refreshToken: string) {
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
+}
+
+function normalizeIdentifier(value: string) {
+  return value.trim().toLowerCase();
 }

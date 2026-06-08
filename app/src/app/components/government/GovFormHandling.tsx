@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { apiUrl } from '../../lib/api';
+import { authHeaders } from '../../lib/auth';
 
 type TicketStatus = 'open' | 'in-progress' | 'resolved' | 'grouped';
 type TicketUrgency = 'critical' | 'high' | 'medium' | 'low';
@@ -27,6 +28,16 @@ type TicketComment = {
   author: string;
   visibility: 'public' | 'internal';
   body: string;
+  createdAt: string;
+};
+type TicketImage = {
+  id: string;
+  filename: string | null;
+  mimeType: string | null;
+  byteSize: number | null;
+  storageKey: string | null;
+  previewUrl: string | null;
+  status: string;
   createdAt: string;
 };
 type Ticket = {
@@ -43,6 +54,8 @@ type Ticket = {
   relatedTickets: string[];
   comments: TicketComment[];
   pingedAgencies: string[];
+  images?: TicketImage[];
+  chatEnabled?: boolean;
 };
 
 const agencies = ['All Agencies', 'MOH', 'PUB', 'LTA', 'Enterprise SG', 'SPF', 'SCDF'];
@@ -208,6 +221,7 @@ export default function GovFormHandling() {
   }, [filterAgency, filterCrisis, filterStatus, query, tickets]);
 
   const selectedTicket = tickets.find((ticket) => ticket.id === selectedTicketId) ?? filtered[0] ?? tickets[0];
+  const selectedTicketResolved = selectedTicket ? isResolved(selectedTicket) : false;
 
   const syncTicket = (updated: Ticket) => {
     setTickets((current) => current.map((ticket) => (ticket.id === updated.id ? updated : ticket)));
@@ -234,7 +248,7 @@ export default function GovFormHandling() {
   };
 
   const addComment = async () => {
-    if (!selectedTicket || !comment.trim()) return;
+    if (!selectedTicket || !comment.trim() || isResolved(selectedTicket)) return;
 
     try {
       const data = await requestJson<{ item: Ticket }>(`/api/tickets/${selectedTicket.id}/comments`, 'POST', {
@@ -245,6 +259,10 @@ export default function GovFormHandling() {
       setUsingBackend(true);
     } catch {
       setUsingBackend(false);
+      if (isResolved(selectedTicket)) {
+        setNotice(`${selectedTicket.id} is resolved. Discussion is closed.`);
+        return;
+      }
       updateLocalTickets(
         (current) =>
           current.map((ticket) =>
@@ -422,7 +440,7 @@ export default function GovFormHandling() {
                 {selectedTicket.hasImage && (
                   <div>
                     <div className="text-xs text-zinc-500 mb-1">Attachment</div>
-                    <div className="flex items-center gap-1.5 text-sm text-blue-400"><Image className="w-3.5 h-3.5" />Photo attached</div>
+                    <div className="flex items-center gap-1.5 text-sm text-blue-400"><Image className="w-3.5 h-3.5" />{selectedTicket.images?.length || 1} photo attached</div>
                   </div>
                 )}
                 {selectedTicket.relatedTickets.length > 0 && (
@@ -458,6 +476,20 @@ export default function GovFormHandling() {
                         <span className="text-xs text-zinc-500">{selectedTicket.timestamp}</span>
                       </div>
                       <p className="text-sm text-zinc-300 leading-relaxed">{selectedTicket.message}</p>
+                      {selectedTicket.images?.length ? (
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          {selectedTicket.images.map((image) =>
+                            image.previewUrl ? (
+                              <img key={image.id} src={image.previewUrl} alt={image.filename ?? 'Ticket attachment'} className="h-36 w-full rounded-lg border border-zinc-800 object-cover" />
+                            ) : (
+                              <div key={image.id} className="flex min-h-20 items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-400">
+                                <Image className="h-4 w-4" />
+                                <span className="truncate">{image.filename ?? image.storageKey ?? 'Uploaded image'}</span>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      ) : null}
                       <div className="flex items-center gap-2 mt-2 text-xs text-zinc-500"><MapPin className="w-3 h-3" />{selectedTicket.location}</div>
                     </div>
                   </div>
@@ -465,27 +497,34 @@ export default function GovFormHandling() {
 
                 <div className="flex-1 overflow-y-auto p-5 space-y-4">
                   {selectedTicket.comments.length === 0 && <div className="text-sm text-zinc-600">No comments yet.</div>}
-                  {selectedTicket.comments.map((item) => (
-                    <div key={item.id} className="flex items-start gap-3">
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${item.visibility === 'public' ? 'bg-blue-900' : 'bg-red-900'}`}>G</div>
+                  {groupComments(selectedTicket.comments).map((group) => (
+                    <div key={group.id} className="flex items-start gap-3">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${group.visibility === 'public' ? 'bg-blue-900' : 'bg-red-900'}`}>G</div>
                       <div className="flex-1 bg-zinc-800 rounded-lg p-3">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-medium">{item.author}</span>
-                          <span className="text-xs text-zinc-500">{relativeTime(item.createdAt)}</span>
-                          <span className="text-xs px-1.5 py-0.5 bg-zinc-700 text-zinc-400 rounded">{item.visibility === 'public' ? 'Public reply' : 'Internal note'}</span>
+                          <span className="text-xs font-medium">{group.author}</span>
+                          <span className="text-xs text-zinc-500">{relativeTime(group.createdAt)}</span>
+                          <span className="text-xs px-1.5 py-0.5 bg-zinc-700 text-zinc-400 rounded">{group.visibility === 'public' ? 'Public reply' : 'Internal note'}</span>
                         </div>
-                        <p className="text-sm text-zinc-300">{item.body}</p>
+                        <div className="space-y-2">
+                          {group.bodies.map((body, index) => <p key={`${group.id}-${index}`} className="text-sm text-zinc-300">{body}</p>)}
+                        </div>
                       </div>
                     </div>
                   ))}
+                  {selectedTicketResolved && (
+                    <div className="rounded-lg border border-green-800 bg-green-950/30 px-3 py-2 text-sm text-green-300">
+                      Ticket resolved. Discussion is closed.
+                    </div>
+                  )}
                 </div>
 
                 <div className="p-4 border-t border-zinc-800">
                   <div className="flex gap-2 mb-2">
-                    <button onClick={() => setCommentType('public')} className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${commentType === 'public' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                    <button disabled={selectedTicketResolved} onClick={() => setCommentType('public')} className={`px-3 py-1.5 rounded-lg text-xs transition-colors disabled:opacity-50 ${commentType === 'public' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
                       <MessageSquare className="w-3 h-3 inline mr-1" />Public reply
                     </button>
-                    <button onClick={() => setCommentType('internal')} className={`px-3 py-1.5 rounded-lg text-xs transition-colors ${commentType === 'internal' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+                    <button disabled={selectedTicketResolved} onClick={() => setCommentType('internal')} className={`px-3 py-1.5 rounded-lg text-xs transition-colors disabled:opacity-50 ${commentType === 'internal' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
                       <Shield className="w-3 h-3 inline mr-1" />Internal note
                     </button>
                   </div>
@@ -493,11 +532,12 @@ export default function GovFormHandling() {
                     <textarea
                       value={comment}
                       onChange={(event) => setComment(event.target.value)}
-                      placeholder={commentType === 'public' ? 'Reply to citizen...' : 'Add internal note (not visible to citizen)...'}
+                      disabled={selectedTicketResolved}
+                      placeholder={selectedTicketResolved ? 'Discussion closed after resolution' : commentType === 'public' ? 'Reply to citizen...' : 'Add internal note (not visible to citizen)...'}
                       rows={2}
-                      className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-red-600 resize-none"
+                      className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-red-600 resize-none disabled:opacity-60"
                     />
-                    <button onClick={addComment} className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center gap-1 text-sm self-end">
+                    <button disabled={selectedTicketResolved} onClick={addComment} className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center gap-1 text-sm self-end disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-500">
                       <Send className="w-4 h-4" />
                     </button>
                   </div>
@@ -583,10 +623,6 @@ function loadLocalTickets() {
   }
 }
 
-function authHeaders() {
-  const token = localStorage.getItem('signal-access-token') ?? localStorage.getItem('accessToken');
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
 
 function createComment(visibility: 'public' | 'internal', body: string): TicketComment {
   return {
@@ -603,6 +639,38 @@ function commentSeed(visibility: 'public' | 'internal', body: string, minutesAgo
     ...createComment(visibility, body),
     createdAt: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
   };
+}
+
+type CommentGroup = {
+  id: string;
+  author: string;
+  visibility: 'public' | 'internal';
+  createdAt: string;
+  bodies: string[];
+};
+
+function groupComments(comments: TicketComment[]): CommentGroup[] {
+  return comments.reduce<CommentGroup[]>((groups, comment) => {
+    const previous = groups.at(-1);
+    if (previous && previous.author === comment.author && previous.visibility === comment.visibility) {
+      previous.bodies.push(comment.body);
+      previous.createdAt = comment.createdAt;
+      return groups;
+    }
+
+    groups.push({
+      id: comment.id,
+      author: comment.author,
+      visibility: comment.visibility,
+      createdAt: comment.createdAt,
+      bodies: [comment.body],
+    });
+    return groups;
+  }, []);
+}
+
+function isResolved(ticket: Ticket) {
+  return ticket.status === 'resolved' || ticket.chatEnabled === false;
 }
 
 function relativeTime(timestamp: string) {
