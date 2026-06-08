@@ -1,0 +1,122 @@
+{
+  "generatedAt": "2026-06-08T00:00:00.000Z",
+  "tickets": [
+    {
+      "id": "TKT-0041",
+      "timestamp": "2026-06-05T14:22:00+08:00",
+      "reporter": "Citizen (Anonymous)",
+      "message": "Panadol Menstrual completely out of stock at Jurong Point Watsons, Unity, and Guardian. Checked 4 outlets in the area.",
+      "location": "Jurong Point, West",
+      "crisisType": "Supply Chain",
+      "reportType": "supply",
+      "status": "open",
+      "assignedAgency": "Enterprise SG",
+      "urgency": "high",
+      "hasImage": false,
+      "relatedTickets": ["TKT-0038", "TKT-0039"],
+      "comments": [
+        {
+          "author": "GOV-HANDLER-001",
+          "visibility": "internal",
+          "body": "Enterprise SG should verify retail stock and supplier ETA.",
+          "createdAt": "2026-06-05T14:15:00+08:00"
+        }
+      ],
+      "pingedAgencies": []
+    },
+    {
+      "id": "TKT-0040",
+      "timestamp": "2026-06-05T13:55:00+08:00",
+      "reporter": "User #7821",
+      "message": "Flooding at Orchard underpass - water knee-deep. Cars stalling.",
+      "location": "Orchard Road, Central",
+      "crisisType": "Weather",
+      "reportType": "flood",
+      "status": "in-progress",
+      "assignedAgency": "PUB",
+      "urgency": "critical",
+      "hasImage": true,
+      "relatedTickets": ["TKT-0036"],
+      "comments": [
+        {
+          "author": "GOV-HANDLER-001",
+          "visibility": "internal",
+          "body": "PUB ops notified. Check whether LTA traffic diversion is needed.",
+          "createdAt": "2026-06-05T13:44:00+08:00"
+        }
+      ],
+      "pingedAgencies": ["PUB"]
+    },
+    {
+      "id": "TKT-0039",
+      "timestamp": "2026-06-05T13:40:00+08:00",
+      "reporter": "User #3312",
+      "message": "Cannot find Panadol Menstrual anywhere in Tampines Hub area.",
+      "location": "Tampines Hub, East",
+      "crisisType": "Supply Chain",
+      "reportType": "supply",
+      "status": "grouped",
+      "assignedAgency": "Enterprise SG",
+      "urgency": "medium",
+      "hasImage": false,
+      "relatedTickets": ["TKT-0041"],
+      "comments": [],
+      "pingedAgencies": []
+    },
+    {
+      "id": "TKT-0038",
+      "timestamp": "2026-06-05T13:10:00+08:00",
+      "reporter": "User #5509",
+      "message": "Dengue symptoms visible in family of 3. Requesting health advisory for Bedok North Ave 1.",
+      "location": "Bedok North Ave 1, East",
+      "crisisType": "Health",
+      "reportType": "health",
+      "status": "open",
+      "assignedAgency": "MOH",
+      "urgency": "high",
+      "hasImage": false,
+      "relatedTickets": [],
+      "comments": [],
+      "pingedAgencies": []
+    },
+    {
+      "id": "TKT-0037",
+      "timestamp": "2026-06-05T11:30:00+08:00",
+      "reporter": "Citizen (Anonymous)",
+      "message": "MRT East-West Line severely delayed at Jurong East station. Platform overcrowded.",
+      "location": "Jurong East MRT, West",
+      "crisisType": "Infrastructure",
+      "reportType": "transport",
+      "status": "resolved",
+      "assignedAgency": "LTA",
+      "urgency": "medium",
+      "hasImage": true,
+      "relatedTickets": [],
+      "comments": [
+        {
+          "author": "GOV-HANDLER-001",
+          "visibility": "public",
+          "body": "Thank you. LTA has confirmed service resumed and crowding has cleared.",
+          "createdAt": "2026-06-05T09:10:00+08:00"
+        }
+      ],
+      "pingedAgencies": ["LTA"]
+    },
+    {
+      "id": "TKT-0036",
+      "timestamp": "2026-06-05T10:15:00+08:00",
+      "reporter": "User #2201",
+      "message": "Road flooded at Orchard Road near Ngee Ann City. Traffic at standstill.",
+      "location": "Orchard Road, Central",
+      "crisisType": "Weather",
+      "reportType": "flood",
+      "status": "grouped",
+      "assignedAgency": "PUB",
+      "urgency": "critical",
+      "hasImage": true,
+      "relatedTickets": ["TKT-0040"],
+      "comments": [],
+      "pingedAgencies": ["PUB"]
+    }
+  ]
+}

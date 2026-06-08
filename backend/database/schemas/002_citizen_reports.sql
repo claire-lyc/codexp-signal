@@ -24,6 +24,8 @@ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
+CREATE SEQUENCE IF NOT EXISTS citizen.report_ticket_seq START WITH 42;
+
 CREATE TABLE IF NOT EXISTS citizen.reports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   public_report_id TEXT NOT NULL UNIQUE,
@@ -43,6 +45,8 @@ CREATE TABLE IF NOT EXISTS citizen.reports (
   confidence_score NUMERIC(5, 2),
   assigned_agency_id UUID REFERENCES auth.government_agencies(id),
   grouped_report_id UUID REFERENCES citizen.reports(id),
+  chat_enabled BOOLEAN NOT NULL DEFAULT true,
+  chat_closed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -50,6 +54,10 @@ CREATE TABLE IF NOT EXISTS citizen.reports (
 CREATE INDEX IF NOT EXISTS reports_status_created_at_idx ON citizen.reports (status, created_at DESC);
 CREATE INDEX IF NOT EXISTS reports_crisis_type_idx ON citizen.reports (crisis_type);
 CREATE INDEX IF NOT EXISTS reports_planning_area_idx ON citizen.reports (planning_area_id);
+
+ALTER TABLE citizen.reports
+  ADD COLUMN IF NOT EXISTS chat_enabled BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS chat_closed_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS citizen.report_images (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

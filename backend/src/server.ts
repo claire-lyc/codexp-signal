@@ -2,7 +2,8 @@ import 'dotenv/config';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
-import { authenticateJwt, requireActor } from './authMiddleware.js';
+import multer from 'multer';
+import { authenticateJwt, optionalAuthenticateJwt, requireActor, type AuthenticatedRequest } from './authMiddleware.js';
 import { createAuthRouter } from './authRoutes.js';
 import {
   createForumPost,
@@ -14,6 +15,7 @@ import {
 import {
   addTicketComment,
   createCitizenTicket,
+  getTicketByPublicId,
   listTickets,
   pingTicketAgencies,
   updateTicketStatus,
@@ -33,6 +35,20 @@ const requireGovUser: express.RequestHandler[] = [
   authenticateJwt as express.RequestHandler,
   requireActor('government_user', 'system') as express.RequestHandler,
 ];
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    files: 5,
+    fileSize: 5 * 1024 * 1024,
+  },
+  fileFilter: (_request, file, callback) => {
+    if (!file.mimetype.startsWith('image/')) {
+      callback(new Error('Only image uploads are supported'));
+      return;
+    }
+    callback(null, true);
+  },
+});
 
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') ?? true }));
 app.use(helmet());
@@ -98,15 +114,19 @@ app.post('/api/forum/posts/:id/replies', (request, response) => {
   response.status(201).json({ item: post });
 });
 
-app.get('/api/tickets', ...requireGovUser, (request, response) => {
-  response.json({
-    items: listTickets({
-      agency: stringParam(request.query.agency),
-      status: stringParam(request.query.status),
-      crisisType: stringParam(request.query.crisisType),
-      query: stringParam(request.query.query),
-    }),
-  });
+app.get('/api/tickets', ...requireGovUser, async (request, response, next) => {
+  try {
+    response.json({
+      items: await listTickets({
+        agency: stringParam(request.query.agency),
+        status: stringParam(request.query.status),
+        crisisType: stringParam(request.query.crisisType),
+        query: stringParam(request.query.query),
+      }),
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.post('/api/citizen/reports', async (request, response, next) => {
@@ -141,41 +161,104 @@ app.post('/api/citizen/reports', async (request, response, next) => {
   }
 });
 
-app.get('/api/citizen/reports/:publicReportId', (request, response) => {
-  const ticket = listTickets({}).find((item) => item.id === request.params.publicReportId);
-  if (!ticket) {
-    response.status(404).json({ error: 'Report not found' });
-    return;
-  }
+app.post(
+  '/api/citizen/reports',
+  optionalAuthenticateJwt as express.RequestHandler,
+  upload.array('images', 5),
+  async (request: AuthenticatedRequest, response, next) => {
+    try {
+      const message = stringBody(request.body?.description) ?? stringBody(request.body?.message);
+      const crisisType = stringBody(request.body?.crisisType) ?? stringBody(request.body?.reportType) ?? 'general';
+      if (!message) {
+        response.status(400).json({ error: 'Report description is required' });
+        return;
+      }
 
-  response.json({
-    publicReportId: ticket.id,
-    status: ticket.status,
-    assignedAgency: ticket.assignedAgency,
-    latestPublicMessage:
-      [...ticket.comments].reverse().find((comment) => comment.visibility === 'public')?.body ??
-      'Your report is in the government ticket queue.',
-    updatedAt: ticket.comments.at(-1)?.createdAt ?? new Date().toISOString(),
-    item: ticket,
-  });
+      const files = Array.isArray(request.files) ? request.files : [];
+      const bodyImages = parseImageMetadata(request.body?.images);
+      const ticket = await createCitizenTicket({
+        reporterUserId: request.user?.id ?? null,
+        reporter: stringBody(request.body?.reporter),
+        title: stringBody(request.body?.title),
+        message,
+        location: stringBody(request.body?.locationText) ?? stringBody(request.body?.location),
+        latitude: numberBody(request.body?.latitude),
+        longitude: numberBody(request.body?.longitude),
+        crisisType,
+        reportType: stringBody(request.body?.reportType),
+        images: [
+          ...files.map((file) => ({
+            originalFilename: file.originalname,
+            mimeType: file.mimetype,
+            byteSize: file.size,
+            storageKey: `uploads/${Date.now()}-${file.originalname}`,
+          })),
+          ...bodyImages,
+        ],
+      });
+
+      if (!ticket) {
+        response.status(500).json({ error: 'Unable to create ticket' });
+        return;
+      }
+
+      response.status(201).json({
+        id: ticket.id,
+        publicReportId: ticket.id,
+        status: ticket.status,
+        assignedAgency: ticket.assignedAgency,
+        createdAt: new Date().toISOString(),
+        item: ticket,
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+app.get('/api/citizen/reports/:publicReportId', async (request, response, next) => {
+  try {
+    const ticket = await getTicketByPublicId(request.params.publicReportId);
+    if (!ticket) {
+      response.status(404).json({ error: 'Report not found' });
+      return;
+    }
+
+    response.json({
+      publicReportId: ticket.id,
+      status: ticket.status,
+      assignedAgency: ticket.assignedAgency,
+      latestPublicMessage:
+        [...ticket.comments].reverse().find((comment) => comment.visibility === 'public')?.body ??
+        'Your report is in the government ticket queue.',
+      updatedAt: ticket.comments.at(-1)?.createdAt ?? new Date().toISOString(),
+      item: ticket,
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.patch('/api/tickets/:id/status', ...requireGovUser, (request, response) => {
+app.patch('/api/tickets/:id/status', ...requireGovUser, async (request, response, next) => {
   const status = stringBody(request.body?.status);
   if (!isTicketStatus(status)) {
     response.status(400).json({ error: 'Valid ticket status is required' });
     return;
   }
 
-  const ticket = updateTicketStatus(request.params.id, status);
-  if (!ticket) {
-    response.status(404).json({ error: 'Ticket not found' });
-    return;
+  try {
+    const ticket = await updateTicketStatus(request.params.id, status);
+    if (!ticket) {
+      response.status(404).json({ error: 'Ticket not found' });
+      return;
+    }
+    response.json({ item: ticket });
+  } catch (error) {
+    next(error);
   }
-  response.json({ item: ticket });
 });
 
-app.post('/api/tickets/:id/comments', ...requireGovUser, (request, response) => {
+app.post('/api/tickets/:id/comments', ...requireGovUser, async (request: AuthenticatedRequest, response, next) => {
   const body = stringBody(request.body?.body);
   const visibility = request.body?.visibility === 'public' ? 'public' : 'internal';
   if (!body) {
@@ -183,19 +266,25 @@ app.post('/api/tickets/:id/comments', ...requireGovUser, (request, response) => 
     return;
   }
 
-  const ticket = addTicketComment(request.params.id, {
-    body,
-    visibility,
-    author: stringBody(request.body?.author),
-  });
-  if (!ticket) {
-    response.status(404).json({ error: 'Ticket not found' });
-    return;
+  try {
+    const ticket = await addTicketComment(request.params.id, {
+      body,
+      visibility,
+      author: stringBody(request.body?.author),
+      authorUserId: request.user?.id,
+      authorType: 'government_user',
+    });
+    if (!ticket) {
+      response.status(404).json({ error: 'Ticket not found' });
+      return;
+    }
+    response.status(201).json({ item: ticket });
+  } catch (error) {
+    next(error);
   }
-  response.status(201).json({ item: ticket });
 });
 
-app.post('/api/tickets/:id/ping-agencies', ...requireGovUser, (request, response) => {
+app.post('/api/tickets/:id/ping-agencies', ...requireGovUser, async (request: AuthenticatedRequest, response, next) => {
   const agencyCodes = Array.isArray(request.body?.agencyCodes)
     ? request.body.agencyCodes.filter((item: unknown) => typeof item === 'string' && item.trim())
     : [];
@@ -204,17 +293,21 @@ app.post('/api/tickets/:id/ping-agencies', ...requireGovUser, (request, response
     return;
   }
 
-  const result = pingTicketAgencies(request.params.id, agencyCodes);
-  if (!result) {
-    response.status(404).json({ error: 'Ticket not found' });
-    return;
+  try {
+    const result = await pingTicketAgencies(request.params.id, agencyCodes, request.user?.id);
+    if (!result?.ticket) {
+      response.status(404).json({ error: 'Ticket not found' });
+      return;
+    }
+    response.json({
+      item: result.ticket,
+      ticketId: result.ticket.id,
+      pingedAgencies: result.pingedAgencies,
+      createdAt: result.createdAt,
+    });
+  } catch (error) {
+    next(error);
   }
-  response.json({
-    item: result.ticket,
-    ticketId: result.ticket.id,
-    pingedAgencies: result.pingedAgencies,
-    createdAt: result.createdAt,
-  });
 });
 
 app.get(['/api/gov/crises', '/api/crises'], ...requireGovUser, async (request, response, next) => {
@@ -361,6 +454,38 @@ function stringParam(value: unknown) {
 
 function stringBody(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function numberBody(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function parseImageMetadata(value: unknown) {
+  if (!value) return [];
+
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => {
+        const record = item as Record<string, unknown>;
+        return {
+          originalFilename: stringBody(record.originalFilename) ?? stringBody(record.filename) ?? null,
+          mimeType: stringBody(record.mimeType) ?? null,
+          byteSize: typeof record.byteSize === 'number' ? record.byteSize : null,
+          storageKey: stringBody(record.storageKey) ?? null,
+          checksumSha256: stringBody(record.checksumSha256) ?? null,
+        };
+      });
+  } catch {
+    return [];
+  }
 }
 
 function isTicketStatus(value: unknown): value is TicketStatus {

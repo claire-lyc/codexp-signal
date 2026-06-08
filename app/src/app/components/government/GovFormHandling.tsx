@@ -45,7 +45,6 @@ type Ticket = {
   pingedAgencies: string[];
 };
 
-const storageKey = 'signal-tickets';
 const agencies = ['All Agencies', 'MOH', 'PUB', 'LTA', 'Enterprise SG', 'SPF', 'SCDF'];
 const pingableAgencies = ['MOH', 'PUB', 'LTA', 'Enterprise SG', 'SPF', 'SCDF', 'NEA', 'MSF'];
 const statusOptions: Array<'All' | TicketStatus> = ['All', 'open', 'in-progress', 'grouped', 'resolved'];
@@ -160,8 +159,8 @@ const statusColors: Record<TicketStatus, string> = {
 };
 
 export default function GovFormHandling() {
-  const [tickets, setTickets] = useState<Ticket[]>(() => loadLocalTickets());
-  const [selectedTicketId, setSelectedTicketId] = useState(tickets[0]?.id ?? '');
+  const [tickets, setTickets] = useState<Ticket[]>(seedTickets);
+  const [selectedTicketId, setSelectedTicketId] = useState(seedTickets[0]?.id ?? '');
   const [query, setQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'All' | TicketStatus>('All');
   const [filterCrisis, setFilterCrisis] = useState('All');
@@ -174,7 +173,7 @@ export default function GovFormHandling() {
   const [usingBackend, setUsingBackend] = useState(false);
 
   useEffect(() => {
-    fetch(apiUrl('/api/tickets'))
+    fetch(apiUrl('/api/tickets'), { headers: authHeaders() })
       .then((response) => {
         if (!response.ok) throw new Error('Ticket API unavailable');
         return response.json() as Promise<{ items: Ticket[] }>;
@@ -186,9 +185,8 @@ export default function GovFormHandling() {
       })
       .catch(() => {
         setUsingBackend(false);
-        const local = loadLocalTickets();
-        setTickets(local);
-        setSelectedTicketId((current) => current || local[0]?.id || '');
+        setTickets(seedTickets);
+        setSelectedTicketId((current) => current || seedTickets[0]?.id || '');
       });
   }, []);
 
@@ -556,30 +554,27 @@ function Property({ icon: Icon, label, value }: { icon: LucideIcon; label: strin
 async function requestJson<T>(path: string, method: 'POST' | 'PATCH', body: unknown): Promise<T> {
   const response = await fetch(apiUrl(path), {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
   return response.json() as Promise<T>;
 }
 
-function loadLocalTickets() {
-  try {
-    const stored = localStorage.getItem(storageKey);
-    if (!stored) return seedTickets;
-    const parsed = JSON.parse(stored) as Ticket[];
-    return Array.isArray(parsed) ? parsed : seedTickets;
-  } catch {
-    return seedTickets;
-  }
-}
-
 function updateLocalTickets(updater: (current: Ticket[]) => Ticket[], setTickets: Dispatch<SetStateAction<Ticket[]>>) {
   setTickets((current) => {
     const next = updater(current.length ? current : loadLocalTickets());
-    localStorage.setItem(storageKey, JSON.stringify(next));
     return next;
   });
+}
+
+function loadLocalTickets() {
+  return seedTickets;
+}
+
+function authHeaders() {
+  const token = localStorage.getItem('signal-access-token') ?? localStorage.getItem('accessToken');
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 function createComment(visibility: 'public' | 'internal', body: string): TicketComment {
