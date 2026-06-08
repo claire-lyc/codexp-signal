@@ -37,6 +37,7 @@ export async function detectTicketUrgency(crisisType: string, message: string): 
   if (openAiKey?.startsWith('sk-or-')) return detectWithOpenRouter(openAiKey, crisisType, message);
   if (openAiKey) return detectWithOpenAI(openAiKey, crisisType, message);
 
+  console.warn('[severity] No OPENROUTER_API_KEY or OPENAI_API_KEY configured; defaulting to medium.');
   return defaultUrgency();
 }
 
@@ -83,12 +84,18 @@ async function detectWithOpenAI(apiKey: string, crisisType: string, message: str
       }),
     });
 
-    if (!response.ok) return defaultUrgency();
+    if (!response.ok) {
+      console.warn(`[severity] OpenAI request failed (${response.status}): ${await response.text()}`);
+      return defaultUrgency();
+    }
 
     const data = (await response.json()) as OpenAIResponse;
-    const parsed = JSON.parse(responseText(data) ?? '{}') as SeverityResponse;
-    return toTicketUrgency(parsed.urgency);
-  } catch {
+    const parsed = parseSeverityResponse(responseText(data));
+    const urgency = toTicketUrgency(parsed.urgency);
+    console.info(`[severity] OpenAI detected ${urgency} for ${crisisType}.`);
+    return urgency;
+  } catch (error) {
+    console.warn('[severity] OpenAI detection failed; defaulting to medium.', error);
     return defaultUrgency();
   }
 }
@@ -113,12 +120,18 @@ async function detectWithOpenRouter(apiKey: string, crisisType: string, message:
       }),
     });
 
-    if (!response.ok) return defaultUrgency();
+    if (!response.ok) {
+      console.warn(`[severity] OpenRouter request failed (${response.status}): ${await response.text()}`);
+      return defaultUrgency();
+    }
 
     const data = (await response.json()) as OpenRouterResponse;
-    const parsed = JSON.parse(data.choices?.[0]?.message?.content ?? '{}') as SeverityResponse;
-    return toTicketUrgency(parsed.urgency);
-  } catch {
+    const parsed = parseSeverityResponse(data.choices?.[0]?.message?.content);
+    const urgency = toTicketUrgency(parsed.urgency);
+    console.info(`[severity] OpenRouter detected ${urgency} for ${crisisType}.`);
+    return urgency;
+  } catch (error) {
+    console.warn('[severity] OpenRouter detection failed; defaulting to medium.', error);
     return defaultUrgency();
   }
 }
@@ -133,4 +146,14 @@ function defaultUrgency(): TicketUrgency {
 
 function responseText(response: OpenAIResponse) {
   return response.output_text ?? response.output?.flatMap((item) => item.content ?? []).find((content) => content.text)?.text;
+}
+
+function parseSeverityResponse(text: string | undefined): SeverityResponse {
+  if (!text) return {};
+  try {
+    return JSON.parse(text) as SeverityResponse;
+  } catch {
+    const match = text.match(/\{[\s\S]*\}/);
+    return match ? (JSON.parse(match[0]) as SeverityResponse) : {};
+  }
 }
