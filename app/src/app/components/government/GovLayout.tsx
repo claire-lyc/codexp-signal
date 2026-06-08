@@ -20,7 +20,7 @@ import {
 
 const navItems = [
   { path: '/gov', label: 'Overview', icon: LayoutDashboard },
-  { path: '/gov/pandemic', label: 'Health / Diseases', icon: Activity },
+  { path: '/gov/pandemic', label: 'Health & Diseases', icon: Activity },
   { path: '/gov/weather', label: 'Weather & Climate', icon: Cloud },
   { path: '/gov/supply-chain', label: 'Supply Chain', icon: Package },
   { path: '/gov/infrastructure', label: 'Infrastructure', icon: Zap },
