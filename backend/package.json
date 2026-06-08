@@ -15,6 +15,7 @@
     "db:schema:node": "tsx src/applySchemas.ts",
     "db:seed": "docker compose exec -T postgres psql -U signal_app -d signal -v ON_ERROR_STOP=1 -f /workspace/database/seeds/001_dashboard_seed.sql && docker compose exec -T postgres psql -U signal_app -d signal -v ON_ERROR_STOP=1 -f /workspace/database/seeds/002_dashboard_payload_seed.sql",
     "db:seed:auth": "tsx src/seedAuthUser.ts",
+    "db:seed:profiles": "tsx src/seedGovProfiles.ts",
     "db:seed:json": "tsx src/seedDashboardFromJson.ts",
     "db:seed:tickets": "tsx src/seedTicketsFromJson.ts",
     "db:init": "npm run db:up && npm run db:wait && npm run db:schema && npm run db:seed:json",

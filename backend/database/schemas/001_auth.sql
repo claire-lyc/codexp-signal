@@ -3,6 +3,8 @@ CREATE TABLE IF NOT EXISTS auth.users (
   actor_type public.actor_type NOT NULL,
   display_name TEXT,
   email TEXT,
+  username TEXT,
+  tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   phone TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -11,6 +13,18 @@ CREATE TABLE IF NOT EXISTS auth.users (
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique
   ON auth.users (lower(email))
   WHERE email IS NOT NULL;
+
+ALTER TABLE auth.users
+  ADD COLUMN IF NOT EXISTS username TEXT,
+  ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+
+CREATE UNIQUE INDEX IF NOT EXISTS users_username_unique
+  ON auth.users (lower(username))
+  WHERE username IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS users_username_raw_unique
+  ON auth.users (username)
+  WHERE username IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS auth.singpass_identities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

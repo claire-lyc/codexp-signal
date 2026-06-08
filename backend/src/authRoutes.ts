@@ -17,6 +17,7 @@ import {
 
 const emailSchema = z.string().trim().email().max(320).transform((value) => value.toLowerCase());
 const passwordSchema = z.string().min(8).max(128);
+const loginPasswordSchema = z.string().min(1).max(128);
 
 const registerSchema = z.object({
   email: emailSchema,
@@ -27,8 +28,8 @@ const registerSchema = z.object({
 });
 
 const loginSchema = z.object({
-  email: emailSchema,
-  password: passwordSchema,
+  email: z.string().trim().min(1).max(320),
+  password: loginPasswordSchema,
 });
 
 const refreshSchema = z.object({
@@ -160,6 +161,8 @@ function sanitizeUser(user: NonNullable<AuthenticatedRequest['user']>) {
     displayName: user.display_name,
     email: user.email,
     role: user.role,
+    username: user.username,
+    tags: user.tags,
     agencyId: user.agency_id,
     clearanceLevel: user.clearance_level,
   };

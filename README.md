@@ -158,6 +158,14 @@ $env:DEMO_ADMIN_PASSWORD="replace-with-temp-admin-password"
 npm run db:seed:auth
 ```
 
+Create the demo government profile users:
+
+```bash
+npm run db:seed:profiles
+```
+
+This creates `MOH`, `PUB`, `LTA`, `SCDF`, `SPF`, `NEA`, `Enterprise SG`, `Form Handler`, and `Admin`. For demo use, each username has the same password as the username.
+
 Reset citizen/form-handling tickets to the committed demo set:
 
 ```bash

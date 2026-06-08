@@ -15,6 +15,7 @@ import {
   Search,
   AlertTriangle,
   Ticket,
+  UserCircle,
 } from 'lucide-react';
 
 const navItems = [
@@ -77,10 +78,18 @@ export default function GovLayout() {
         </nav>
 
         <div className="p-4 border-t border-zinc-800">
-          <div className="text-xs text-zinc-600">
-            <div className="mb-1">Authorized User</div>
-            <div className="text-zinc-400">GOV-ADMIN-001</div>
-          </div>
+          <Link
+            to="/gov-profile"
+            className="flex items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-zinc-800"
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-800 text-zinc-300">
+              <UserCircle className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 text-xs">
+              <div className="mb-0.5 text-zinc-600">Authorized User</div>
+              <div className="truncate text-zinc-400">Profile / Sign out</div>
+            </div>
+          </Link>
         </div>
       </aside>
 

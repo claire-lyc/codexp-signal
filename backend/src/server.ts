@@ -3,7 +3,7 @@ import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
 import multer from 'multer';
-import { authenticateJwt, optionalAuthenticateJwt, requireActor, type AuthenticatedRequest } from './authMiddleware.js';
+import { authenticateJwt, requireActor, type AuthenticatedRequest } from './authMiddleware.js';
 import { createAuthRouter } from './authRoutes.js';
 import {
   createForumPost,
@@ -16,8 +16,10 @@ import {
   addTicketComment,
   createCitizenTicket,
   getTicketByPublicId,
+  listTicketsForReporter,
   listTickets,
   pingTicketAgencies,
+  TicketChatClosedError,
   updateTicketStatus,
   type TicketStatus,
 } from './ticketRepository.js';
@@ -128,9 +130,21 @@ app.get('/api/tickets', ...requireGovUser, async (request, response, next) => {
   }
 });
 
+app.get('/api/citizen/reports', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
+  try {
+    if (!request.user?.id) {
+      response.status(401).json({ error: 'Bearer token is required' });
+      return;
+    }
+    response.json({ items: await listTicketsForReporter(request.user.id) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post(
   '/api/citizen/reports',
-  optionalAuthenticateJwt as express.RequestHandler,
+  authenticateJwt as express.RequestHandler,
   upload.array('images', 5),
   async (request: AuthenticatedRequest, response, next) => {
     try {
@@ -159,6 +173,7 @@ app.post(
             mimeType: file.mimetype,
             byteSize: file.size,
             storageKey: `uploads/${Date.now()}-${file.originalname}`,
+            previewUrl: `data:${file.mimetype};base64,${file.buffer.toString('base64')}`,
           })),
           ...bodyImages,
         ],
@@ -183,7 +198,7 @@ app.post(
   },
 );
 
-app.get('/api/citizen/reports/:publicReportId', async (request, response, next) => {
+app.get('/api/citizen/reports/:publicReportId', authenticateJwt as express.RequestHandler, async (request, response, next) => {
   try {
     const ticket = await getTicketByPublicId(request.params.publicReportId);
     if (!ticket) {
@@ -206,6 +221,35 @@ app.get('/api/citizen/reports/:publicReportId', async (request, response, next) 
   }
 });
 
+app.post('/api/citizen/reports/:publicReportId/comments', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
+  const body = stringBody(request.body?.body);
+  if (!body) {
+    response.status(400).json({ error: 'Comment body is required' });
+    return;
+  }
+
+  try {
+    const ticket = await addTicketComment(request.params.publicReportId, {
+      body,
+      visibility: 'public',
+      author: request.user?.display_name ?? request.user?.username ?? 'Citizen',
+      authorUserId: request.user?.id,
+      authorType: request.user?.actor_type === 'government_user' ? 'government_user' : 'citizen',
+    });
+    if (!ticket) {
+      response.status(404).json({ error: 'Report not found' });
+      return;
+    }
+    response.status(201).json({ item: ticket });
+  } catch (error) {
+    if (error instanceof TicketChatClosedError) {
+      response.status(409).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
 app.patch('/api/tickets/:id/status', ...requireGovUser, async (request, response, next) => {
   const status = stringBody(request.body?.status);
   if (!isTicketStatus(status)) {
@@ -221,6 +265,10 @@ app.patch('/api/tickets/:id/status', ...requireGovUser, async (request, response
     }
     response.json({ item: ticket });
   } catch (error) {
+    if (error instanceof TicketChatClosedError) {
+      response.status(409).json({ error: error.message });
+      return;
+    }
     next(error);
   }
 });
@@ -448,6 +496,7 @@ function parseImageMetadata(value: unknown) {
           byteSize: typeof record.byteSize === 'number' ? record.byteSize : null,
           storageKey: stringBody(record.storageKey) ?? null,
           checksumSha256: stringBody(record.checksumSha256) ?? null,
+          previewUrl: stringBody(record.previewUrl) ?? null,
         };
       });
   } catch {

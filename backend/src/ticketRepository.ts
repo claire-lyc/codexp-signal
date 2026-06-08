@@ -17,6 +17,7 @@ export type TicketImage = {
   mimeType: string | null;
   byteSize: number | null;
   storageKey: string | null;
+  previewUrl: string | null;
   status: string;
   createdAt: string;
 };
@@ -80,6 +81,7 @@ type ImageRow = {
   mime_type: string | null;
   byte_size: number | null;
   storage_key: string | null;
+  processed_metadata: Record<string, unknown>;
   processing_status: string;
   created_at: string;
 };
@@ -195,6 +197,41 @@ export async function getTicketByPublicId(publicReportId: string) {
   return ticket ?? null;
 }
 
+export async function listTicketsForReporter(userId: string) {
+  const reports = await query<ReportRow>(
+    `
+      SELECT
+        reports.id,
+        reports.public_report_id,
+        reports.reporter_user_id,
+        reports.reporter_label,
+        users.display_name AS reporter_display_name,
+        reports.crisis_type,
+        reports.report_type,
+        reports.title,
+        reports.description,
+        reports.location_text,
+        reports.latitude,
+        reports.longitude,
+        reports.severity,
+        reports.status,
+        agency.code AS assigned_agency_code,
+        grouped.public_report_id AS grouped_public_report_id,
+        reports.chat_enabled,
+        reports.created_at
+      FROM citizen.reports reports
+      LEFT JOIN auth.users users ON users.id = reports.reporter_user_id
+      LEFT JOIN auth.government_agencies agency ON agency.id = reports.assigned_agency_id
+      LEFT JOIN citizen.reports grouped ON grouped.id = reports.grouped_report_id
+      WHERE reports.reporter_user_id = $1
+      ORDER BY reports.created_at DESC
+    `,
+    [userId],
+  );
+
+  return hydrateTickets(reports);
+}
+
 export async function createCitizenTicket(input: {
   reporterUserId?: string | null;
   reporter?: string;
@@ -211,6 +248,7 @@ export async function createCitizenTicket(input: {
     byteSize?: number | null;
     storageKey?: string | null;
     checksumSha256?: string | null;
+    previewUrl?: string | null;
   }>;
 }) {
   const client = await pool.connect();
@@ -279,9 +317,10 @@ export async function createCitizenTicket(input: {
             storage_bucket,
             storage_key,
             checksum_sha256,
+            processed_metadata,
             processing_status
           )
-          VALUES ($1, $2, $3, $4, 'local-dev', $5, $6, 'uploaded')
+          VALUES ($1, $2, $3, $4, 'local-dev', $5, $6, $7, 'uploaded')
         `,
         [
           reportId,
@@ -290,6 +329,7 @@ export async function createCitizenTicket(input: {
           image.byteSize ?? 0,
           image.storageKey ?? `${publicReportId}/${image.originalFilename ?? 'upload'}`,
           image.checksumSha256 ?? null,
+          JSON.stringify({ previewUrl: image.previewUrl ?? null }),
         ],
       );
     }
@@ -308,7 +348,11 @@ export async function updateTicketStatus(id: string, status: TicketStatus) {
   await query(
     `
       UPDATE citizen.reports
-      SET status = $2, updated_at = now(), chat_closed_at = CASE WHEN $2 = 'resolved' THEN now() ELSE chat_closed_at END
+      SET
+        status = $2,
+        updated_at = now(),
+        chat_enabled = CASE WHEN $2 = 'resolved' THEN false ELSE true END,
+        chat_closed_at = CASE WHEN $2 = 'resolved' THEN now() ELSE NULL END
       WHERE public_report_id = $1
     `,
     [id, toDbStatus(status) ?? 'submitted'],
@@ -334,6 +378,9 @@ export async function addTicketComment(
 ) {
   const ticket = await getReportInternalId(id);
   if (!ticket) return null;
+  if (ticket.status === 'resolved' || !ticket.chat_enabled) {
+    throw new TicketChatClosedError(id);
+  }
 
   await query(
     `
@@ -349,6 +396,13 @@ export async function addTicketComment(
     ],
   );
   return getTicketByPublicId(id);
+}
+
+export class TicketChatClosedError extends Error {
+  constructor(publicReportId: string) {
+    super(`Ticket ${publicReportId} is resolved and no longer accepts chat messages.`);
+    this.name = 'TicketChatClosedError';
+  }
 }
 
 export async function pingTicketAgencies(id: string, agencyCodes: string[], pingedByUserId?: string | null) {
@@ -414,7 +468,7 @@ async function hydrateTickets(reports: ReportRow[]) {
     ),
     query<ImageRow>(
       `
-        SELECT id, report_id, original_filename, mime_type, byte_size, storage_key, processing_status, created_at
+        SELECT id, report_id, original_filename, mime_type, byte_size, storage_key, processed_metadata, processing_status, created_at
         FROM citizen.report_images
         WHERE report_id = ANY($1::uuid[])
         ORDER BY created_at ASC
@@ -476,6 +530,7 @@ async function hydrateTickets(reports: ReportRow[]) {
         mimeType: image.mime_type,
         byteSize: image.byte_size,
         storageKey: image.storage_key,
+        previewUrl: typeof image.processed_metadata?.previewUrl === 'string' ? image.processed_metadata.previewUrl : null,
         status: image.processing_status,
         createdAt: image.created_at,
       })),
@@ -485,8 +540,8 @@ async function hydrateTickets(reports: ReportRow[]) {
 }
 
 async function getReportInternalId(publicReportId: string) {
-  const rows = await query<{ id: string }>(
-    `SELECT id FROM citizen.reports WHERE public_report_id = $1 LIMIT 1`,
+  const rows = await query<{ id: string; status: ReportStatus; chat_enabled: boolean }>(
+    `SELECT id, status, chat_enabled FROM citizen.reports WHERE public_report_id = $1 LIMIT 1`,
     [publicReportId],
   );
   return rows[0] ?? null;
