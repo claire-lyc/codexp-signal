@@ -355,6 +355,15 @@ export default function GovFormHandling() {
 
   const selectedTicket = filtered.find((ticket) => ticket.id === selectedTicketId) ?? filtered[0] ?? null;
   const selectedTicketResolved = selectedTicket ? isResolved(selectedTicket) : false;
+  const groupedTickets = useMemo(() => {
+    if (!selectedTicket) return [];
+    const subjectTagId = selectedTicket.subjectTag?.id ?? null;
+    if (subjectTagId) {
+      return tickets.filter((ticket) => ticket.id !== selectedTicket.id && ticket.subjectTag?.id === subjectTagId);
+    }
+    const relatedIds = new Set(selectedTicket.relatedTickets);
+    return tickets.filter((ticket) => relatedIds.has(ticket.id));
+  }, [selectedTicket, tickets]);
   const visibleStatusOptions: Array<'All' | TicketStatus> =
     queueView === 'archive' ? ['All', 'resolved'] : statusOptions.filter((status) => status !== 'resolved');
 
@@ -762,10 +771,21 @@ export default function GovFormHandling() {
                     <div className="flex items-center gap-1.5 text-sm text-blue-400"><Image className="w-3.5 h-3.5" />{selectedTicket.images?.length || 1} photo attached</div>
                   </div>
                 )}
-                {selectedTicket.relatedTickets.length > 0 && (
+                {groupedTickets.length > 0 && (
                   <div>
                     <div className="text-xs text-zinc-500 mb-1">Grouped Reports</div>
-                    {selectedTicket.relatedTickets.map((id) => <div key={id} className="text-xs text-purple-400 font-mono">{id}</div>)}
+                    <div className="space-y-1">
+                      {groupedTickets.map((ticket) => (
+                        <button
+                          key={ticket.id}
+                          type="button"
+                          onClick={() => selectTicket(ticket.id)}
+                          className="block text-left text-xs font-mono text-purple-400 hover:text-purple-300"
+                        >
+                          {ticket.id}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
                 {selectedTicket.pingedAgencies.length > 0 && (
@@ -785,7 +805,7 @@ export default function GovFormHandling() {
                 </div>
               </div>
 
-              <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="min-h-0 flex-1 flex flex-col overflow-hidden">
                 {selectedTicket.status === 'open' && !selectedTicket.startedWorkAt && !selectedTicketResolved && (
                   <div className="border-b border-blue-900/60 bg-blue-950/30 px-5 py-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -837,7 +857,7 @@ export default function GovFormHandling() {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                <div className="min-h-0 flex-1 overflow-y-auto p-5 space-y-4">
                   {selectedTicket.comments.length === 0 && <div className="text-sm text-zinc-600">No comments yet.</div>}
                   {groupComments(selectedTicket.comments).map((group) => (
                     <div key={group.id} className="flex items-start gap-3">

@@ -730,6 +730,10 @@ app.post('/api/broadcasts', ...requireGovUser, async (request: AuthenticatedRequ
       targetRegions: Array.isArray(request.body?.targetRegions) ? request.body.targetRegions.filter((item: unknown) => typeof item === 'string') : [],
       platforms: Array.isArray(request.body?.platforms) ? request.body.platforms.filter((item: unknown) => typeof item === 'string') : ['web'],
     });
+    if (!item) {
+      response.status(500).json({ error: 'Unable to create broadcast' });
+      return;
+    }
     await enqueueBroadcastNotifications(item);
     response.status(201).json({ item });
   } catch (error) {
@@ -828,13 +832,25 @@ app.post('/api/citizen/broadcasts/:id/action', authenticateJwt as express.Reques
 
 app.get('/api/gov/overview', ...requireGovUser, async (_request, response, next) => {
   try {
-    const [crises, alerts, overview] = await Promise.all([
+    const [crises, alerts, broadcasts, overview] = await Promise.all([
       listCrises({ status: 'active' }),
       listAlerts({ status: 'active' }),
+      listBroadcasts(),
       getLatestSnapshot('dashboard_overview'),
     ]);
 
-    response.json({ crises, alerts, overview });
+    const liveBroadcastAlerts = broadcasts.map((broadcast) => ({
+      id: `broadcast-${broadcast.id}`,
+      type: 'Broadcast',
+      severity: broadcast.severity,
+      message: `${broadcast.title}: ${broadcast.message}`,
+      region: broadcast.senderAgencyCode
+        ? `${broadcast.targetRegions.length ? broadcast.targetRegions.join('/') : 'Nationwide'} • ${broadcast.senderAgencyCode}`
+        : (broadcast.targetRegions.length ? broadcast.targetRegions.join('/') : 'Nationwide'),
+      time: broadcast.time,
+    }));
+
+    response.json({ crises, alerts: [...liveBroadcastAlerts, ...alerts], overview });
   } catch (error) {
     next(error);
   }

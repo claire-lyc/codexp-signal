@@ -31,11 +31,13 @@ type OverviewData = {
 };
 
 const severityBadge: Record<string, string> = {
+  critical: 'bg-red-600/20 text-red-200 border-red-500/60',
   high: 'bg-red-500/15 text-red-300 border-red-500/40',
   medium: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
   low: 'bg-blue-500/15 text-blue-300 border-blue-500/40',
 };
 const severitySpark: Record<string, string> = {
+  critical: '#ef4444',
   high: '#fb7185',
   medium: '#fbbf24',
   low: '#38bdf8',
@@ -57,8 +59,8 @@ const fallbackAlerts: AlertItem[] = [
 ];
 const trendData: Array<{ date: string; incidents: number }> = [];
 
-const filterTypes = ['All', 'Health', 'Weather', 'Supply', 'Infrastructure', 'Cybersecurity'];
-const filterSeverities = ['All', 'High', 'Medium', 'Low'];
+const filterTypes = ['All', 'Broadcast', 'Health', 'Weather', 'Supply', 'Infrastructure', 'Cybersecurity'];
+const filterSeverities = ['All', 'Critical', 'High', 'Medium', 'Low'];
 const filterRegions = ['All', 'North', 'South', 'East', 'West', 'Central', 'Nationwide'];
 
 export default function GovOverview() {
@@ -331,7 +333,7 @@ export default function GovOverview() {
                 type="button"
                 onClick={() => focusAlertOnMap(alert)}
                 className={`p-3 rounded-lg border ${
-                  alert.severity === 'high'
+                  alert.severity === 'critical' || alert.severity === 'high'
                     ? 'bg-red-950/30 border-red-800'
                     : alert.severity === 'medium'
                     ? 'bg-yellow-950/30 border-yellow-800'
@@ -341,7 +343,7 @@ export default function GovOverview() {
                 <div className="flex items-start gap-2">
                   <AlertCircle
                     className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
-                      alert.severity === 'high' ? 'text-red-500' : alert.severity === 'medium' ? 'text-yellow-500' : 'text-blue-500'
+                      alert.severity === 'critical' || alert.severity === 'high' ? 'text-red-500' : alert.severity === 'medium' ? 'text-yellow-500' : 'text-blue-500'
                     }`}
                   />
                   <div className="flex-1 min-w-0">

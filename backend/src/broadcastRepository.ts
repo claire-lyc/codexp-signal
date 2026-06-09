@@ -41,6 +41,9 @@ export type BroadcastItem = {
   resolvedAt: string | null;
   updates: { id: string; body: string; time: string; createdAt: string }[];
   notificationAction?: 'notify' | 'ignore' | null;
+  senderName?: string | null;
+  senderRole?: string | null;
+  senderAgencyCode?: string | null;
 };
 
 export async function listBroadcasts(options: { includeResolved?: boolean; userId?: string | null } = {}) {
@@ -201,15 +204,20 @@ export async function setBroadcastAction(userId: string, broadcastId: string, ac
 
 async function hydrateBroadcasts(rows: BroadcastRow[]) {
   if (!rows.length) return [];
-  const updateRows = await query<BroadcastUpdateRow>(
-    `
-      SELECT id, broadcast_id, body, created_at
-      FROM citizen.broadcast_updates
-      WHERE broadcast_id = ANY($1::uuid[])
-      ORDER BY created_at ASC
-    `,
-    [rows.map((row) => row.id)],
-  );
+  let updateRows: BroadcastUpdateRow[] = [];
+  try {
+    updateRows = await query<BroadcastUpdateRow>(
+      `
+        SELECT id, broadcast_id, body, created_at
+        FROM citizen.broadcast_updates
+        WHERE broadcast_id = ANY($1::uuid[])
+        ORDER BY created_at ASC
+      `,
+      [rows.map((row) => row.id)],
+    );
+  } catch (error) {
+    if (!isMissingRelationError(error)) throw error;
+  }
   const updatesByBroadcast = new Map<string, ReturnType<typeof toBroadcastUpdate>[]>();
   for (const row of updateRows) {
     const updates = updatesByBroadcast.get(row.broadcast_id) ?? [];
@@ -259,6 +267,15 @@ function toBroadcastItem(row: BroadcastRow, updates: BroadcastItem['updates']): 
     updates,
     notificationAction: row.dismissed_action,
   };
+}
+
+function isMissingRelationError(error: unknown) {
+  return Boolean(
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    (error as { code?: string }).code === '42P01',
+  );
 }
 
 function toBroadcastUpdate(row: BroadcastUpdateRow) {
