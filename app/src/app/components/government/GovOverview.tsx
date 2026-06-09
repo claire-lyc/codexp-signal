@@ -1,7 +1,7 @@
 // GET /api/crises?status=active
 // GET /api/alerts?status=active&type=&region=
 // GET /api/heatmap?crisisId=&layer=
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { AlertCircle, MapPin, Activity, Cloud, Package, Shield, ChevronRight, Filter, Pin } from 'lucide-react';
 import { Link } from 'react-router';
@@ -18,9 +18,10 @@ type CrisisCard = {
   stats: Array<{ label: string; value: string; delta?: string }>;
   icon: string;
 };
+type AlertItem = { id: number | string; type: string; severity: string; message: string; region: string; time?: string };
 type OverviewData = {
   crises: unknown[];
-  alerts: typeof alerts;
+  alerts: AlertItem[];
   overview: {
     crisisCards: CrisisCard[];
     incidentTrend: Array<{ date: string; incidents: number }>;
@@ -40,66 +41,19 @@ const severitySpark: Record<string, string> = {
 };
 
 const fallbackCrisisCards: CrisisCard[] = [
-  {
-    id: 'covid',
-    label: 'Covid-19',
-    type: 'Health',
-    severity: 'medium',
-    path: '/gov/pandemic',
-    stats: [
-      { label: 'Active cases today', value: '378', delta: '+12%' },
-      { label: 'ICU occupancy', value: '25', delta: '+5' },
-    ],
-    icon: 'Activity',
-  },
-  {
-    id: 'dengue',
-    label: 'Dengue',
-    type: 'Health',
-    severity: 'high',
-    path: '/gov/pandemic',
-    stats: [
-      { label: 'Red zone clusters', value: '14', delta: '+3' },
-      { label: 'Cases this week', value: '212', delta: '+8%' },
-    ],
-    icon: 'Activity',
-  },
-  {
-    id: 'flood',
-    label: 'Flash Flood Risk',
-    type: 'Weather',
-    severity: 'high',
-    path: '/gov/weather',
-    stats: [
-      { label: 'High-risk zones', value: '6', delta: '' },
-      { label: 'Peak rainfall (1h)', value: '45mm', delta: 'Alert' },
-    ],
-    icon: 'Cloud',
-  },
-  {
-    id: 'panadol',
-    label: 'Panadol Shortage',
-    type: 'Supply Chain',
-    severity: 'medium',
-    path: '/gov/supply-chain',
-    stats: [
-      { label: 'Affected outlets', value: '87', delta: '' },
-      { label: 'Est. restock', value: '4 days', delta: '' },
-    ],
-    icon: 'Package',
-  },
-  {
-    id: 'cyber',
-    label: 'Cyber Incident',
-    type: 'Cybersecurity',
-    severity: 'low',
-    path: '/gov/cybersecurity',
-    stats: [{ label: 'Active threats', value: '3', delta: '-1' }],
-    icon: 'Shield',
-  },
+  { id: 'covid', label: 'Covid-19', type: 'Health', severity: 'medium', path: '/gov/pandemic', stats: [{ label: 'Active cases today', value: '378', delta: '+12%' }, { label: 'ICU occupancy', value: '25', delta: '+5' }], icon: 'Activity' },
+  { id: 'dengue', label: 'Dengue', type: 'Health', severity: 'high', path: '/gov/pandemic', stats: [{ label: 'Red zone clusters', value: '14', delta: '+3' }, { label: 'Cases this week', value: '212', delta: '+8%' }], icon: 'Activity' },
+  { id: 'flood', label: 'Flash Flood Risk', type: 'Weather', severity: 'high', path: '/gov/weather', stats: [{ label: 'High-risk zones', value: '6', delta: '' }, { label: 'Peak rainfall (1h)', value: '45mm', delta: 'Alert' }], icon: 'Cloud' },
+  { id: 'panadol', label: 'Panadol Shortage', type: 'Supply Chain', severity: 'medium', path: '/gov/supply-chain', stats: [{ label: 'Affected outlets', value: '87', delta: '' }, { label: 'Est. restock', value: '4 days', delta: '' }], icon: 'Package' },
+  { id: 'cyber', label: 'Cyber Incident', type: 'Cybersecurity', severity: 'low', path: '/gov/cybersecurity', stats: [{ label: 'Active threats', value: '3', delta: '-1' }], icon: 'Shield' },
 ];
-
-const alerts: Array<{ id: number | string; type: string; severity: string; message: string; region: string; time?: string }> = [];
+const fallbackAlerts: AlertItem[] = [
+  { id: 1, type: 'Weather', severity: 'high', message: 'Flash flood risk in Orchard & East Coast', region: 'East/Central', time: '10:23 AM' },
+  { id: 2, type: 'Health', severity: 'high', message: 'New dengue red zone: Bedok North Ave 1', region: 'East', time: '09:45 AM' },
+  { id: 3, type: 'Supply', severity: 'medium', message: 'Panadol Menstrual out-of-stock at 87 outlets', region: 'Nationwide', time: '08:30 AM' },
+  { id: 4, type: 'Infrastructure', severity: 'medium', message: 'Power grid fluctuation in Woodlands', region: 'North', time: '07:15 AM' },
+  { id: 5, type: 'Health', severity: 'medium', message: 'New Covid-19 cluster at Jurong West MRT', region: 'West', time: '06:50 AM' },
+];
 const trendData: Array<{ date: string; incidents: number }> = [];
 
 const filterTypes = ['All', 'Health', 'Weather', 'Supply', 'Infrastructure', 'Cybersecurity'];
@@ -119,13 +73,27 @@ export default function GovOverview() {
   const [filterType, setFilterType] = useState('All');
   const [filterSeverity, setFilterSeverity] = useState('All');
   const [filterRegion, setFilterRegion] = useState('All');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedAlertId, setSelectedAlertId] = useState<string | number | null>(null);
   const mapSectionRef = useRef<HTMLDivElement | null>(null);
+  const filtersRef = useRef<HTMLDivElement | null>(null);
   const apiCrisisCards = data?.overview?.crisisCards ?? [];
   const crisisCards: CrisisCard[] = apiCrisisCards.length > 0 ? apiCrisisCards : fallbackCrisisCards;
-  const alerts = data?.alerts ?? [];
+  const apiAlerts = data?.alerts ?? [];
+  const alerts = apiAlerts.length > 0 ? apiAlerts : fallbackAlerts;
   const trendData = data?.overview?.incidentTrend ?? [];
   const riskSummary = data?.overview?.riskSummary;
+
+  useEffect(() => {
+    const closeFilters = (event: MouseEvent) => {
+      if (filtersRef.current && !filtersRef.current.contains(event.target as Node)) {
+        setFiltersOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', closeFilters);
+    return () => document.removeEventListener('mousedown', closeFilters);
+  }, []);
 
   const filteredAlerts = alerts.filter((a) => {
     const typeMatch = filterType === 'All' || a.type === filterType;
@@ -173,11 +141,6 @@ export default function GovOverview() {
           <span className="text-xs text-zinc-600">Scroll to see all →</span>
         </div>
         <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
-          {crisisCards.length === 0 && (
-            <div className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
-              No active crisis situations available.
-            </div>
-          )}
           {crisisCards.map((card) => {
             const Icon = iconMap[card.icon as keyof typeof iconMap] ?? AlertCircle;
             const stats = Array.isArray(card.stats) ? card.stats : [];
@@ -270,44 +233,67 @@ export default function GovOverview() {
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 flex flex-col">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Active Alerts</h2>
-            <Filter className="w-4 h-4 text-zinc-500" />
+            <div ref={filtersRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setFiltersOpen((open) => !open)}
+                className={`rounded-lg p-2 transition-colors ${
+                  filtersOpen || filterType !== 'All' || filterSeverity !== 'All' || filterRegion !== 'All'
+                    ? 'bg-zinc-800 text-zinc-100'
+                    : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'
+                }`}
+                aria-label="Filter active alerts"
+              >
+                <Filter className="w-4 h-4" />
+              </button>
+              {filtersOpen && (
+                <div className="absolute right-0 top-full z-40 mt-2 w-72 rounded-xl border border-zinc-800 bg-zinc-950 p-3 shadow-2xl">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">Filters</div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFilterType('All');
+                        setFilterSeverity('All');
+                        setFilterRegion('All');
+                      }}
+                      className="text-xs text-zinc-500 transition-colors hover:text-zinc-200"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                  <FilterGroup label="Type">
+                    {filterTypes.map((t) => (
+                      <FilterChip key={t} active={filterType === t} onClick={() => setFilterType(t)}>
+                        {t}
+                      </FilterChip>
+                    ))}
+                  </FilterGroup>
+                  <FilterGroup label="Severity">
+                    {filterSeverities.map((s) => (
+                      <FilterChip key={s} active={filterSeverity === s} onClick={() => setFilterSeverity(s)}>
+                        {s}
+                      </FilterChip>
+                    ))}
+                  </FilterGroup>
+                  <FilterGroup label="Region">
+                    {filterRegions.map((r) => (
+                      <FilterChip key={r} active={filterRegion === r} onClick={() => setFilterRegion(r)}>
+                        {r}
+                      </FilterChip>
+                    ))}
+                  </FilterGroup>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Filters */}
-          <div className="space-y-2 mb-4">
-            <div className="flex gap-1 flex-wrap">
-              {filterTypes.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setFilterType(t)}
-                  className={`px-2 py-0.5 rounded text-xs transition-colors ${filterType === t ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-1 flex-wrap">
-              {filterSeverities.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setFilterSeverity(s)}
-                  className={`px-2 py-0.5 rounded text-xs transition-colors ${filterSeverity === s ? 'bg-zinc-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-1 flex-wrap">
-              {filterRegions.map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setFilterRegion(r)}
-                  className={`px-2 py-0.5 rounded text-xs transition-colors ${filterRegion === r ? 'bg-zinc-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
+          <div className="mb-4 flex min-h-5 flex-wrap items-center gap-1.5 text-xs text-zinc-500">
+            {[filterType, filterSeverity, filterRegion].filter((value) => value !== 'All').map((value) => (
+              <span key={value} className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-zinc-300">
+                {value}
+              </span>
+            ))}
           </div>
 
           <div className="space-y-2 flex-1 overflow-y-auto">
@@ -374,6 +360,29 @@ export default function GovOverview() {
   );
 }
 
+function FilterGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="mb-3 last:mb-0">
+      <div className="mb-1.5 text-xs font-medium text-zinc-500">{label}</div>
+      <div className="flex flex-wrap gap-1">{children}</div>
+    </div>
+  );
+}
+
+function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-md px-2 py-1 text-xs transition-colors ${
+        active ? 'bg-zinc-700 text-white' : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function MiniTrend({ color, seed }: { color: string; seed: string }) {
   const points = useMemo(() => buildSparkline(seed), [seed]);
   const gradientId = `trend-${seed.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
@@ -395,9 +404,11 @@ function MiniTrend({ color, seed }: { color: string; seed: string }) {
 function buildSparkline(seed: string) {
   const values = Array.from({ length: 28 }, (_, index) => {
     const code = seed.charCodeAt(index % seed.length) || 42;
-    const wave = Math.sin(index * 0.82 + code) * 9;
-    const jitter = ((code + index * 13) % 11) - 5;
-    return 28 + wave + jitter;
+    const progress = index / 27;
+    const slope = progress * 28;
+    const wave = Math.sin(index * 0.55 + code) * 3.2;
+    const jitter = (((code + index * 7) % 5) - 2) * 0.9;
+    return 18 + slope + wave + jitter;
   });
   const min = Math.min(...values);
   const max = Math.max(...values);
