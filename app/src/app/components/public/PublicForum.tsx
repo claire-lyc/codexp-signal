@@ -646,6 +646,11 @@ export default function PublicForum() {
                       >
                         <ThumbsDown className="h-4 w-4" />
                       </button>
+                      {!selectedPost.verified && (
+                        <button type="button" onClick={() => handleReport(selectedPost.id)} className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-red-400" aria-label="Report post">
+                          <Flag className="h-4 w-4" />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => setExpandedPostId(null)}
@@ -654,11 +659,6 @@ export default function PublicForum() {
                       >
                         <X className="h-4 w-4" />
                       </button>
-                      {!selectedPost.verified && (
-                        <button type="button" onClick={() => handleReport(selectedPost.id)} className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-red-400" aria-label="Report post">
-                          <Flag className="h-4 w-4" />
-                        </button>
-                      )}
                     </div>
                   </div>
                 </div>
