@@ -1,11 +1,10 @@
 // GET /api/citizen/alerts
 // GET /api/heatmap?layer=crises&public=true
-import { AlertTriangle, MapPin, Activity, Shield, TrendingUp, Navigation } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, MapPin, Activity, Shield, Navigation, CloudRain, Wind } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import SingaporeRegionMap, { type MapMarker } from '../SingaporeRegionMap';
-import { fetchWithAuth, useApi } from '../../lib/api';
-import { resolveAlertLocations } from '../../lib/singaporeLocations';
+import SingaporeRegionMap, { type MapHeatmapLayer, type MapMarker } from '../SingaporeRegionMap';
+import { apiUrl, useApi } from '../../lib/api';
 
 type PublicHomeData = {
   activeCrisisLabels: string[];
@@ -44,21 +43,121 @@ type BroadcastAlert = {
   target: string;
   status: 'ongoing' | 'resolved';
   time: string;
+  updates?: { id: string; body: string; time: string; createdAt: string }[];
 };
 
-const publicStats: PublicHomeData['stats'] = [];
-const statIconMap = { Activity, AlertTriangle, Shield, TrendingUp };
-const statColours: Record<string, { bg: string; text: string }> = {
-  red: { bg: 'bg-red-950', text: 'text-red-500' },
-  yellow: { bg: 'bg-yellow-950', text: 'text-yellow-500' },
-  green: { bg: 'bg-green-950', text: 'text-green-500' },
-  blue: { bg: 'bg-blue-950', text: 'text-blue-500' },
+type CrisisCard = {
+  id: string;
+  title: string;
+  type: string;
+  value: string;
+  detail: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  region: string;
+  latitude: number;
+  longitude: number;
+  icon: 'activity' | 'rain' | 'wind' | 'shield';
 };
+
+const crisisIconMap = { activity: Activity, rain: CloudRain, wind: Wind, shield: Shield };
+const regionCoordinates: Record<string, { latitude: number; longitude: number }> = {
+  Nationwide: { latitude: 1.3521, longitude: 103.8198 },
+  North: { latitude: 1.4291, longitude: 103.8354 },
+  South: { latitude: 1.276, longitude: 103.8457 },
+  East: { latitude: 1.3529, longitude: 103.9441 },
+  West: { latitude: 1.3456, longitude: 103.7019 },
+  Central: { latitude: 1.3021, longitude: 103.8398 },
+  All: { latitude: 1.3521, longitude: 103.8198 },
+};
+const staticCrisisCards: CrisisCard[] = [
+  {
+    id: 'covid-watch',
+    title: 'Covid-19 Watch',
+    type: 'Health',
+    value: '378 cases',
+    detail: 'Respiratory infection activity is being monitored using the same health feed used by the government dashboard.',
+    severity: 'medium',
+    region: 'West',
+    latitude: 1.3456,
+    longitude: 103.7019,
+    icon: 'activity',
+  },
+  {
+    id: 'rainfall-risk',
+    title: 'Elevated Flood Risk',
+    type: 'Weather',
+    value: '45mm peak',
+    detail: 'Rainfall intensity is elevated in eastern and central areas. Avoid underpasses during heavy showers.',
+    severity: 'high',
+    region: 'East / Central',
+    latitude: 1.3221,
+    longitude: 103.8918,
+    icon: 'rain',
+  },
+  {
+    id: 'air-quality',
+    title: 'Air Quality Advisory',
+    type: 'Environment',
+    value: 'PSI 76',
+    detail: 'Air quality remains acceptable but sensitive groups should monitor symptoms during prolonged outdoor activity.',
+    severity: 'low',
+    region: 'Nationwide',
+    latitude: 1.3521,
+    longitude: 103.8198,
+    icon: 'wind',
+  },
+];
+const covidCaseMarkers: MapMarker[] = [
+  { id: 'covid-bedok', name: 'Bedok', latitude: 1.324, longitude: 103.93, value: '64 active cases', detail: 'Moderate Covid-19 activity in eastern residential clusters.', severity: 'medium' },
+  { id: 'covid-tampines', name: 'Tampines', latitude: 1.3547, longitude: 103.9436, value: '58 active cases', detail: 'Clinic visits for respiratory symptoms remain elevated.', severity: 'medium' },
+  { id: 'covid-jurong', name: 'Jurong West', latitude: 1.3404, longitude: 103.7058, value: '76 active cases', detail: 'Highest current Covid-19 watch cluster in the public feed.', severity: 'high' },
+  { id: 'covid-woodlands', name: 'Woodlands', latitude: 1.436, longitude: 103.786, value: '49 active cases', detail: 'Northern residential cases under monitoring.', severity: 'medium' },
+  { id: 'covid-bishan', name: 'Bishan', latitude: 1.3508, longitude: 103.8485, value: '42 active cases', detail: 'Central area activity remains moderate.', severity: 'medium' },
+  { id: 'covid-queenstown', name: 'Queenstown', latitude: 1.2942, longitude: 103.7861, value: '29 active cases', detail: 'Lower but visible Covid-19 activity.', severity: 'low' },
+  { id: 'covid-punggol', name: 'Punggol', latitude: 1.3984, longitude: 103.9072, value: '36 active cases', detail: 'Monitoring newer residential clusters.', severity: 'low' },
+];
+const floodRiskLayer: MapHeatmapLayer = {
+  label: 'Flood risk severity',
+  unit: 'risk',
+  palette: 'psi',
+  min: 0,
+  max: 100,
+  opacity: 0.82,
+  radius: 46,
+  cellSize: 8,
+  points: [
+    { id: 'flood-orchard', name: 'Orchard underpass', latitude: 1.3048, longitude: 103.8318, value: 92 },
+    { id: 'flood-east-coast', name: 'East Coast', latitude: 1.305, longitude: 103.912, value: 78 },
+    { id: 'flood-bedok', name: 'Bedok', latitude: 1.324, longitude: 103.93, value: 68 },
+    { id: 'flood-bishan', name: 'Bishan', latitude: 1.3508, longitude: 103.8485, value: 55 },
+    { id: 'flood-jurong', name: 'Jurong West', latitude: 1.3404, longitude: 103.7058, value: 36 },
+    { id: 'flood-woodlands', name: 'Woodlands', latitude: 1.436, longitude: 103.786, value: 28 },
+  ],
+};
+const psiRiskLayer: MapHeatmapLayer = {
+  label: 'Air quality PSI',
+  unit: 'PSI',
+  palette: 'psi',
+  min: 30,
+  max: 120,
+  opacity: 0.8,
+  radius: 52,
+  cellSize: 8,
+  points: [
+    { id: 'psi-west', name: 'West', latitude: 1.357, longitude: 103.7, value: 84 },
+    { id: 'psi-north', name: 'North', latitude: 1.418, longitude: 103.82, value: 76 },
+    { id: 'psi-central', name: 'Central', latitude: 1.357, longitude: 103.82, value: 69 },
+    { id: 'psi-east', name: 'East', latitude: 1.357, longitude: 103.94, value: 62 },
+    { id: 'psi-south', name: 'South', latitude: 1.296, longitude: 103.82, value: 52 },
+  ],
+};
+
 export default function PublicHome() {
   const { data: publicHome, loading, error } = useApi<PublicHomeData>('/api/citizen/home');
   const { data: citizenAlerts } = useApi<{ items: LiveCitizenAlert[] }>('/api/citizen/alerts');
   const [broadcasts, setBroadcasts] = useState<BroadcastAlert[]>([]);
-  const [selectedAlertId, setSelectedAlertId] = useState<string | number | null>(null);
+  const [selectedCrisisId, setSelectedCrisisId] = useState<string | null>(null);
+  const situationMapRef = useRef<HTMLDivElement | null>(null);
   const liveAlerts = (citizenAlerts?.items ?? [])
     .filter((alert) => alert.status !== 'resolved')
     .map(mapLiveAlertToHomeAlert);
@@ -68,31 +167,55 @@ export default function PublicHome() {
   const activeAlerts = [...liveBroadcasts, ...liveAlerts];
   const visibleAlerts = activeAlerts.length ? activeAlerts : (publicHome?.activeAlerts ?? []);
   const nearbyResources = publicHome?.nearbyResources ?? [];
-  const updates = publicHome?.updates ?? [];
-  const stats = publicHome?.stats ?? publicStats;
-  const focusedAlerts = selectedAlertId ? visibleAlerts.filter((alert) => alert.id === selectedAlertId) : visibleAlerts;
-  const mapMarkers = useMemo<MapMarker[]>(
-    () =>
-      focusedAlerts.flatMap((alert) =>
-        resolveAlertLocations(alert.region, alert.title, alert.message).map((location, index) => ({
-          id: `${alert.id}-${index}`,
-          name: location.name,
-          latitude: location.latitude,
-          longitude: location.longitude,
-          value: `${alert.type} - ${alert.severity.toUpperCase()}`,
-          detail: alert.title ? `${alert.title}. ${alert.message}` : alert.message,
-          severity: alert.severity === 'critical' || alert.severity === 'high'
-            ? 'high'
-            : alert.severity === 'medium'
-              ? 'medium'
-              : 'low',
-        })),
-      ),
-    [focusedAlerts],
-  );
+  const primaryBroadcast = broadcasts.find((broadcast) => broadcast.status === 'ongoing') ?? null;
+  const selectedCrisis = staticCrisisCards.find((card) => card.id === selectedCrisisId) ?? null;
+  const selectedHeatmapLayer = selectedCrisisId === 'rainfall-risk'
+    ? floodRiskLayer
+    : selectedCrisisId === 'air-quality'
+      ? psiRiskLayer
+      : undefined;
+  const overallSituation = visibleAlerts.some((alert) => alert.severity === 'critical' || alert.severity === 'high') || staticCrisisCards.some((card) => card.severity === 'high')
+    ? 'Elevated'
+    : 'Stable';
+  const mapMarkers = useMemo<MapMarker[]>(() => {
+    if (selectedCrisisId === 'covid-watch') return covidCaseMarkers;
+    if (selectedHeatmapLayer) return [];
+
+    const crisisMarkers = (selectedCrisis ? [selectedCrisis] : staticCrisisCards).map((card) => ({
+      id: card.id,
+      name: card.region,
+      latitude: card.latitude,
+      longitude: card.longitude,
+      value: `${card.type} - ${card.value}`,
+      detail: `${card.title}. ${card.detail}`,
+      severity: card.severity === 'critical' || card.severity === 'high' ? 'high' as const : card.severity === 'medium' ? 'medium' as const : 'low' as const,
+    }));
+
+    if (selectedCrisis) return crisisMarkers;
+
+    const alertMarkers = visibleAlerts.map((alert) => {
+      const regionName = Object.keys(regionCoordinates).find((region) => alert.region?.includes(region)) ?? 'Nationwide';
+      const coordinates = regionCoordinates[regionName] ?? regionCoordinates.Nationwide;
+      return {
+        id: String(alert.id),
+        name: alert.region || 'Nationwide',
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+        value: `${alert.type} - ${alert.severity.toUpperCase()}`,
+        detail: alert.title ? `${alert.title}. ${alert.message}` : alert.message,
+        severity: alert.severity === 'critical' || alert.severity === 'high'
+          ? 'high' as const
+          : alert.severity === 'medium'
+            ? 'medium' as const
+            : 'low' as const,
+      };
+    });
+
+    return [...crisisMarkers, ...alertMarkers];
+  }, [selectedCrisis, selectedCrisisId, selectedHeatmapLayer, visibleAlerts]);
 
   useEffect(() => {
-    fetchWithAuth('/api/citizen/broadcasts')
+    fetch(apiUrl('/api/citizen/broadcasts'))
       .then((response) => {
         if (!response.ok) throw new Error('Broadcasts unavailable');
         return response.json() as Promise<{ items: BroadcastAlert[] }>;
@@ -102,127 +225,146 @@ export default function PublicHome() {
   }, []);
 
   useEffect(() => {
-    if (selectedAlertId && !visibleAlerts.some((alert) => alert.id === selectedAlertId)) {
-      setSelectedAlertId(null);
-    }
-  }, [selectedAlertId, visibleAlerts]);
+    const resetSituationFocus = (event: MouseEvent) => {
+      if (!selectedCrisisId) return;
+      const target = event.target as Node;
+      if (situationMapRef.current && !situationMapRef.current.contains(target)) {
+        setSelectedCrisisId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', resetSituationFocus);
+    return () => document.removeEventListener('mousedown', resetSituationFocus);
+  }, [selectedCrisisId]);
 
   return (
-    <div className="space-y-8">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">
-        <div className="flex items-start gap-4">
-          <div className="p-3 bg-zinc-800 rounded-xl">
-            <Shield className="w-8 h-8 text-blue-400" />
+    <div className="space-y-6">
+      <div>
+        <div className="mb-2 flex items-center gap-2 px-1">
+          <span className="rounded bg-red-600 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-white">
+            Emergency Broadcast
+          </span>
+          <span className="text-xs text-red-200">Government verified</span>
+        </div>
+        <div className="overflow-hidden rounded-xl border border-red-800 bg-gradient-to-r from-red-950 via-zinc-950 to-zinc-900 shadow-[0_0_32px_rgba(220,38,38,0.14)]">
+        <div className="flex items-stretch">
+          <div className="flex items-center bg-red-600 px-4">
+            <AlertTriangle className="h-6 w-6 text-white" />
           </div>
-          <div className="flex-1">
-            <h2 className="text-2xl font-bold mb-2">Stay Informed & Safe</h2>
-            <p className="text-zinc-400">
-              {publicHome?.summary ?? 'Loading current public advisories...'}
-            </p>
+          <div className="flex flex-1 flex-wrap items-start justify-between gap-3 px-4 py-3">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-zinc-100">
+                {liveBroadcasts.length
+                  ? liveBroadcasts[0].title ?? liveBroadcasts[0].type
+                  : 'No active government broadcasts'}
+              </div>
+              <div className="line-clamp-1 text-xs text-zinc-400">
+                {liveBroadcasts.length ? liveBroadcasts[0].message : 'Official emergency broadcasts will appear here when active.'}
+              </div>
+              {Boolean(primaryBroadcast?.updates?.length) && (
+                <div className="mt-2 space-y-1 border-l border-red-700/60 pl-3">
+                  {primaryBroadcast.updates!.slice(-2).map((update) => (
+                    <div key={update.id} className="text-xs text-zinc-300">
+                      <span className="text-zinc-500">{update.time}</span> · {update.body}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {liveBroadcasts.length > 1 && (
+                <span className="rounded-full border border-red-700 bg-red-950 px-3 py-1 text-xs text-red-200">
+                  +{liveBroadcasts.length - 1} more
+                </span>
+              )}
+              <Link to="/public/alerts" className="rounded-lg bg-red-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-red-700">
+                View Alerts
+              </Link>
+            </div>
           </div>
+        </div>
         </div>
       </div>
 
       {loading && <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">Loading public dashboard data...</div>}
       {error && <div className="rounded-lg border border-red-800 bg-red-950/40 p-4 text-sm text-red-300">Public dashboard API unavailable: {error}</div>}
 
-      {/* Quick stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {stats.map((stat) => {
-          const Icon = statIconMap[stat.icon as keyof typeof statIconMap] ?? Activity;
-          const colour = statColours[stat.colour] ?? statColours.blue;
-
-          return (
-            <div key={stat.label} className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-              <div className={`p-2 ${colour.bg} rounded-lg mb-3 inline-block`}><Icon className={`w-5 h-5 ${colour.text}`} /></div>
-              <div className="text-2xl font-bold mb-1">{stat.value}</div>
-              <div className="text-sm text-zinc-400">{stat.label}</div>
+      <div ref={situationMapRef} className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-base font-semibold">Active Situations</h2>
+            <div className={`rounded-full border px-3 py-1 text-xs font-medium ${overallSituation === 'Elevated' ? 'border-yellow-700 bg-yellow-950/40 text-yellow-300' : 'border-green-800 bg-green-950/40 text-green-300'}`}>
+              {overallSituation}
             </div>
-          );
-        })}
-      </div>
-
-      {/* National heatmap */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <MapPin className="w-5 h-5 text-red-600" />
-            National Alert Heatmap
-          </h2>
-          <div className="flex items-center gap-3 text-xs text-zinc-500">
-            <span className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-red-500" />High Risk</span>
-            <span className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-yellow-500" />Moderate</span>
-            <span className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-green-500" />Low Risk</span>
           </div>
-        </div>
-        <div className="h-[500px]">
-          <SingaporeRegionMap markers={mapMarkers} />
-        </div>
-        <p className="text-xs text-zinc-500 mt-2">Hover or focus a region for current alert details. Regional status is linked to government crisis data.</p>
+
+          <div className="space-y-2">
+            {staticCrisisCards.map((card) => {
+              const Icon = crisisIconMap[card.icon];
+              const active = selectedCrisisId === card.id;
+              return (
+                <button
+                  key={card.id}
+                  type="button"
+                  onClick={() => setSelectedCrisisId((current) => current === card.id ? null : card.id)}
+                  className={`w-full rounded-lg border bg-zinc-950/40 p-3 text-left transition-colors hover:bg-zinc-800/80 ${active ? 'border-red-600 ring-1 ring-red-600/60' : 'border-zinc-800'}`}
+                >
+                  <div className="mb-2 flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="rounded-md bg-zinc-800 p-1.5">
+                        <Icon className="h-4 w-4 text-red-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold">{card.title}</div>
+                        <div className="text-xs text-zinc-500">{card.type}</div>
+                      </div>
+                    </div>
+                    <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${card.severity === 'high' ? 'bg-red-950 text-red-300' : card.severity === 'medium' ? 'bg-yellow-950 text-yellow-300' : 'bg-blue-950 text-blue-300'}`}>
+                      {card.severity}
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold">{card.value}</div>
+                  <p className={`mt-1 text-xs leading-relaxed text-zinc-400 ${active ? '' : 'line-clamp-2'}`}>{card.detail}</p>
+                  <div className="mt-2 flex items-center gap-1 text-xs text-zinc-500">
+                    <MapPin className="h-3 w-3" />
+                    {card.region}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-base font-semibold flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-red-600" />
+              Location Map
+            </h2>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-3 text-xs text-zinc-500">
+                <span className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-red-500" />High Risk</span>
+                <span className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-yellow-500" />Moderate</span>
+                <span className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-blue-500" />Low Risk</span>
+              </div>
+            </div>
+          </div>
+          <div className="h-[430px]">
+            <SingaporeRegionMap
+              markers={mapMarkers}
+              heatmapLayer={selectedHeatmapLayer}
+              showMarkers={!selectedHeatmapLayer}
+              problemLabel={selectedHeatmapLayer ? selectedHeatmapLayer.label.toLowerCase() : selectedCrisisId === 'covid-watch' ? 'Covid-19 case clusters' : 'active signals'}
+            />
+          </div>
+          <p className="text-xs text-zinc-500 mt-2">
+            {selectedCrisis ? `Showing ${selectedCrisis.title} on the map. Click Show all or the card again to reset.` : 'Click a situation card to focus it on the map. Regional status is linked to government crisis data.'}
+          </p>
+        </section>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          {/* Active alerts */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-red-600" />
-              Active Alerts
-            </h2>
-            <div className="space-y-3">
-              {visibleAlerts.length === 0 && (
-                <div className="rounded-lg border border-zinc-800 bg-zinc-800/60 p-4 text-sm text-zinc-500">
-                  No active alerts right now. Check Alerts for current broadcasts and archived advisories.
-                </div>
-              )}
-              {visibleAlerts.map((alert) => (
-                <button
-                  key={alert.id}
-                  type="button"
-                  onClick={() => setSelectedAlertId((current) => (current === alert.id ? null : alert.id))}
-                  className={`w-full rounded-lg border p-4 text-left transition-colors ${alert.severity === 'critical' || alert.severity === 'high' ? 'bg-red-950/30 border-red-800' : alert.severity === 'medium' ? 'bg-yellow-950/30 border-yellow-800' : 'bg-green-950/30 border-green-800'} ${selectedAlertId === alert.id ? 'border-white/60 bg-zinc-800/80 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.28)]' : 'hover:bg-zinc-800/60'}`}
-                >
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className={`w-5 h-5 mt-0.5 ${alert.severity === 'critical' || alert.severity === 'high' ? 'text-red-500' : alert.severity === 'medium' ? 'text-yellow-500' : 'text-green-500'}`} />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium">{alert.type}</span>
-                        <span className="text-xs px-2 py-0.5 bg-zinc-800 rounded">{alert.region}</span>
-                      </div>
-                      <p className="text-sm text-zinc-300">{alert.message}</p>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-            <Link
-              to="/public/alerts"
-              className="mt-4 block text-center w-full px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
-            >
-              View All Alerts
-            </Link>
-          </div>
-
-          {/* Live updates */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-            <h2 className="text-lg font-semibold mb-4">Live Updates</h2>
-            <div className="space-y-3">
-              {updates.length === 0 && (
-                <div className="rounded-lg border border-zinc-800 bg-zinc-800/60 p-4 text-sm text-zinc-500">
-                  No live updates are currently published.
-                </div>
-              )}
-              {updates.map((update, idx) => (
-                <div key={idx} className="p-4 bg-zinc-800 rounded-lg">
-                  <div className="text-xs text-zinc-500 mb-1">{update.time}</div>
-                  <p className="text-sm">{update.message}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-6">
+        <div className="lg:col-span-2">
           {/* Nearby resources */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -244,7 +386,9 @@ export default function PublicHome() {
               ))}
             </div>
           </div>
+        </div>
 
+        <div>
           {/* Emergency actions */}
           <div className="bg-gradient-to-br from-red-950/50 to-orange-950/50 border border-red-900/50 rounded-xl p-6">
             <h2 className="text-lg font-semibold mb-3">Quick Actions</h2>

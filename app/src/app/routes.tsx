@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { createBrowserRouter } from "react-router";
 import LandingPage from "./components/LandingPage";
+import NotFoundPage from "./components/NotFoundPage";
 import RequireAuth from "./components/auth/RequireAuth";
 
 const lazyRoute = (load: () => Promise<{ default: ComponentType }>) => async () => ({
@@ -36,6 +37,7 @@ export const router = createBrowserRouter([
           { path: "ai-recommendations", lazy: lazyRoute(() => import("./components/government/GovAIRecommendations")) },
           { path: "historical", lazy: lazyRoute(() => import("./components/government/GovHistoricalAnalysis")) },
           { path: "broadcast", lazy: lazyRoute(() => import("./components/government/GovBroadcast")) },
+          { path: "*", element: <NotFoundPage audience="government" /> },
         ],
       },
       {
@@ -55,6 +57,7 @@ export const router = createBrowserRouter([
           { path: "forum", lazy: lazyRoute(() => import("./components/public/PublicForum")) },
           { path: "profile", lazy: lazyRoute(() => import("./components/public/PublicProfile")) },
           { path: "settings", lazy: lazyRoute(() => import("./components/public/PublicSettings")) },
+          { path: "*", element: <NotFoundPage audience="public" /> },
         ],
       },
     ],
