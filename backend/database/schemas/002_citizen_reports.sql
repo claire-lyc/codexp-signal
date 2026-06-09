@@ -51,13 +51,82 @@ CREATE TABLE IF NOT EXISTS citizen.reports (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS citizen.report_subject_tags (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  label TEXT NOT NULL UNIQUE,
+  description TEXT,
+  created_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS citizen.report_subject_tag_categories (
+  subject_tag_id UUID NOT NULL REFERENCES citizen.report_subject_tags(id) ON DELETE CASCADE,
+  category TEXT NOT NULL,
+  PRIMARY KEY (subject_tag_id, category)
+);
+
+CREATE INDEX IF NOT EXISTS report_subject_tag_categories_category_idx
+  ON citizen.report_subject_tag_categories (category);
+
 CREATE INDEX IF NOT EXISTS reports_status_created_at_idx ON citizen.reports (status, created_at DESC);
 CREATE INDEX IF NOT EXISTS reports_crisis_type_idx ON citizen.reports (crisis_type);
 CREATE INDEX IF NOT EXISTS reports_planning_area_idx ON citizen.reports (planning_area_id);
 
 ALTER TABLE citizen.reports
   ADD COLUMN IF NOT EXISTS chat_enabled BOOLEAN NOT NULL DEFAULT true,
-  ADD COLUMN IF NOT EXISTS chat_closed_at TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS chat_closed_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS subject_tag_id UUID REFERENCES citizen.report_subject_tags(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS started_work_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS started_work_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS current_handler_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS reports_subject_tag_id_idx ON citizen.reports (subject_tag_id);
+CREATE INDEX IF NOT EXISTS reports_started_work_by_user_id_idx ON citizen.reports (started_work_by_user_id);
+
+WITH seed_tags(label, description, categories) AS (
+  VALUES
+    ('Covid-19', 'Respiratory illness, Covid-19 clusters, testing, or isolation support.', ARRAY['health']),
+    ('Hospital crowding', 'Crowding or long wait reports at hospitals, clinics, or urgent care.', ARRAY['health']),
+    ('Dengue symptoms', 'Dengue symptoms, clusters, mosquito activity, or health advisory requests.', ARRAY['health', 'environment']),
+    ('Orchard Road flooding', 'Flooding or road disruption around Orchard Road.', ARRAY['flood', 'transport', 'infrastructure']),
+    ('MRT disruption', 'Train delay, platform crowding, station disruption, or rail incident.', ARRAY['transport', 'infrastructure']),
+    ('Medicine shortage', 'Medication stockouts or pharmacy supply shortage reports.', ARRAY['supply', 'health']),
+    ('Flash flood', 'Fast-rising water, underpass flooding, or flood-prone roads.', ARRAY['flood', 'weather']),
+    ('Road obstruction', 'Blocked roads, stalled vehicles, fallen trees, or unsafe road conditions.', ARRAY['transport', 'infrastructure']),
+    ('Haze', 'Air quality, smoke haze, or outdoor exposure concerns.', ARRAY['environment', 'health']),
+    ('Power outage', 'Electricity outage or critical utility interruption.', ARRAY['infrastructure']),
+    ('Fire/smoke', 'Fire, smoke, burning smell, or evacuation concern.', ARRAY['infrastructure', 'environment']),
+    ('Public safety', 'Police, crowd safety, suspicious activity, or general public risk.', ARRAY['other', 'infrastructure'])
+)
+INSERT INTO citizen.report_subject_tags (label, description)
+SELECT label, description
+FROM seed_tags
+ON CONFLICT (label) DO UPDATE
+SET description = EXCLUDED.description,
+    updated_at = now();
+
+WITH seed_tags(label, categories) AS (
+  VALUES
+    ('Covid-19', ARRAY['health']),
+    ('Hospital crowding', ARRAY['health']),
+    ('Dengue symptoms', ARRAY['health', 'environment']),
+    ('Orchard Road flooding', ARRAY['flood', 'transport', 'infrastructure']),
+    ('MRT disruption', ARRAY['transport', 'infrastructure']),
+    ('Medicine shortage', ARRAY['supply', 'health']),
+    ('Flash flood', ARRAY['flood', 'weather']),
+    ('Road obstruction', ARRAY['transport', 'infrastructure']),
+    ('Haze', ARRAY['environment', 'health']),
+    ('Power outage', ARRAY['infrastructure']),
+    ('Fire/smoke', ARRAY['infrastructure', 'environment']),
+    ('Public safety', ARRAY['other', 'infrastructure'])
+)
+INSERT INTO citizen.report_subject_tag_categories (subject_tag_id, category)
+SELECT tags.id, category
+FROM seed_tags
+JOIN citizen.report_subject_tags tags ON tags.label = seed_tags.label
+CROSS JOIN LATERAL unnest(seed_tags.categories) AS category
+ON CONFLICT (subject_tag_id, category) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS citizen.report_images (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

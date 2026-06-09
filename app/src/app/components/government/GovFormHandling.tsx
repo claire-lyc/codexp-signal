@@ -18,6 +18,8 @@ import {
   Trash2,
   User,
   X,
+  MoreVertical,
+  Plus,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { API_REFRESH_INTERVAL_MS, apiUrl } from '../../lib/api';
@@ -58,6 +60,17 @@ type Ticket = {
   pingedAgencies: string[];
   images?: TicketImage[];
   chatEnabled?: boolean;
+  subjectTag?: SubjectTag | null;
+  startedWorkAt?: string | null;
+  startedWorkBy?: string | null;
+  currentHandler?: string | null;
+};
+
+type SubjectTag = {
+  id: string;
+  label: string;
+  description: string | null;
+  categories: string[];
 };
 
 type AuthUser = {
@@ -70,6 +83,7 @@ const agencies = ['All Agencies', 'MOH', 'PUB', 'LTA', 'Enterprise SG', 'SPF', '
 const pingableAgencies = ['MOH', 'PUB', 'LTA', 'Enterprise SG', 'SPF', 'SCDF', 'NEA', 'MSF'];
 const statusOptions: Array<'All' | TicketStatus> = ['All', 'open', 'in-progress', 'grouped', 'resolved'];
 const crisisTypes = ['All', 'Health', 'Weather', 'Supply Chain', 'Infrastructure', 'Cybersecurity'];
+const tagCategories = ['health', 'flood', 'supply', 'infrastructure', 'transport', 'environment', 'other'];
 const sortOptions: Array<{ value: SortMode; label: string }> = [
   { value: 'priority', label: 'Priority' },
   { value: 'newest', label: 'Newest first' },
@@ -217,6 +231,7 @@ export default function GovFormHandling() {
   const [filterStatus, setFilterStatus] = useState<'All' | TicketStatus>('All');
   const [filterCrisis, setFilterCrisis] = useState('All');
   const [filterAgency, setFilterAgency] = useState('All Agencies');
+  const [filterSubjectId, setFilterSubjectId] = useState('All Subjects');
   const [sortMode, setSortMode] = useState<SortMode>('priority');
   const [queueView, setQueueView] = useState<QueueView>('active');
   const [comment, setComment] = useState('');
@@ -227,6 +242,12 @@ export default function GovFormHandling() {
   const [usingBackend, setUsingBackend] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletingTicket, setDeletingTicket] = useState(false);
+  const [subjectTags, setSubjectTags] = useState<SubjectTag[]>([]);
+  const [subjectDialogOpen, setSubjectDialogOpen] = useState(false);
+  const [createSubjectOpen, setCreateSubjectOpen] = useState(false);
+  const [newSubjectLabel, setNewSubjectLabel] = useState('');
+  const [newSubjectCategories, setNewSubjectCategories] = useState<string[]>(['other']);
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -246,6 +267,17 @@ export default function GovFormHandling() {
       .catch(() => {
         if (!active) return;
         setFilterAgency('All Agencies');
+      });
+
+    fetch(apiUrl('/api/report-subject-tags'), { headers: authHeaders() })
+      .then((response) => response.ok ? response.json() as Promise<{ items: SubjectTag[] }> : Promise.reject())
+      .then((data) => {
+        if (!active) return;
+        setSubjectTags(data.items);
+      })
+      .catch(() => {
+        if (!active) return;
+        setSubjectTags([]);
       });
 
     const loadTickets = () => {
@@ -292,17 +324,20 @@ export default function GovFormHandling() {
         const archiveMatch = queueView === 'archive' ? isResolved(ticket) : !isResolved(ticket);
         const statusMatch = filterStatus === 'All' || ticket.status === filterStatus;
         const crisisMatch = filterCrisis === 'All' || ticket.crisisType === filterCrisis;
-        const agencyMatch = filterAgency === 'All Agencies' || ticket.assignedAgency === filterAgency;
+        const agencyMatch = filterAgency === 'All Agencies' || ticket.assignedAgency === filterAgency || ticket.pingedAgencies.includes(filterAgency);
+        const subjectMatch =
+          filterSubjectId === 'All Subjects' ||
+          (filterSubjectId === 'Ungrouped' ? !ticket.subjectTag : ticket.subjectTag?.id === filterSubjectId);
         const queryMatch =
           !normalizedQuery ||
           ticket.id.toLowerCase().includes(normalizedQuery) ||
           ticket.message.toLowerCase().includes(normalizedQuery) ||
           ticket.location.toLowerCase().includes(normalizedQuery) ||
           ticket.reporter.toLowerCase().includes(normalizedQuery);
-        return archiveMatch && statusMatch && crisisMatch && agencyMatch && queryMatch;
+        return archiveMatch && statusMatch && crisisMatch && agencyMatch && subjectMatch && queryMatch;
       })
       .sort((a, b) => sortTickets(a, b, sortMode));
-  }, [filterAgency, filterCrisis, filterStatus, query, queueView, sortMode, tickets]);
+  }, [filterAgency, filterCrisis, filterStatus, filterSubjectId, query, queueView, sortMode, tickets]);
 
   const selectedTicket = filtered.find((ticket) => ticket.id === selectedTicketId) ?? filtered[0] ?? null;
   const selectedTicketResolved = selectedTicket ? isResolved(selectedTicket) : false;
@@ -358,6 +393,81 @@ export default function GovFormHandling() {
       });
     }
     setNotice(`${ticket.id} marked ${status}.`);
+  };
+
+  const startWork = async (ticket: Ticket) => {
+    try {
+      const data = await requestJson<{ item: Ticket }>(`/api/tickets/${ticket.id}/start-work`, 'POST', {});
+      syncTicket(data.item);
+      setUsingBackend(true);
+      setNotice(`Started work on ${ticket.id}.`);
+    } catch {
+      setUsingBackend(false);
+      updateLocalTickets(
+        (current) =>
+          current.map((item) =>
+            item.id === ticket.id
+              ? {
+                  ...item,
+                  status: 'in-progress',
+                  startedWorkAt: new Date().toISOString(),
+                  currentHandler: 'Current handler',
+                  comments: [...item.comments, createComment('internal', 'Work started.')],
+                }
+              : item,
+          ),
+        setTickets,
+      );
+      setNotice(`Started work on ${ticket.id}.`);
+    }
+  };
+
+  const updateSubjectTag = async (ticket: Ticket, subjectTagId: string | null) => {
+    try {
+      const data = await requestJson<{ item: Ticket }>(`/api/tickets/${ticket.id}/subject-tag`, 'PATCH', { subjectTagId });
+      syncTicket(data.item);
+      setUsingBackend(true);
+      setNotice(subjectTagId ? `${ticket.id} regrouped.` : `${ticket.id} moved to ungrouped.`);
+    } catch {
+      setUsingBackend(false);
+      const subjectTag = subjectTags.find((tag) => tag.id === subjectTagId) ?? null;
+      updateLocalTickets(
+        (current) => current.map((item) => item.id === ticket.id ? { ...item, subjectTag } : item),
+        setTickets,
+      );
+      setNotice(subjectTagId ? `${ticket.id} regrouped locally.` : `${ticket.id} moved to ungrouped locally.`);
+    } finally {
+      setSubjectDialogOpen(false);
+      setActionMenuOpen(false);
+    }
+  };
+
+  const createSubjectTag = async () => {
+    const label = newSubjectLabel.trim();
+    if (!label || newSubjectCategories.length === 0) return;
+    try {
+      const data = await requestJson<{ item: SubjectTag }>('/api/report-subject-tags', 'POST', {
+        label,
+        categories: newSubjectCategories,
+      });
+      setSubjectTags((current) => [data.item, ...current.filter((tag) => tag.id !== data.item.id)]);
+      setNewSubjectLabel('');
+      setNewSubjectCategories(['other']);
+      setCreateSubjectOpen(false);
+      setNotice(`Created subject grouping: ${data.item.label}.`);
+    } catch {
+      const localTag: SubjectTag = {
+        id: `local-${Date.now()}`,
+        label,
+        description: null,
+        categories: newSubjectCategories,
+      };
+      setSubjectTags((current) => [localTag, ...current]);
+      setNewSubjectLabel('');
+      setNewSubjectCategories(['other']);
+      setCreateSubjectOpen(false);
+      setNotice(`Created local subject grouping: ${label}.`);
+    }
   };
 
   const addComment = async () => {
@@ -461,6 +571,9 @@ export default function GovFormHandling() {
           <p className="mt-1 text-xs text-zinc-600">
             Data mode: {usingBackend ? 'Connected to backend ticket API' : 'Website-only local mode'}
           </p>
+          <p className="mt-1 text-xs text-blue-300">
+            Currently viewing: {filterCrisis === 'All' ? 'All crisis types' : filterCrisis} &gt; {subjectViewLabel(filterSubjectId, subjectTags)}
+          </p>
         </div>
         <div className="flex items-center gap-2 text-sm">
           <span className="px-2.5 py-1 bg-zinc-900/80 border border-zinc-700 text-zinc-200 rounded-lg">
@@ -541,6 +654,25 @@ export default function GovFormHandling() {
             <select value={filterAgency} onChange={(event) => setFilterAgency(event.target.value)} className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-600">
               {agencies.map((agency) => <option key={agency}>{agency}</option>)}
             </select>
+            <div className="space-y-1 rounded-lg border border-zinc-800 bg-zinc-950 p-2">
+              <div className="flex items-center justify-between">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Subject tags</div>
+                <button
+                  type="button"
+                  onClick={() => setCreateSubjectOpen(true)}
+                  className="rounded bg-zinc-800 p-1 text-zinc-400 hover:text-white"
+                  title="Create subject tag"
+                  aria-label="Create subject tag"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <select value={filterSubjectId} onChange={(event) => setFilterSubjectId(event.target.value)} className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-600">
+                <option>All Subjects</option>
+                <option>Ungrouped</option>
+                {subjectTags.map((tag) => <option key={tag.id} value={tag.id}>{tag.label}</option>)}
+              </select>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -559,10 +691,24 @@ export default function GovFormHandling() {
           <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col overflow-hidden">
             <TicketDetailHeader
               ticket={selectedTicket}
-              onPing={() => setPingOpen(true)}
-              onStart={() => updateStatus(selectedTicket, 'in-progress')}
-              onResolve={() => updateStatus(selectedTicket, 'resolved')}
-              onDelete={() => setDeleteConfirmOpen(true)}
+              actionMenuOpen={actionMenuOpen}
+              onToggleMenu={() => setActionMenuOpen((open) => !open)}
+              onGroup={() => {
+                setSubjectDialogOpen(true);
+                setActionMenuOpen(false);
+              }}
+              onPing={() => {
+                setActionMenuOpen(false);
+                setPingOpen(true);
+              }}
+              onResolve={() => {
+                setActionMenuOpen(false);
+                updateStatus(selectedTicket, 'resolved');
+              }}
+              onDelete={() => {
+                setActionMenuOpen(false);
+                setDeleteConfirmOpen(true);
+              }}
             />
 
             <div className="flex flex-1 overflow-hidden">
@@ -575,6 +721,16 @@ export default function GovFormHandling() {
                   <div className="text-xs text-zinc-500 mb-1">Crisis Type</div>
                   <div className="text-sm text-zinc-300">{selectedTicket.crisisType}</div>
                 </div>
+                <div>
+                  <div className="text-xs text-zinc-500 mb-1">Subject Group</div>
+                  <div className="text-sm text-zinc-300">{selectedTicket.subjectTag?.label ?? 'Ungrouped'}</div>
+                </div>
+                {selectedTicket.startedWorkAt && (
+                  <div>
+                    <div className="text-xs text-zinc-500 mb-1">Current Handler</div>
+                    <div className="text-sm text-zinc-300">{selectedTicket.currentHandler ?? selectedTicket.startedWorkBy ?? 'Started'}</div>
+                  </div>
+                )}
                 {selectedTicket.hasImage && (
                   <div>
                     <div className="text-xs text-zinc-500 mb-1">Attachment</div>
@@ -605,6 +761,23 @@ export default function GovFormHandling() {
               </div>
 
               <div className="flex-1 flex flex-col overflow-hidden">
+                {!selectedTicket.startedWorkAt && !selectedTicketResolved && (
+                  <div className="border-b border-blue-900/60 bg-blue-950/30 px-5 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-blue-200">Start work on this ticket?</div>
+                        <div className="text-xs text-blue-300/70">This records you as the current handler and moves the ticket to in progress.</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => startWork(selectedTicket)}
+                        className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium hover:bg-blue-700"
+                      >
+                        Start work
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="p-5 border-b border-zinc-800">
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 bg-zinc-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">{selectedTicket.reporter.charAt(0)}</div>
@@ -714,6 +887,31 @@ export default function GovFormHandling() {
           onConfirm={pingAgencies}
         />
       )}
+
+      {subjectDialogOpen && selectedTicket && (
+        <SubjectGroupDialog
+          ticket={selectedTicket}
+          subjectTags={subjectTags}
+          onCreate={() => setCreateSubjectOpen(true)}
+          onCancel={() => setSubjectDialogOpen(false)}
+          onConfirm={(subjectTagId) => updateSubjectTag(selectedTicket, subjectTagId)}
+        />
+      )}
+
+      {createSubjectOpen && (
+        <CreateSubjectDialog
+          label={newSubjectLabel}
+          categories={newSubjectCategories}
+          onLabelChange={setNewSubjectLabel}
+          onToggleCategory={(category) =>
+            setNewSubjectCategories((current) =>
+              current.includes(category) ? current.filter((item) => item !== category) : [...current, category],
+            )
+          }
+          onCancel={() => setCreateSubjectOpen(false)}
+          onConfirm={createSubjectTag}
+        />
+      )}
     </div>
   );
 }
@@ -760,14 +958,18 @@ function TicketListItem({
 
 function TicketDetailHeader({
   ticket,
+  actionMenuOpen,
+  onToggleMenu,
+  onGroup,
   onPing,
-  onStart,
   onResolve,
   onDelete,
 }: {
   ticket: Ticket;
+  actionMenuOpen: boolean;
+  onToggleMenu: () => void;
+  onGroup: () => void;
   onPing: () => void;
-  onStart: () => void;
   onResolve: () => void;
   onDelete: () => void;
 }) {
@@ -778,36 +980,51 @@ function TicketDetailHeader({
         <StatusBadge status={ticket.status} />
         <UrgencyBadge urgency={ticket.urgency} />
         <span className="text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded">{ticket.crisisType}</span>
+        <span className="text-xs px-2 py-0.5 bg-blue-950 text-blue-300 border border-blue-900 rounded">
+          {ticket.subjectTag?.label ?? 'Ungrouped'}
+        </span>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="relative flex items-center gap-2">
         {ticket.relatedTickets.length > 0 && (
           <span className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-purple-950 border border-purple-800 text-purple-400 rounded-lg">
             <Layers className="w-3 h-3" />
             Grouped ({ticket.relatedTickets.length})
           </span>
         )}
-        <button onClick={onPing} className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-blue-950 border border-blue-800 text-blue-400 rounded-lg hover:bg-blue-900 transition-colors">
-          <Bell className="w-3 h-3" />
-          Ping Agencies
-        </button>
-        <button onClick={onStart} className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-blue-950 border border-blue-800 text-blue-400 rounded-lg hover:bg-blue-900 transition-colors">
-          Start Work
-        </button>
-        <button onClick={onResolve} className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-green-950 border border-green-800 text-green-400 rounded-lg hover:bg-green-900 transition-colors">
-          <CheckCircle className="w-3 h-3" />
-          Resolve
-        </button>
         <button
           type="button"
-          onClick={onDelete}
-          className="p-1.5 hover:bg-red-950 rounded transition-colors"
-          title="Delete ticket"
-          aria-label="Delete ticket"
+          onClick={onToggleMenu}
+          className="rounded-lg border border-zinc-700 bg-zinc-950 p-1.5 text-zinc-300 transition-colors hover:bg-zinc-800"
+          title="Ticket actions"
+          aria-label="Ticket actions"
         >
-          <Trash2 className="w-4 h-4 text-red-400" />
+          <MoreVertical className="w-4 h-4" />
         </button>
+        {actionMenuOpen && (
+          <div className="absolute right-0 top-full z-40 mt-2 w-52 rounded-xl border border-zinc-800 bg-zinc-950 p-2 shadow-2xl">
+            <ActionMenuButton icon={<Layers className="h-4 w-4" />} label="Group/change subject" onClick={onGroup} />
+            <ActionMenuButton icon={<Bell className="h-4 w-4" />} label="Ping agency" onClick={onPing} />
+            <ActionMenuButton icon={<CheckCircle className="h-4 w-4" />} label="Resolve" onClick={onResolve} />
+            <ActionMenuButton icon={<Trash2 className="h-4 w-4" />} label="Delete" danger onClick={onDelete} />
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+function ActionMenuButton({ icon, label, danger = false, onClick }: { icon: React.ReactNode; label: string; danger?: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+        danger ? 'text-red-300 hover:bg-red-950/60' : 'text-zinc-300 hover:bg-zinc-800'
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 
@@ -859,6 +1076,113 @@ function DeleteTicketDialog({
   );
 }
 
+function SubjectGroupDialog({
+  ticket,
+  subjectTags,
+  onCreate,
+  onCancel,
+  onConfirm,
+}: {
+  ticket: Ticket;
+  subjectTags: SubjectTag[];
+  onCreate: () => void;
+  onCancel: () => void;
+  onConfirm: (subjectTagId: string | null) => void;
+}) {
+  const [selectedSubjectId, setSelectedSubjectId] = useState(ticket.subjectTag?.id ?? '');
+  const groupedTags = subjectTags.filter((tag) => ticket.crisisType === 'All' || true);
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-[32rem] max-w-[calc(100vw-2rem)] shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold flex items-center gap-2"><Layers className="w-5 h-5 text-blue-400" />Group Ticket</h3>
+          <button onClick={onCancel} className="p-1 hover:bg-zinc-800 rounded transition-colors"><X className="w-4 h-4 text-zinc-400" /></button>
+        </div>
+        <p className="text-sm text-zinc-400 mb-4">Assign one subject tag to {ticket.id}. Clear it to keep the ticket ungrouped.</p>
+        <div className="space-y-2 max-h-72 overflow-y-auto">
+          <button
+            type="button"
+            onClick={() => setSelectedSubjectId('')}
+            className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${!selectedSubjectId ? 'border-blue-700 bg-blue-950/40 text-blue-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
+          >
+            Ungrouped
+          </button>
+          {groupedTags.map((tag) => (
+            <button
+              key={tag.id}
+              type="button"
+              onClick={() => setSelectedSubjectId(tag.id)}
+              className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${selectedSubjectId === tag.id ? 'border-blue-700 bg-blue-950/40 text-blue-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
+            >
+              <div className="font-medium">{tag.label}</div>
+              <div className="mt-1 text-xs text-zinc-500">{tag.categories.join(', ')}</div>
+            </button>
+          ))}
+        </div>
+        <div className="mt-4 flex gap-2">
+          <button onClick={onCreate} className="rounded-lg bg-zinc-800 px-3 py-2 text-sm hover:bg-zinc-700">Create new</button>
+          <button onClick={onCancel} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm transition-colors">Cancel</button>
+          <button onClick={() => onConfirm(selectedSubjectId || null)} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm transition-colors">
+            Save group
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CreateSubjectDialog({
+  label,
+  categories,
+  onLabelChange,
+  onToggleCategory,
+  onCancel,
+  onConfirm,
+}: {
+  label: string;
+  categories: string[];
+  onLabelChange: (value: string) => void;
+  onToggleCategory: (category: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-[30rem] max-w-[calc(100vw-2rem)] shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold flex items-center gap-2"><Plus className="w-5 h-5 text-blue-400" />Create Subject Tag</h3>
+          <button onClick={onCancel} className="p-1 hover:bg-zinc-800 rounded transition-colors"><X className="w-4 h-4 text-zinc-400" /></button>
+        </div>
+        <input
+          value={label}
+          onChange={(event) => onLabelChange(event.target.value)}
+          placeholder="Subject name, e.g. Jurong medicine shortage"
+          className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-600"
+        />
+        <div className="mt-4 text-xs font-semibold uppercase tracking-wide text-zinc-500">Linked crisis tags</div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {tagCategories.map((category) => (
+            <button
+              key={category}
+              type="button"
+              onClick={() => onToggleCategory(category)}
+              className={`rounded-full border px-3 py-1.5 text-sm ${categories.includes(category) ? 'border-blue-600 bg-blue-950/50 text-blue-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+        <div className="mt-5 flex gap-2">
+          <button onClick={onCancel} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm transition-colors">Cancel</button>
+          <button disabled={!label.trim() || categories.length === 0} onClick={onConfirm} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm transition-colors">
+            Create
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PingAgenciesDialog({
   ticketId,
   pinnedAgencies,
@@ -872,6 +1196,8 @@ function PingAgenciesDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const [agencyQuery, setAgencyQuery] = useState('');
+  const visibleAgencies = pingableAgencies.filter((agency) => agency.toLowerCase().includes(agencyQuery.trim().toLowerCase()));
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
       <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-96 shadow-2xl">
@@ -880,8 +1206,17 @@ function PingAgenciesDialog({
           <button onClick={onCancel} className="p-1 hover:bg-zinc-800 rounded transition-colors"><X className="w-4 h-4 text-zinc-400" /></button>
         </div>
         <p className="text-sm text-zinc-400 mb-4">Selected agencies will receive this ticket ({ticketId}) in their queue and be notified.</p>
+        <div className="relative mb-3">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-500" />
+          <input
+            value={agencyQuery}
+            onChange={(event) => setAgencyQuery(event.target.value)}
+            placeholder="Filter agencies..."
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 py-2 pl-8 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-600"
+          />
+        </div>
         <div className="grid grid-cols-2 gap-2 mb-4">
-          {pingableAgencies.map((agency) => (
+          {visibleAgencies.map((agency) => (
             <button
               key={agency}
               onClick={() => onToggleAgency(agency)}
@@ -1016,6 +1351,12 @@ function ticketNumber(ticket: Ticket) {
 function nextSortMode(sortMode: SortMode): SortMode {
   const index = sortOptions.findIndex((option) => option.value === sortMode);
   return sortOptions[(index + 1) % sortOptions.length].value;
+}
+
+function subjectViewLabel(filterSubjectId: string, subjectTags: SubjectTag[]) {
+  if (filterSubjectId === 'All Subjects') return 'All subjects';
+  if (filterSubjectId === 'Ungrouped') return 'Ungrouped';
+  return subjectTags.find((tag) => tag.id === filterSubjectId)?.label ?? 'Selected subject';
 }
 
 function relativeTime(timestamp: string) {

@@ -22,6 +22,13 @@ export type TicketImage = {
   createdAt: string;
 };
 
+export type ReportSubjectTag = {
+  id: string;
+  label: string;
+  description: string | null;
+  categories: string[];
+};
+
 export type Ticket = {
   id: string;
   timestamp: string;
@@ -38,6 +45,10 @@ export type Ticket = {
   pingedAgencies: string[];
   images?: TicketImage[];
   chatEnabled?: boolean;
+  subjectTag: ReportSubjectTag | null;
+  startedWorkAt: string | null;
+  startedWorkBy: string | null;
+  currentHandler: string | null;
 };
 
 type ReportStatus = 'submitted' | 'triage' | 'in_progress' | 'grouped' | 'resolved' | 'rejected';
@@ -61,6 +72,12 @@ type ReportRow = {
   assigned_agency_code: string | null;
   grouped_report_id: string | null;
   grouped_public_report_id: string | null;
+  subject_tag_id: string | null;
+  subject_tag_label: string | null;
+  subject_tag_description: string | null;
+  started_work_at: string | null;
+  started_work_by_name: string | null;
+  current_handler_name: string | null;
   chat_enabled: boolean;
   created_at: string;
 };
@@ -92,6 +109,13 @@ type PingRow = {
   agency_code: string;
 };
 
+type SubjectTagRow = {
+  id: string;
+  label: string;
+  description: string | null;
+  categories: string[];
+};
+
 export async function listTickets(filters: {
   agency?: string;
   status?: string;
@@ -103,7 +127,16 @@ export async function listTickets(filters: {
 
   if (filters.agency && filters.agency !== 'All Agencies') {
     values.push(filters.agency);
-    clauses.push(`agency.code = $${values.length}`);
+    clauses.push(`(
+      agency.code = $${values.length}
+      OR EXISTS (
+        SELECT 1
+        FROM citizen.report_agency_pings agency_filter_pings
+        JOIN auth.government_agencies agency_filter ON agency_filter.id = agency_filter_pings.agency_id
+        WHERE agency_filter_pings.report_id = reports.id
+          AND agency_filter.code = $${values.length}
+      )
+    )`);
   }
 
   const dbStatus = toDbStatus(filters.status);
@@ -148,12 +181,21 @@ export async function listTickets(filters: {
         agency.code AS assigned_agency_code,
         reports.grouped_report_id,
         grouped.public_report_id AS grouped_public_report_id,
+        subject_tags.id AS subject_tag_id,
+        subject_tags.label AS subject_tag_label,
+        subject_tags.description AS subject_tag_description,
+        reports.started_work_at,
+        started_by.display_name AS started_work_by_name,
+        current_handler.display_name AS current_handler_name,
         reports.chat_enabled,
         reports.created_at
       FROM citizen.reports reports
       LEFT JOIN auth.users users ON users.id = reports.reporter_user_id
       LEFT JOIN auth.government_agencies agency ON agency.id = reports.assigned_agency_id
       LEFT JOIN citizen.reports grouped ON grouped.id = reports.grouped_report_id
+      LEFT JOIN citizen.report_subject_tags subject_tags ON subject_tags.id = reports.subject_tag_id
+      LEFT JOIN auth.users started_by ON started_by.id = reports.started_work_by_user_id
+      LEFT JOIN auth.users current_handler ON current_handler.id = reports.current_handler_user_id
       ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
       ORDER BY
         CASE reports.severity
@@ -191,12 +233,21 @@ export async function getTicketByPublicId(publicReportId: string) {
         agency.code AS assigned_agency_code,
         reports.grouped_report_id,
         grouped.public_report_id AS grouped_public_report_id,
+        subject_tags.id AS subject_tag_id,
+        subject_tags.label AS subject_tag_label,
+        subject_tags.description AS subject_tag_description,
+        reports.started_work_at,
+        started_by.display_name AS started_work_by_name,
+        current_handler.display_name AS current_handler_name,
         reports.chat_enabled,
         reports.created_at
       FROM citizen.reports reports
       LEFT JOIN auth.users users ON users.id = reports.reporter_user_id
       LEFT JOIN auth.government_agencies agency ON agency.id = reports.assigned_agency_id
       LEFT JOIN citizen.reports grouped ON grouped.id = reports.grouped_report_id
+      LEFT JOIN citizen.report_subject_tags subject_tags ON subject_tags.id = reports.subject_tag_id
+      LEFT JOIN auth.users started_by ON started_by.id = reports.started_work_by_user_id
+      LEFT JOIN auth.users current_handler ON current_handler.id = reports.current_handler_user_id
       WHERE reports.public_report_id = $1
       LIMIT 1
     `,
@@ -228,12 +279,21 @@ export async function listTicketsForReporter(userId: string) {
         agency.code AS assigned_agency_code,
         reports.grouped_report_id,
         grouped.public_report_id AS grouped_public_report_id,
+        subject_tags.id AS subject_tag_id,
+        subject_tags.label AS subject_tag_label,
+        subject_tags.description AS subject_tag_description,
+        reports.started_work_at,
+        started_by.display_name AS started_work_by_name,
+        current_handler.display_name AS current_handler_name,
         reports.chat_enabled,
         reports.created_at
       FROM citizen.reports reports
       LEFT JOIN auth.users users ON users.id = reports.reporter_user_id
       LEFT JOIN auth.government_agencies agency ON agency.id = reports.assigned_agency_id
       LEFT JOIN citizen.reports grouped ON grouped.id = reports.grouped_report_id
+      LEFT JOIN citizen.report_subject_tags subject_tags ON subject_tags.id = reports.subject_tag_id
+      LEFT JOIN auth.users started_by ON started_by.id = reports.started_work_by_user_id
+      LEFT JOIN auth.users current_handler ON current_handler.id = reports.current_handler_user_id
       WHERE reports.reporter_user_id = $1
       ORDER BY reports.created_at DESC
     `,
@@ -254,6 +314,7 @@ export async function createCitizenTicket(input: {
   crisisType: string;
   urgency: TicketUrgency;
   reportType?: string;
+  subjectTagId?: string | null;
   images?: Array<{
     originalFilename?: string | null;
     mimeType?: string | null;
@@ -287,9 +348,10 @@ export async function createCitizenTicket(input: {
           longitude,
           severity,
           status,
-          assigned_agency_id
+          assigned_agency_id,
+          subject_tag_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'submitted', $12)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'submitted', $12, $13)
         RETURNING id
       `,
       [
@@ -305,6 +367,7 @@ export async function createCitizenTicket(input: {
         input.longitude ?? null,
         input.urgency,
         agencyId,
+        input.subjectTagId ?? null,
       ],
     );
 
@@ -372,6 +435,133 @@ export async function updateTicketStatus(id: string, status: TicketStatus) {
     body: `Status changed to ${status}.`,
     visibility: 'internal',
     author: 'GOV-HANDLER-001',
+    authorType: 'government_user',
+  });
+  return getTicketByPublicId(id);
+}
+
+export async function listReportSubjectTags() {
+  const rows = await query<SubjectTagRow>(
+    `
+      SELECT
+        tags.id,
+        tags.label,
+        tags.description,
+        COALESCE(array_agg(categories.category ORDER BY categories.category) FILTER (WHERE categories.category IS NOT NULL), ARRAY[]::text[]) AS categories
+      FROM citizen.report_subject_tags tags
+      LEFT JOIN citizen.report_subject_tag_categories categories ON categories.subject_tag_id = tags.id
+      GROUP BY tags.id, tags.label, tags.description
+      ORDER BY tags.label ASC
+    `,
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    label: row.label,
+    description: row.description,
+    categories: row.categories ?? [],
+  }));
+}
+
+export async function createReportSubjectTag(input: {
+  label: string;
+  description?: string | null;
+  categories: string[];
+  createdByUserId?: string | null;
+}) {
+  const label = input.label.trim();
+  if (!label) return null;
+
+  const categories = [...new Set(input.categories.map((category) => category.trim().toLowerCase()).filter(Boolean))];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query<{ id: string }>(
+      `
+        INSERT INTO citizen.report_subject_tags (label, description, created_by_user_id)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (label)
+        DO UPDATE SET description = COALESCE(EXCLUDED.description, citizen.report_subject_tags.description), updated_at = now()
+        RETURNING id
+      `,
+      [label, input.description?.trim() || null, input.createdByUserId ?? null],
+    );
+    const subjectTagId = result.rows[0].id;
+
+    if (categories.length) {
+      await client.query(
+        `
+          INSERT INTO citizen.report_subject_tag_categories (subject_tag_id, category)
+          SELECT $1, unnest($2::text[])
+          ON CONFLICT (subject_tag_id, category) DO NOTHING
+        `,
+        [subjectTagId, categories],
+      );
+    }
+
+    await client.query('COMMIT');
+    const tags = await listReportSubjectTags();
+    return tags.find((tag) => tag.id === subjectTagId) ?? null;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function setTicketSubjectTag(id: string, subjectTagId: string | null, userId?: string | null) {
+  if (subjectTagId) {
+    const existing = await query<{ id: string }>(
+      `SELECT id FROM citizen.report_subject_tags WHERE id = $1 LIMIT 1`,
+      [subjectTagId],
+    );
+    if (!existing[0]) return null;
+  }
+
+  const rows = await query<{ id: string }>(
+    `
+      UPDATE citizen.reports
+      SET subject_tag_id = $2, updated_at = now()
+      WHERE public_report_id = $1
+      RETURNING id
+    `,
+    [id, subjectTagId],
+  );
+  if (!rows[0]) return null;
+
+  await addTicketComment(id, {
+    body: subjectTagId ? 'Subject grouping updated.' : 'Subject grouping removed.',
+    visibility: 'internal',
+    authorUserId: userId ?? null,
+    authorType: 'government_user',
+  });
+  return getTicketByPublicId(id);
+}
+
+export async function startTicketWork(id: string, userId?: string | null, userLabel?: string | null) {
+  const rows = await query<{ public_report_id: string }>(
+    `
+      UPDATE citizen.reports
+      SET
+        status = CASE
+          WHEN status = 'resolved'::citizen.report_status THEN status
+          ELSE 'in_progress'::citizen.report_status
+        END,
+        started_work_at = COALESCE(started_work_at, now()),
+        started_work_by_user_id = COALESCE(started_work_by_user_id, $2),
+        current_handler_user_id = $2,
+        updated_at = now()
+      WHERE public_report_id = $1
+      RETURNING public_report_id
+    `,
+    [id, userId ?? null],
+  );
+  if (!rows[0]) return null;
+
+  await addTicketComment(id, {
+    body: `Work started${userLabel ? ` by ${userLabel}` : ''}.`,
+    visibility: 'internal',
+    authorUserId: userId ?? null,
     authorType: 'government_user',
   });
   return getTicketByPublicId(id);
@@ -505,7 +695,7 @@ async function hydrateTickets(reports: ReportRow[]) {
   if (!reports.length) return [];
 
   const reportIds = reports.map((report) => report.id);
-  const [comments, images, pings, childGroups] = await Promise.all([
+  const [comments, images, pings, childGroups, subjectCategories, subjectPeers] = await Promise.all([
     query<CommentRow>(
       `
         SELECT
@@ -556,6 +746,29 @@ async function hydrateTickets(reports: ReportRow[]) {
       `,
       [reportIds],
     ),
+    query<{ subject_tag_id: string; category: string }>(
+      `
+        SELECT categories.subject_tag_id, categories.category
+        FROM citizen.report_subject_tag_categories categories
+        JOIN citizen.reports reports ON reports.subject_tag_id = categories.subject_tag_id
+        WHERE reports.id = ANY($1::uuid[])
+        ORDER BY categories.category ASC
+      `,
+      [reportIds],
+    ),
+    query<{ id: string; subject_tag_id: string | null; public_report_id: string }>(
+      `
+        SELECT id, subject_tag_id, public_report_id
+        FROM citizen.reports
+        WHERE subject_tag_id = ANY(
+          SELECT subject_tag_id
+          FROM citizen.reports
+          WHERE id = ANY($1::uuid[])
+            AND subject_tag_id IS NOT NULL
+        )
+      `,
+      [reportIds],
+    ),
   ]);
 
   return reports.map((report) => {
@@ -564,6 +777,9 @@ async function hydrateTickets(reports: ReportRow[]) {
       ...(report.grouped_public_report_id ? [report.grouped_public_report_id] : []),
       ...childGroups.filter((item) => item.grouped_report_id === report.id).map((item) => item.public_report_id),
       ...childGroups.filter((item) => item.id === report.grouped_report_id).map((item) => item.public_report_id),
+      ...subjectPeers
+        .filter((item) => item.subject_tag_id && item.subject_tag_id === report.subject_tag_id)
+        .map((item) => item.public_report_id),
     ].filter((ticketId, index, all) => ticketId !== report.public_report_id && all.indexOf(ticketId) === index);
 
     return {
@@ -599,6 +815,19 @@ async function hydrateTickets(reports: ReportRow[]) {
         createdAt: image.created_at,
       })),
       chatEnabled: report.chat_enabled,
+      subjectTag: report.subject_tag_id
+        ? {
+            id: report.subject_tag_id,
+            label: report.subject_tag_label ?? 'Subject',
+            description: report.subject_tag_description,
+            categories: subjectCategories
+              .filter((category) => category.subject_tag_id === report.subject_tag_id)
+              .map((category) => category.category),
+          }
+        : null,
+      startedWorkAt: report.started_work_at,
+      startedWorkBy: report.started_work_by_name,
+      currentHandler: report.current_handler_name,
     } satisfies Ticket;
   });
 }

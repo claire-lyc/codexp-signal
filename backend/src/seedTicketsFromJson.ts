@@ -12,6 +12,7 @@ type SeedTicket = {
   location: string;
   crisisType: string;
   reportType: string;
+  subjectTag?: string | null;
   status: 'open' | 'in-progress' | 'resolved' | 'grouped';
   assignedAgency: string;
   urgency: 'critical' | 'high' | 'medium' | 'low';
@@ -45,6 +46,7 @@ try {
 
   for (const ticket of data.tickets) {
     const agencyId = await upsertAgency(ticket.assignedAgency);
+    const subjectTagId = ticket.subjectTag ? await getSubjectTagId(ticket.subjectTag) : null;
     const result = await client.query<{ id: string }>(
       `
         INSERT INTO citizen.reports (
@@ -57,10 +59,11 @@ try {
           severity,
           status,
           assigned_agency_id,
+          subject_tag_id,
           created_at,
           updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
         RETURNING id
       `,
       [
@@ -73,6 +76,7 @@ try {
         ticket.urgency,
         toDbStatus(ticket.status),
         agencyId,
+        subjectTagId,
         ticket.timestamp,
       ],
     );
@@ -157,6 +161,14 @@ async function upsertAgency(code: string) {
     [code],
   );
   return result.rows[0].id;
+}
+
+async function getSubjectTagId(label: string) {
+  const result = await client.query<{ id: string }>(
+    `SELECT id FROM citizen.report_subject_tags WHERE label = $1 LIMIT 1`,
+    [label],
+  );
+  return result.rows[0]?.id ?? null;
 }
 
 function toDbStatus(status: SeedTicket['status']) {
