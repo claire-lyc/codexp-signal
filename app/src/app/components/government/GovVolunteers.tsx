@@ -5,7 +5,7 @@
 // POST /api/volunteers/assignments
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ChevronDown, Clock, Lock, MapPin, Plus, ShieldCheck, UserCheck, Users, X } from 'lucide-react';
-import { apiUrl } from '../../lib/api';
+import { API_REFRESH_INTERVAL_MS, apiUrl } from '../../lib/api';
 import { authHeaders } from '../../lib/auth';
 import {
   demoVolunteerProfiles,
@@ -134,6 +134,10 @@ function filledSlotsForRole(profiles: VolunteerProfile[], opportunityId: number,
   return activeAssignmentsForRole(profiles, opportunityId, role.id).length;
 }
 
+function volunteerIdentity(profile: VolunteerProfile | RemoteVolunteerProfile) {
+  return 'userId' in profile ? `${profile.userId}:${profile.id}` : profile.id;
+}
+
 export default function GovVolunteers() {
   const [currentAgency, setCurrentAgency] = useState(() => agencyFromStoredUser());
   const [citizenProfile, setCitizenProfile] = useState<VolunteerProfile | null>(null);
@@ -174,11 +178,13 @@ export default function GovVolunteers() {
     loadCitizenProfile();
     loadRemoteProfiles();
     const refreshNeeds = () => setCustomNeeds(readCustomNeeds());
+    const timer = window.setInterval(loadRemoteProfiles, API_REFRESH_INTERVAL_MS);
     window.addEventListener('storage', loadCitizenProfile);
     window.addEventListener('storage', refreshNeeds);
     window.addEventListener('signal-volunteer-updated', loadCitizenProfile);
     window.addEventListener('signal-volunteer-needs-updated', refreshNeeds);
     return () => {
+      window.clearInterval(timer);
       window.removeEventListener('storage', loadCitizenProfile);
       window.removeEventListener('storage', refreshNeeds);
       window.removeEventListener('signal-volunteer-updated', loadCitizenProfile);
@@ -194,7 +200,7 @@ export default function GovVolunteers() {
       ...(citizenProfile ? [citizenProfile] : []),
       ...demoProfiles,
     ].filter((profile) => {
-      const key = 'userId' in profile ? profile.userId : profile.id;
+      const key = volunteerIdentity(profile);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -239,7 +245,6 @@ export default function GovVolunteers() {
   const applicationQueue = useMemo(() => agencyOpportunities.flatMap((opportunity) => (
     rawApplicants
       .filter((profile) => profile.appliedOpportunityIds.includes(opportunity.id))
-      .filter((profile) => hasSkillOverlap(profile, opportunity))
       .filter((profile) => !profile.assignments.some((assignment) => assignment.opportunityId === opportunity.id && assignment.status === 'declined'))
       .map((profile) => ({
         profile,

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { apiUrl } from '../../lib/api';
+import { API_REFRESH_INTERVAL_MS } from '../../lib/api';
 import { authHeaders } from '../../lib/auth';
 import {
   clearVolunteerProfile,
@@ -39,6 +40,22 @@ type FormState = {
   emergencyContact: string;
 };
 
+type AccountProfileResponse = {
+  user: {
+    displayName: string | null;
+    email: string | null;
+  } | null;
+  preferences?: {
+    phoneNumber: string | null;
+    smsEnabled: boolean;
+    alertNotifications: boolean;
+    replyNotifications: boolean;
+    agencyPingNotifications: boolean;
+    volunteerNotifications: boolean;
+  };
+  volunteerProfile?: VolunteerProfile | null;
+};
+
 const emptyForm: FormState = {
   name: '',
   phone: '',
@@ -53,6 +70,7 @@ const emptyForm: FormState = {
 export default function PublicVolunteer() {
   const [authenticated, setAuthenticated] = useState(true);
   const [profile, setProfile] = useState<VolunteerProfile | null>(null);
+  const [accountProfile, setAccountProfile] = useState<AccountProfileResponse | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [showProfileForm, setShowProfileForm] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
@@ -65,21 +83,29 @@ export default function PublicVolunteer() {
   const [opportunities, setOpportunities] = useState<VolunteerOpportunity[]>(() => readVolunteerOpportunities());
   const [notifications, setNotifications] = useState<VolunteerNotification[]>(() => readVolunteerNotifications());
 
+  const loadRemoteVolunteerProfile = (quiet = false) =>
+    fetch(apiUrl('/api/volunteers/profile'), { headers: authHeaders() })
+      .then((response) => {
+        if (!response.ok) throw new Error('Volunteer profile unavailable');
+        return response.json() as Promise<{ item: { userId: string; profile: VolunteerProfile } | null }>;
+      })
+      .then((data) => {
+        if (!data.item?.profile) return;
+        const merged = normalizeVolunteerProfile(data.item.profile, accountProfile);
+        saveVolunteerProfile(merged);
+        hydrateProfile(merged);
+        if (!quiet && (merged.assignments.some((assignment) => assignment.status === 'offered'))) {
+          setMessage('A new volunteer offer is available for your review.');
+        }
+      });
+
   const hydrateProfile = (nextProfile: VolunteerProfile) => {
     setProfile(nextProfile);
-    setForm({
-      name: nextProfile.name,
-      phone: nextProfile.phone,
-      email: nextProfile.email,
-      region: nextProfile.region,
-      skills: nextProfile.skills,
-      availability: nextProfile.availability,
-      certifications: nextProfile.certifications,
-      emergencyContact: nextProfile.emergencyContact,
-    });
+    setForm(formFromProfile(nextProfile));
   };
 
   const saveVolunteerRemote = async (nextProfile: VolunteerProfile) => {
+    await syncAccountDetails(nextProfile, accountProfile);
     const response = await fetch(apiUrl('/api/volunteers/profile'), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -101,31 +127,58 @@ export default function PublicVolunteer() {
   };
 
   useEffect(() => {
-    const saved = readVolunteerProfile();
-    if (saved) {
-      hydrateProfile(saved);
-    } else {
-      const demoProfile = { ...demoCitizenVolunteerProfile, assignments: [...demoCitizenVolunteerProfile.assignments] };
-      saveVolunteerProfile(demoProfile);
-      hydrateProfile(demoProfile);
-      setMessage('Demo returning volunteer loaded. You can apply, review pending applications, and check upcoming shifts.');
-    }
-
-    fetch(apiUrl('/api/volunteers/profile'), { headers: authHeaders() })
+    fetch(apiUrl('/api/auth/profile'), { headers: authHeaders() })
       .then((response) => {
-        if (!response.ok) throw new Error('Volunteer profile unavailable');
-        return response.json() as Promise<{ item: { userId: string; profile: VolunteerProfile } | null }>;
+        if (!response.ok) throw new Error('Account profile unavailable');
+        return response.json() as Promise<AccountProfileResponse>;
       })
       .then((data) => {
-        if (data.item?.profile) {
-          saveVolunteerProfile(data.item.profile);
-          hydrateProfile(data.item.profile);
+        setAccountProfile(data);
+        const syncedVolunteer = normalizeVolunteerProfile(data.volunteerProfile ?? null, data);
+        if (syncedVolunteer) {
+          saveVolunteerProfile(syncedVolunteer);
+          hydrateProfile(syncedVolunteer);
+          return;
         }
+
+        const saved = readVolunteerProfile();
+        if (saved) {
+          const merged = normalizeVolunteerProfile(saved, data);
+          saveVolunteerProfile(merged);
+          hydrateProfile(merged);
+          return;
+        }
+
+        const seeded = normalizeVolunteerProfile(
+          { ...demoCitizenVolunteerProfile, assignments: [...demoCitizenVolunteerProfile.assignments] },
+          data,
+        );
+        saveVolunteerProfile(seeded);
+        hydrateProfile(seeded);
+        setMessage('Demo returning volunteer loaded. You can apply, review pending applications, and check upcoming shifts.');
       })
       .catch(() => {
-        // Keep local fallback profile if backend is unavailable.
+        const saved = readVolunteerProfile();
+        if (saved) {
+          hydrateProfile(saved);
+        } else {
+          const demoProfile = { ...demoCitizenVolunteerProfile, assignments: [...demoCitizenVolunteerProfile.assignments] };
+          saveVolunteerProfile(demoProfile);
+          hydrateProfile(demoProfile);
+          setMessage('Demo returning volunteer loaded. You can apply, review pending applications, and check upcoming shifts.');
+        }
       });
   }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      loadRemoteVolunteerProfile(true).catch(() => {
+        // Keep the latest local volunteer state when backend sync is temporarily unavailable.
+      });
+    }, API_REFRESH_INTERVAL_MS);
+
+    return () => window.clearInterval(timer);
+  }, [accountProfile]);
 
   useEffect(() => {
     const refreshProfile = () => {
@@ -202,7 +255,7 @@ export default function PublicVolunteer() {
       id: profile?.id ?? makeVolunteerId(),
       name: form.name.trim(),
       phone: form.phone.trim(),
-      email: form.email.trim(),
+      email: accountProfile?.user?.email?.trim() || form.email.trim(),
       region: form.region,
       skills: form.skills,
       availability: form.availability,
@@ -228,16 +281,11 @@ export default function PublicVolunteer() {
 
   const quickVerify = () => {
     if (!profile) return;
-    fetch(apiUrl('/api/volunteers/profile'), { headers: authHeaders() })
-      .then((response) => {
-        if (!response.ok) throw new Error('Volunteer profile unavailable');
-        return response.json() as Promise<{ item: { userId: string; profile: VolunteerProfile } | null }>;
-      })
-      .then((data) => {
-        if (data.item?.profile) {
-          saveVolunteerProfile(data.item.profile);
-          hydrateProfile(data.item.profile);
-          setMessage(data.item.profile.status === 'verified' ? 'Your profile has been approved and is ready for matching.' : 'Your profile is still under review.');
+    loadRemoteVolunteerProfile()
+      .then(() => {
+        const latest = readVolunteerProfile();
+        if (latest) {
+          setMessage(latest.status === 'verified' ? 'Your profile has been approved and is ready for matching.' : 'Your profile is still under review.');
           return;
         }
         setMessage('We could not find a synced volunteer profile yet.');
@@ -285,7 +333,7 @@ export default function PublicVolunteer() {
       ...profile,
       name: form.name.trim(),
       phone: form.phone.trim(),
-      email: form.email.trim(),
+      email: accountProfile?.user?.email?.trim() || form.email.trim(),
       region: form.region,
       skills: form.skills,
       availability: form.availability,
@@ -433,6 +481,47 @@ function formFromProfile(profile: VolunteerProfile): FormState {
     certifications: profile.certifications,
     emergencyContact: profile.emergencyContact,
   };
+}
+
+function normalizeVolunteerProfile(profile: VolunteerProfile | null, accountProfile: AccountProfileResponse | null) {
+  if (!profile) return null;
+  return {
+    ...profile,
+    name: accountProfile?.user?.displayName?.trim() || profile.name,
+    email: accountProfile?.user?.email?.trim() || profile.email,
+    phone: profile.phone || accountProfile?.preferences?.phoneNumber || '',
+  };
+}
+
+async function syncAccountDetails(profile: VolunteerProfile, accountProfile: AccountProfileResponse | null) {
+  const requests: Promise<Response>[] = [];
+  const displayName = profile.name.trim();
+  if (displayName && displayName !== (accountProfile?.user?.displayName ?? '')) {
+    requests.push(
+      fetch(apiUrl('/api/auth/profile/details'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ displayName }),
+      }),
+    );
+  }
+
+  if (accountProfile?.preferences?.smsEnabled && profile.phone.trim() && profile.phone.trim() !== (accountProfile.preferences.phoneNumber ?? '')) {
+    requests.push(
+      fetch(apiUrl('/api/auth/profile/preferences'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({
+          ...accountProfile.preferences,
+          phoneNumber: profile.phone.trim(),
+        }),
+      }),
+    );
+  }
+
+  if (requests.length) {
+    await Promise.all(requests);
+  }
 }
 
 function ProfileForm({

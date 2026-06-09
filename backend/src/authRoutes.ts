@@ -7,9 +7,11 @@ import {
   findActiveSessionByRefreshToken,
   getNotificationPreferences,
   revokeSession,
+  updateUserProfileDetails,
   updateNotificationPreferences,
   verifyPasswordUser,
 } from './authRepository.js';
+import { getVolunteerProfile, patchVolunteerProfile } from './volunteerRepository.js';
 import {
   authenticateJwt,
   issueTokenPair,
@@ -54,6 +56,10 @@ const preferencesSchema = z.object({
 }).refine((value) => !value.smsEnabled || /^\+?[0-9][0-9\s-]{6,20}$/.test(value.phoneNumber?.trim() ?? ''), {
   message: 'Enter a valid phone number',
   path: ['phoneNumber'],
+});
+
+const profileDetailsSchema = z.object({
+  displayName: z.string().trim().min(1).max(120),
 });
 
 export function createAuthRouter(): Router {
@@ -188,7 +194,31 @@ export function createAuthRouter(): Router {
       response.json({
         user: sanitizeUser(request.user),
         preferences: await getNotificationPreferences(request.user.id),
+        volunteerProfile: (await getVolunteerProfile(request.user.id))?.profile ?? null,
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/profile/details', authenticateJwt, async (request: AuthenticatedRequest, response, next) => {
+    const parsed = profileDetailsSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: 'Invalid profile payload', details: parsed.error.flatten().fieldErrors });
+      return;
+    }
+
+    try {
+      if (!request.user?.id) {
+        response.status(401).json({ error: 'Bearer token is required' });
+        return;
+      }
+      const user = await updateUserProfileDetails(request.user.id, parsed.data);
+      if (!user) {
+        response.status(404).json({ error: 'User not found' });
+        return;
+      }
+      response.json({ user: sanitizeUser(user) });
     } catch (error) {
       next(error);
     }
@@ -206,7 +236,11 @@ export function createAuthRouter(): Router {
         response.status(401).json({ error: 'Bearer token is required' });
         return;
       }
-      response.json({ preferences: await updateNotificationPreferences(request.user.id, parsed.data) });
+      const preferences = await updateNotificationPreferences(request.user.id, parsed.data);
+      if (preferences.smsEnabled && preferences.phoneNumber) {
+        await patchVolunteerProfile(request.user.id, { phone: preferences.phoneNumber });
+      }
+      response.json({ preferences });
     } catch (error) {
       next(error);
     }

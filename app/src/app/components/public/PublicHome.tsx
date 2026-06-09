@@ -1,10 +1,11 @@
 // GET /api/citizen/alerts
 // GET /api/heatmap?layer=crises&public=true
 import { AlertTriangle, MapPin, Activity, Shield, TrendingUp, Navigation } from 'lucide-react';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import SingaporeRegionMap, { type MapMarker } from '../SingaporeRegionMap';
-import { useApi } from '../../lib/api';
+import { apiUrl, useApi } from '../../lib/api';
+import { authHeaders } from '../../lib/auth';
 
 type PublicHomeData = {
   activeCrisisLabels: string[];
@@ -13,6 +14,36 @@ type PublicHomeData = {
   activeAlerts: Array<{ id: number; type: string; message: string; severity: string; region: string }>;
   nearbyResources: Array<{ name: string; type: string; distance: string; status: string }>;
   updates: Array<{ time: string; message: string }>;
+};
+
+type LiveCitizenAlert = {
+  id: number | string;
+  title: string;
+  message: string;
+  crisis_type: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  region: string | null;
+  status: 'active' | 'monitoring' | 'resolved';
+  created_at: string;
+};
+
+type HomeAlert = {
+  id: number | string;
+  type: string;
+  title?: string;
+  message: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  region: string;
+};
+
+type BroadcastAlert = {
+  id: string;
+  title: string;
+  message: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  target: string;
+  status: 'ongoing' | 'resolved';
+  time: string;
 };
 
 const publicStats: PublicHomeData['stats'] = [];
@@ -35,12 +66,20 @@ const regionCoordinates: Record<string, { latitude: number; longitude: number }>
 
 export default function PublicHome() {
   const { data: publicHome, loading, error } = useApi<PublicHomeData>('/api/citizen/home');
-  const { data: citizenAlerts } = useApi<{ items: Array<{ id: number | string; type: string; message: string; severity: string; region: string; time?: string }> }>('/api/citizen/alerts');
-  const activeAlerts = citizenAlerts?.items ?? publicHome?.activeAlerts ?? [];
+  const { data: citizenAlerts } = useApi<{ items: LiveCitizenAlert[] }>('/api/citizen/alerts');
+  const [broadcasts, setBroadcasts] = useState<BroadcastAlert[]>([]);
+  const liveAlerts = (citizenAlerts?.items ?? [])
+    .filter((alert) => alert.status !== 'resolved')
+    .map(mapLiveAlertToHomeAlert);
+  const liveBroadcasts = broadcasts
+    .filter((broadcast) => broadcast.status === 'ongoing')
+    .map(mapBroadcastToHomeAlert);
+  const activeAlerts = [...liveBroadcasts, ...liveAlerts];
+  const visibleAlerts = activeAlerts.length ? activeAlerts : (publicHome?.activeAlerts ?? []);
   const nearbyResources = publicHome?.nearbyResources ?? [];
   const updates = publicHome?.updates ?? [];
   const stats = publicHome?.stats ?? publicStats;
-  const mapMarkers = useMemo<MapMarker[]>(() => activeAlerts.map((alert) => {
+  const mapMarkers = useMemo<MapMarker[]>(() => visibleAlerts.map((alert) => {
     const regionName = Object.keys(regionCoordinates).find((region) => alert.region?.includes(region)) ?? 'Nationwide';
     const coordinates = regionCoordinates[regionName] ?? regionCoordinates.Nationwide;
     return {
@@ -48,11 +87,25 @@ export default function PublicHome() {
       name: alert.region || 'Nationwide',
       latitude: coordinates.latitude,
       longitude: coordinates.longitude,
-      value: alert.severity.toUpperCase(),
-      detail: alert.message,
-      severity: (alert.severity === 'high' || alert.severity === 'medium' || alert.severity === 'low') ? alert.severity : 'medium',
+      value: `${alert.type} - ${alert.severity.toUpperCase()}`,
+      detail: alert.title ? `${alert.title}. ${alert.message}` : alert.message,
+      severity: alert.severity === 'critical' || alert.severity === 'high'
+        ? 'high'
+        : alert.severity === 'medium'
+          ? 'medium'
+          : 'low',
     };
-  }), [activeAlerts]);
+  }), [visibleAlerts]);
+
+  useEffect(() => {
+    fetch(apiUrl('/api/citizen/broadcasts'), { headers: authHeaders() })
+      .then((response) => {
+        if (!response.ok) throw new Error('Broadcasts unavailable');
+        return response.json() as Promise<{ items: BroadcastAlert[] }>;
+      })
+      .then((data) => setBroadcasts(data.items))
+      .catch(() => setBroadcasts([]));
+  }, []);
 
   return (
     <div className="space-y-8">
@@ -117,18 +170,18 @@ export default function PublicHome() {
               Active Alerts
             </h2>
             <div className="space-y-3">
-              {activeAlerts.length === 0 && (
+              {visibleAlerts.length === 0 && (
                 <div className="rounded-lg border border-zinc-800 bg-zinc-800/60 p-4 text-sm text-zinc-500">
                   No active alerts right now. Check Alerts for current broadcasts and archived advisories.
                 </div>
               )}
-              {activeAlerts.map((alert) => (
+              {visibleAlerts.map((alert) => (
                 <div
                   key={alert.id}
-                  className={`p-4 rounded-lg border ${alert.severity === 'high' ? 'bg-red-950/30 border-red-800' : 'bg-yellow-950/30 border-yellow-800'}`}
+                  className={`p-4 rounded-lg border ${alert.severity === 'critical' || alert.severity === 'high' ? 'bg-red-950/30 border-red-800' : alert.severity === 'medium' ? 'bg-yellow-950/30 border-yellow-800' : 'bg-green-950/30 border-green-800'}`}
                 >
                   <div className="flex items-start gap-3">
-                    <AlertTriangle className={`w-5 h-5 mt-0.5 ${alert.severity === 'high' ? 'text-red-500' : 'text-yellow-500'}`} />
+                    <AlertTriangle className={`w-5 h-5 mt-0.5 ${alert.severity === 'critical' || alert.severity === 'high' ? 'text-red-500' : alert.severity === 'medium' ? 'text-yellow-500' : 'text-green-500'}`} />
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium">{alert.type}</span>
@@ -218,4 +271,33 @@ export default function PublicHome() {
       </div>
     </div>
   );
+}
+
+function mapLiveAlertToHomeAlert(alert: LiveCitizenAlert): HomeAlert {
+  return {
+    id: alert.id,
+    title: alert.title,
+    type: formatCrisisType(alert.crisis_type),
+    message: alert.message,
+    severity: alert.severity,
+    region: alert.region ?? 'Nationwide',
+  };
+}
+
+function formatCrisisType(value: string) {
+  return value
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function mapBroadcastToHomeAlert(broadcast: BroadcastAlert): HomeAlert {
+  return {
+    id: `broadcast-${broadcast.id}`,
+    title: broadcast.title,
+    type: 'Broadcast',
+    message: broadcast.message,
+    severity: broadcast.severity,
+    region: broadcast.target || 'Nationwide',
+  };
 }
