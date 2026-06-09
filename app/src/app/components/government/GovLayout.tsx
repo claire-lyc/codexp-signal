@@ -24,7 +24,7 @@ import {
   X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { apiUrl } from '../../lib/api';
+import { fetchWithAuth } from '../../lib/api';
 import { authHeaders, clearAuthTokens } from '../../lib/auth';
 
 type ProfileUser = {
@@ -87,7 +87,7 @@ export default function GovLayout() {
   });
 
   useEffect(() => {
-    fetch(apiUrl('/api/auth/me'), { headers: authHeaders() })
+    fetchWithAuth('/api/auth/me')
       .then((response) => {
         if (!response.ok) throw new Error('Profile API unavailable');
         return response.json() as Promise<{ user: ProfileUser | null }>;

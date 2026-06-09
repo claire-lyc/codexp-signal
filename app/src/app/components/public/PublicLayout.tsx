@@ -14,8 +14,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { apiUrl } from '../../lib/api';
-import { authHeaders } from '../../lib/auth';
+import { fetchWithAuth } from '../../lib/api';
 
 const navItems = [
   { path: '/public', label: 'Home', icon: Home },
@@ -223,16 +222,15 @@ type NotificationItem = {
 };
 
 async function loadCitizenNotifications(): Promise<NotificationItem[]> {
-  const response = await fetch(apiUrl('/api/notifications'), { headers: authHeaders() });
+  const response = await fetchWithAuth('/api/notifications');
   if (!response.ok) return [];
   const data = (await response.json()) as { items: NotificationItem[] };
   return data.items;
 }
 
 async function markNotificationRead(id: string) {
-  await fetch(apiUrl(`/api/notifications/${id}/read`), {
+  await fetchWithAuth(`/api/notifications/${id}/read`, {
     method: 'PATCH',
-    headers: authHeaders(),
   });
 }
 
