@@ -13,7 +13,7 @@ import {
   ThumbsUp,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { API_REFRESH_INTERVAL_MS, apiUrl } from '../../lib/api';
 
@@ -111,15 +111,17 @@ export default function PublicForum() {
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
+  const [composerOpen, setComposerOpen] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [status, setStatus] = useState<{ tone: 'success' | 'warning' | 'error'; message: string } | null>(null);
-  const [usingBackend, setUsingBackend] = useState(false);
+  const [, setUsingBackend] = useState(false);
   const [posting, setPosting] = useState(false);
   const [postCooldownUntil, setPostCooldownUntil] = useState(() => loadCooldownUntil());
   const [likedPostIds, setLikedPostIds] = useState<Set<string>>(() => loadLikedPostIds());
   const [dislikedPostIds, setDislikedPostIds] = useState<Set<string>>(() => loadDislikedPostIds());
   const [selectedImageOpen, setSelectedImageOpen] = useState(true);
   const [now, setNow] = useState(Date.now());
+  const communityUpdatesRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -128,6 +130,19 @@ export default function PublicForum() {
 
   useEffect(() => {
     setSelectedImageOpen(true);
+  }, [expandedPostId]);
+
+  useEffect(() => {
+    const clearSelectedPost = (event: MouseEvent) => {
+      if (!expandedPostId) return;
+      const target = event.target as Node;
+      if (communityUpdatesRef.current && !communityUpdatesRef.current.contains(target)) {
+        setExpandedPostId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', clearSelectedPost);
+    return () => document.removeEventListener('mousedown', clearSelectedPost);
   }, [expandedPostId]);
 
   useEffect(() => {
@@ -253,6 +268,7 @@ export default function PublicForum() {
       setPosts((current) => [data.item, ...current.filter((post) => post.id !== data.item.id)]);
       setExpandedPostId(data.item.id);
       setPostImages([]);
+      setComposerOpen(false);
       setUsingBackend(true);
       setStatus({
         tone: data.item.aiFlag ? 'warning' : 'success',
@@ -276,6 +292,7 @@ export default function PublicForum() {
       updateLocalPosts((current) => [optimisticPost, ...current], setPosts);
       setExpandedPostId(optimisticPost.id);
       setPostImages([]);
+      setComposerOpen(false);
       setStatus({
         tone: optimisticPost.aiFlag ? 'warning' : 'success',
         message: optimisticPost.aiFlag
@@ -386,26 +403,19 @@ export default function PublicForum() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="mb-2 text-3xl font-bold">Community Forum</h1>
-        <p className="text-zinc-400">Share updates, ask for help, reply, and flag suspicious posts</p>
-      </div>
-
-      <div className="rounded-xl border border-purple-900/50 bg-gradient-to-r from-purple-950/50 to-blue-950/50 p-6">
-        <div className="flex items-start gap-4">
-          <div className="rounded-lg bg-purple-900/50 p-3">
-            <Shield className="h-6 w-6 text-purple-400" />
-          </div>
-          <div className="flex-1">
-            <h3 className="mb-2 font-semibold">Content Moderation & Safety</h3>
-            <p className="text-sm text-zinc-300">
-              Posts with risky misinformation patterns are hidden behind a review warning. Official government accounts are marked with a verified badge.
-            </p>
-            <div className="mt-2 text-xs text-zinc-500">
-              Data mode: {usingBackend ? 'Connected to backend forum API' : 'Website-only local mode'}
-            </div>
-          </div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="mb-2 text-3xl font-bold">Community Forum</h1>
+          <p className="text-zinc-400">Share updates, ask for help, reply, and flag suspicious posts</p>
         </div>
+        <button
+          type="button"
+          onClick={() => setComposerOpen((open) => !open)}
+          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-700"
+        >
+          <Plus className="h-4 w-4" />
+          {composerOpen ? 'Close Compose' : 'Compose Post'}
+        </button>
       </div>
 
       {status && (
@@ -421,79 +431,93 @@ export default function PublicForum() {
         </div>
       )}
 
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
-          <MessageSquare className="h-5 w-5 text-blue-600" />
-          Create a Post
-        </h2>
-
-        <div className="grid gap-3 md:grid-cols-[1fr_180px]">
-          <input
-            value={author}
-            onChange={(event) => setAuthor(event.target.value)}
-            placeholder="Your name, optional"
-            className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
-          />
-          <select
-            value={category}
-            onChange={(event) => setCategory(event.target.value)}
-            className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
-          >
-            {categories.filter((item) => item !== 'All').map((item) => (
-              <option key={item} value={item}>{item}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="mt-4 space-y-4">
-          <textarea
-            value={newPost}
-            onChange={(event) => setNewPost(event.target.value)}
-            placeholder="Share an update or ask for help from your community..."
-            rows={4}
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600"
-          />
-
-          {postImages.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {postImages.map((image) => (
-                <div key={image.previewUrl} className="relative h-20 w-20 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800">
-                  <img src={image.previewUrl} alt={image.filename ?? 'Forum upload'} className="h-full w-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => setPostImages((current) => current.filter((item) => item.previewUrl !== image.previewUrl))}
-                    className="absolute right-1 top-1 rounded bg-zinc-950/80 px-1.5 py-0.5 text-xs text-zinc-200 hover:bg-red-950"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
+      {composerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="flex items-center gap-2 text-lg font-semibold">
+                <MessageSquare className="h-5 w-5 text-blue-600" />
+                Create a Post
+              </h2>
+              <button
+                type="button"
+                onClick={() => setComposerOpen(false)}
+                className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+                aria-label="Close compose post"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
-          )}
 
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-300 transition-colors hover:bg-zinc-700" title="Add photo">
-              <Plus className="h-5 w-5" />
-              <input type="file" accept="image/*" multiple className="hidden" onChange={(event) => void handleImageUpload(event.target.files)} />
-            </label>
-            <button
-              type="button"
-              onClick={handleSubmitPost}
-              disabled={posting || postCooldownSeconds > 0 || !newPost.trim()}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
-            >
-              <Send className="h-4 w-4" />
-              {posting
-                ? 'Posting...'
-                : postCooldownSeconds > 0
-                  ? `Wait ${postCooldownSeconds}s`
-                  : 'Post to Community'}
-            </button>
+            <div className="grid gap-3 md:grid-cols-[1fr_180px]">
+              <input
+                value={author}
+                onChange={(event) => setAuthor(event.target.value)}
+                placeholder="Your name, optional"
+                className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              />
+              <select
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+                className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              >
+                {categories.filter((item) => item !== 'All').map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <textarea
+                value={newPost}
+                onChange={(event) => setNewPost(event.target.value)}
+                placeholder="Share an update or ask for help from your community..."
+                rows={4}
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600"
+              />
+
+              {postImages.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {postImages.map((image) => (
+                    <div key={image.previewUrl} className="relative h-20 w-20 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800">
+                      <img src={image.previewUrl} alt={image.filename ?? 'Forum upload'} className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setPostImages((current) => current.filter((item) => item.previewUrl !== image.previewUrl))}
+                        className="absolute right-1 top-1 rounded bg-zinc-950/80 px-1.5 py-0.5 text-xs text-zinc-200 hover:bg-red-950"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-300 transition-colors hover:bg-zinc-700" title="Add photo">
+                  <Plus className="h-5 w-5" />
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={(event) => void handleImageUpload(event.target.files)} />
+                </label>
+                <button
+                  type="button"
+                  onClick={handleSubmitPost}
+                  disabled={posting || postCooldownSeconds > 0 || !newPost.trim()}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+                >
+                  <Send className="h-4 w-4" />
+                  {posting
+                    ? 'Posting...'
+                    : postCooldownSeconds > 0
+                      ? `Wait ${postCooldownSeconds}s`
+                      : 'Post to Community'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+      <div ref={communityUpdatesRef} className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">Community Updates</h2>
           <div className="relative min-w-[220px]">
@@ -738,6 +762,23 @@ export default function PublicForum() {
               </div>
             )}
           </aside>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-purple-900/50 bg-gradient-to-r from-purple-950/50 to-blue-950/50 p-6">
+        <div className="flex items-start gap-4">
+          <div className="rounded-lg bg-purple-900/50 p-3">
+            <Shield className="h-6 w-6 text-purple-400" />
+          </div>
+          <div className="flex-1">
+            <h3 className="mb-2 font-semibold">Content Moderation & Safety</h3>
+            <p className="text-sm text-zinc-300">
+              Posts with risky misinformation patterns are hidden behind a review warning. Official government accounts are marked with a verified badge.
+            </p>
+            <div className="mt-2 text-xs text-zinc-500">
+              Data mode: Connected to backend forum API
+            </div>
+          </div>
         </div>
       </div>
     </div>

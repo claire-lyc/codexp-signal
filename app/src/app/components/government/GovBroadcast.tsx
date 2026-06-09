@@ -274,54 +274,63 @@ export default function GovBroadcast() {
         {notice && <Notice color="red" text={notice} />}
 
         {composerOpen && (
-          <section className="rounded-xl border border-zinc-800 bg-zinc-900">
-            <div className="border-b border-zinc-800 px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Radio className="h-4 w-4 text-red-400" />
-                <h2 className="text-sm font-semibold">Compose Emergency Alert</h2>
-              </div>
-            </div>
-
-            <div className="space-y-4 p-4">
-              <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Enter alert title..." className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-600" />
-              <textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Compose your emergency message..." rows={4} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-600" />
-
-              <div className="grid grid-cols-4 gap-2">
-                {(['critical', 'high', 'medium', 'low'] as const).map((item) => (
-                  <button key={item} onClick={() => setSeverity(item)} className={`rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${severity === item ? `${severityStyles[item].banner} ${severityStyles[item].border} text-white` : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700'}`}>
-                    {item.charAt(0).toUpperCase() + item.slice(1)}
-                  </button>
-                ))}
-              </div>
-
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm font-medium text-zinc-200">
-                  <Globe className="h-4 w-4 text-red-400" />
-                  Citizen audience
-                </div>
-                <div className="mb-2 text-xs text-zinc-500">
-                  Leave area filters empty to send islandwide. Select specific Singapore areas to narrow the citizen alert zone.
-                </div>
-                <GroupedAreaPicker groups={singaporeAreaGroups} selected={regions} toggle={toggleRegion} />
-              </div>
-
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
-                <div className="mb-3 flex items-center gap-3">
-                  <AudienceToggle active={sendToAgencies} onClick={() => setSendToAgencies((value) => !value)} label="Also send to selected agencies" icon={Users} />
-                </div>
-                {sendToAgencies ? <Picker items={allAgencies} selected={selectedAgencies} toggle={toggleAgency} color="blue" /> : <div className="text-xs text-zinc-500">Agency recipients are optional and can be added alongside citizen alerts.</div>}
-              </div>
-
-              <div className="flex items-center gap-3 border-t border-zinc-800 pt-4">
-                <button onClick={handleBroadcast} disabled={!title || !message || !audienceSelected} className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50">
-                  <Send className="w-4 h-4" />
-                  Broadcast
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm">
+            <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="flex items-center gap-2 text-lg font-semibold">
+                  <Radio className="h-5 w-5 text-red-400" />
+                  Compose Emergency Alert
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setComposerOpen(false)}
+                  className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+                  aria-label="Close compose alert"
+                >
+                  <X className="h-4 w-4" />
                 </button>
               </div>
-            </div>
-          </section>
-        )}
 
+              <div className="space-y-4">
+                <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Enter alert title..." className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-600" />
+                <textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Compose your emergency message..." rows={4} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-red-600" />
+
+                <div className="grid grid-cols-4 gap-2">
+                  {(['critical', 'high', 'medium', 'low'] as const).map((item) => (
+                    <button key={item} onClick={() => setSeverity(item)} className={`rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${severity === item ? `${severityStyles[item].banner} ${severityStyles[item].border} text-white` : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700'}`}>
+                      {item.charAt(0).toUpperCase() + item.slice(1)}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
+                  <div className="mb-3 flex items-center gap-2 text-sm font-medium text-zinc-200">
+                    <Globe className="h-4 w-4 text-red-400" />
+                    Citizen audience
+                  </div>
+                  <div className="mb-2 text-xs text-zinc-500">
+                    Leave area filters empty to send islandwide. Select specific Singapore areas to narrow the citizen alert zone.
+                  </div>
+                  <GroupedAreaPicker groups={singaporeAreaGroups} selected={regions} toggle={toggleRegion} />
+                </div>
+
+                <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
+                  <div className="mb-3 flex items-center gap-3">
+                    <AudienceToggle active={sendToAgencies} onClick={() => setSendToAgencies((value) => !value)} label="Also send to selected agencies" icon={Users} />
+                  </div>
+                  {sendToAgencies ? <Picker items={allAgencies} selected={selectedAgencies} toggle={toggleAgency} color="blue" /> : <div className="text-xs text-zinc-500">Agency recipients are optional and can be added alongside citizen alerts.</div>}
+                </div>
+
+                <div className="flex items-center gap-3 border-t border-zinc-800 pt-4">
+                  <button onClick={handleBroadcast} disabled={!title || !message || !audienceSelected} className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50">
+                    <Send className="w-4 h-4" />
+                    Broadcast
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="flex gap-4 h-[calc(100vh-260px)] min-h-[620px]">
           <section className="w-80 flex-shrink-0 min-w-0 space-y-4">
             <div className="flex h-full flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
