@@ -6,14 +6,10 @@ import multer from 'multer';
 import { authenticateJwt, requireActor, type AuthenticatedRequest } from './authMiddleware.js';
 import { createAuthRouter } from './authRoutes.js';
 import {
-  banForumAuthor,
   createForumPost,
   createForumReply,
-  dislikeForumPost,
-  ForumAuthorBannedError,
   likeForumPost,
   listForumPosts,
-  moderateForumPost,
   reportForumPost,
 } from './forumRepository.js';
 import {
@@ -37,9 +33,12 @@ import {
 import { startExternalDashboardRefresh } from './externalDashboardRefresh.js';
 import {
   createBroadcast,
+  addBroadcastUpdate,
+  deleteBroadcast,
   listBroadcasts,
   resolveBroadcast,
   setBroadcastAction,
+  unresolveBroadcast,
   type BroadcastSeverity,
 } from './broadcastRepository.js';
 import {
@@ -52,12 +51,6 @@ import {
 } from './notificationRepository.js';
 import { detectPotentialMisinformation } from './misinformationDetector.js';
 import { detectTicketUrgency } from './severityDetector.js';
-import {
-  getVolunteerProfile,
-  listVolunteerProfiles,
-  patchVolunteerProfile,
-  upsertVolunteerProfile,
-} from './volunteerRepository.js';
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
@@ -84,7 +77,7 @@ const upload = multer({
 
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') ?? true }));
 app.use(helmet());
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json());
 app.use('/api/auth', createAuthRouter());
 
 app.get('/health', (_request, response) => {
@@ -124,32 +117,6 @@ app.get('/api/forum/posts', (_request, response) => {
   response.json({ items: listForumPosts() });
 });
 
-app.get('/api/forum/posts/moderation', ...requireGovUser, (_request, response) => {
-  response.json({ items: listForumPosts({ includeHidden: true }) });
-});
-
-app.post('/api/forum/posts/official', ...requireGovUser, async (request: AuthenticatedRequest, response, next) => {
-  const content = stringBody(request.body?.content);
-  if (!content) {
-    response.status(400).json({ error: 'Post content is required' });
-    return;
-  }
-
-  try {
-    const post = createForumPost({
-      author: request.user?.display_name ?? request.user?.username ?? 'Government Moderator',
-      content,
-      category: stringBody(request.body?.category),
-      verified: true,
-      moderationState: 'verified',
-      images: parseForumImages(request.body?.images),
-    });
-    response.status(201).json({ item: post });
-  } catch (error) {
-    next(error);
-  }
-});
-
 app.post('/api/forum/posts', async (request, response, next) => {
   const content = stringBody(request.body?.content);
   if (!content) {
@@ -177,30 +144,16 @@ app.post('/api/forum/posts', async (request, response, next) => {
       content,
       category: stringBody(request.body?.category),
       aiFlag,
-      images: parseForumImages(request.body?.images),
     });
     forumPostCooldowns.set(cooldownKey, Date.now() + forumPostCooldownMs);
     response.status(201).json({ item: post });
   } catch (error) {
-    if (error instanceof ForumAuthorBannedError) {
-      response.status(403).json({ error: error.message });
-      return;
-    }
     next(error);
   }
 });
 
 app.post('/api/forum/posts/:id/like', (request, response) => {
-  const post = likeForumPost(request.params.id, forumInteractionKey(request));
-  if (!post) {
-    response.status(404).json({ error: 'Forum post not found' });
-    return;
-  }
-  response.json({ item: post });
-});
-
-app.post('/api/forum/posts/:id/dislike', (request, response) => {
-  const post = dislikeForumPost(request.params.id, forumInteractionKey(request));
+  const post = likeForumPost(request.params.id);
   if (!post) {
     response.status(404).json({ error: 'Forum post not found' });
     return;
@@ -217,37 +170,6 @@ app.post('/api/forum/posts/:id/report', (request, response) => {
   response.json({ item: post });
 });
 
-app.post('/api/forum/posts/:id/moderation', ...requireGovUser, (request: AuthenticatedRequest, response) => {
-  const action = request.body?.action;
-  if (action !== 'verify' && action !== 'hide' && action !== 'review' && action !== 'misleading' && action !== 'resolve') {
-    response.status(400).json({ error: 'Valid moderation action is required' });
-    return;
-  }
-
-  const post = moderateForumPost(request.params.id, {
-    action,
-    moderator: request.user?.display_name ?? request.user?.username ?? 'Government Moderator',
-    note: stringBody(request.body?.note),
-  });
-  if (!post) {
-    response.status(404).json({ error: 'Forum post not found' });
-    return;
-  }
-  response.json({ item: post });
-});
-
-app.post('/api/forum/posts/:id/ban-author', ...requireGovUser, (request: AuthenticatedRequest, response) => {
-  const post = banForumAuthor(request.params.id, {
-    moderator: request.user?.display_name ?? request.user?.username ?? 'Government Moderator',
-    note: stringBody(request.body?.note),
-  });
-  if (!post) {
-    response.status(404).json({ error: 'Forum post not found' });
-    return;
-  }
-  response.json({ item: post, bannedAuthor: post.author });
-});
-
 app.post('/api/forum/posts/:id/replies', (request, response) => {
   const content = stringBody(request.body?.content);
   if (!content) {
@@ -255,173 +177,15 @@ app.post('/api/forum/posts/:id/replies', (request, response) => {
     return;
   }
 
-  try {
-    const post = createForumReply(request.params.id, {
-      author: stringBody(request.body?.author),
-      content,
-    });
-    if (!post) {
-      response.status(404).json({ error: 'Forum post not found' });
-      return;
-    }
-    response.status(201).json({ item: post });
-  } catch (error) {
-    if (error instanceof ForumAuthorBannedError) {
-      response.status(403).json({ error: error.message });
-      return;
-    }
-    throw error;
-  }
-});
-
-app.post('/api/forum/posts/:id/official-replies', ...requireGovUser, (request: AuthenticatedRequest, response) => {
-  const content = stringBody(request.body?.content);
-  if (!content) {
-    response.status(400).json({ error: 'Reply content is required' });
-    return;
-  }
-
   const post = createForumReply(request.params.id, {
-    author: request.user?.display_name ?? request.user?.username ?? 'Government Moderator',
+    author: stringBody(request.body?.author),
     content,
-    official: true,
   });
   if (!post) {
     response.status(404).json({ error: 'Forum post not found' });
     return;
   }
   response.status(201).json({ item: post });
-});
-
-app.get('/api/forum/posts/moderation', ...requireGovUser, (_request, response) => {
-  response.json({ items: listForumPosts() });
-});
-
-app.post('/api/forum/posts/official', ...requireGovUser, async (request: AuthenticatedRequest, response, next) => {
-  const content = stringBody(request.body?.content);
-  if (!content) {
-    response.status(400).json({ error: 'Post content is required' });
-    return;
-  }
-
-  try {
-    const post = createForumPost({
-      author: request.user?.display_name ?? request.user?.username ?? request.user?.email ?? 'Government Official',
-      content,
-      category: stringBody(request.body?.category),
-      verified: true,
-      moderationState: 'verified',
-    });
-    response.status(201).json({ item: post });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post('/api/forum/posts/:id/moderation', ...requireGovUser, (request: AuthenticatedRequest, response) => {
-  const action = request.body?.action === 'verify'
-    ? 'verify'
-    : request.body?.action === 'hide'
-      ? 'hide'
-      : request.body?.action === 'review'
-        ? 'review'
-        : null;
-
-  if (!action) {
-    response.status(400).json({ error: 'Valid moderation action is required' });
-    return;
-  }
-
-  const post = moderateForumPost(request.params.id, {
-    action,
-    moderator: request.user?.display_name ?? request.user?.username ?? request.user?.email ?? 'Government Moderator',
-  });
-  if (!post) {
-    response.status(404).json({ error: 'Forum post not found' });
-    return;
-  }
-  response.json({ item: post });
-});
-
-app.post('/api/forum/posts/:id/official-replies', ...requireGovUser, (request: AuthenticatedRequest, response) => {
-  const content = stringBody(request.body?.content);
-  if (!content) {
-    response.status(400).json({ error: 'Reply content is required' });
-    return;
-  }
-
-  const post = createForumReply(request.params.id, {
-    author: request.user?.display_name ?? request.user?.username ?? request.user?.email ?? 'Government Official',
-    content,
-    official: true,
-  });
-  if (!post) {
-    response.status(404).json({ error: 'Forum post not found' });
-    return;
-  }
-  response.status(201).json({ item: post });
-});
-
-app.get('/api/volunteers/profile', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
-  try {
-    if (!request.user?.id) {
-      response.status(401).json({ error: 'Bearer token is required' });
-      return;
-    }
-
-    const item = await getVolunteerProfile(request.user.id);
-    response.json({
-      item: item ? { userId: item.user_id, profile: item.profile } : null,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.put('/api/volunteers/profile', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
-  try {
-    if (!request.user?.id) {
-      response.status(401).json({ error: 'Bearer token is required' });
-      return;
-    }
-
-    const body = asObject(request.body);
-    const profile = {
-      ...body,
-      name: stringBody(body.name) ?? request.user.display_name ?? request.user.username ?? 'Citizen Volunteer',
-      email: stringBody(body.email) ?? request.user.email ?? '',
-    };
-    const item = await upsertVolunteerProfile(request.user.id, profile);
-    response.json({
-      item: item ? { userId: item.user_id, profile: item.profile } : null,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get('/api/gov/volunteers/profiles', ...requireGovUser, async (_request, response, next) => {
-  try {
-    const items = await listVolunteerProfiles();
-    response.json({
-      items: items.map((item) => ({ userId: item.user_id, profile: item.profile })),
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.patch('/api/gov/volunteers/profiles/:userId', ...requireGovUser, async (request, response, next) => {
-  try {
-    const item = await patchVolunteerProfile(request.params.userId, asObject(request.body));
-    if (!item) {
-      response.status(404).json({ error: 'Volunteer profile not found' });
-      return;
-    }
-    response.json({ item: { userId: item.user_id, profile: item.profile } });
-  } catch (error) {
-    next(error);
-  }
 });
 
 app.get('/api/tickets', ...requireGovUser, async (request, response, next) => {
@@ -737,6 +501,7 @@ app.post('/api/broadcasts', ...requireGovUser, async (request: AuthenticatedRequ
       message,
       severity,
       targetType: request.body?.targetType === 'regions' ? 'regions' : request.body?.targetType === 'agencies' ? 'agencies' : 'all_citizens',
+      targetAgencies: Array.isArray(request.body?.targetAgencies) ? request.body.targetAgencies.filter((item: unknown) => typeof item === 'string') : [],
       targetRegions: Array.isArray(request.body?.targetRegions) ? request.body.targetRegions.filter((item: unknown) => typeof item === 'string') : [],
       platforms: Array.isArray(request.body?.platforms) ? request.body.platforms.filter((item: unknown) => typeof item === 'string') : ['web'],
     });
@@ -760,9 +525,58 @@ app.patch('/api/broadcasts/:id/resolve', ...requireGovUser, async (request, resp
   }
 });
 
-app.get('/api/citizen/broadcasts', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
+app.patch('/api/broadcasts/:id/unresolve', ...requireGovUser, async (request, response, next) => {
   try {
-    response.json({ items: await listBroadcasts({ includeResolved: true, userId: request.user?.id }) });
+    const item = await unresolveBroadcast(request.params.id);
+    if (!item) {
+      response.status(404).json({ error: 'Broadcast not found' });
+      return;
+    }
+    response.json({ item });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete('/api/broadcasts/:id', ...requireGovUser, async (request, response, next) => {
+  try {
+    const deleted = await deleteBroadcast(request.params.id);
+    if (!deleted) {
+      response.status(404).json({ error: 'Broadcast not found' });
+      return;
+    }
+    response.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/broadcasts/:id/updates', ...requireGovUser, async (request: AuthenticatedRequest, response, next) => {
+  const body = stringBody(request.body?.body) ?? stringBody(request.body?.message);
+  if (!body) {
+    response.status(400).json({ error: 'Update body is required' });
+    return;
+  }
+
+  try {
+    const update = await addBroadcastUpdate({
+      broadcastId: request.params.id,
+      authorUserId: request.user?.id,
+      body,
+    });
+    if (!update) {
+      response.status(404).json({ error: 'Ongoing broadcast not found' });
+      return;
+    }
+    response.status(201).json({ item: update });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/citizen/broadcasts', async (_request, response, next) => {
+  try {
+    response.json({ items: await listBroadcasts({ includeResolved: true }) });
   } catch (error) {
     next(error);
   }
@@ -929,20 +743,6 @@ function parseImageMetadata(value: unknown) {
   }
 }
 
-function parseForumImages(value: unknown) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((item) => item && typeof item === 'object')
-    .map((item) => {
-      const record = item as Record<string, unknown>;
-      return {
-        filename: stringBody(record.filename),
-        mimeType: stringBody(record.mimeType),
-        previewUrl: stringBody(record.previewUrl),
-      };
-    });
-}
-
 function isTicketStatus(value: unknown): value is TicketStatus {
   return value === 'open' || value === 'in-progress' || value === 'resolved' || value === 'grouped';
 }
@@ -957,17 +757,13 @@ async function getSnapshotResponse(snapshotKey: string) {
 }
 
 function asObject(value: unknown) {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
 function forumCooldownKey(request: express.Request, author?: string) {
   const forwardedFor = stringParam(request.headers['x-forwarded-for']);
   const clientIp = forwardedFor?.split(',')[0]?.trim() || request.ip || request.socket.remoteAddress || 'unknown';
   return `${clientIp}:${(author ?? 'Anonymous User').trim().toLowerCase()}`;
-}
-
-function forumInteractionKey(request: express.Request) {
-  return forumCooldownKey(request, request.get('user-agent') ?? 'anonymous');
 }
 
 function forumCooldownRemaining(key: string) {

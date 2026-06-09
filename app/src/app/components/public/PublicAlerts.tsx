@@ -3,7 +3,6 @@ import { CheckCircle, AlertTriangle, Bell, Shield, ChevronRight } from 'lucide-r
 import { useEffect, useState } from 'react';
 import { useApi } from '../../lib/api';
 import { apiUrl } from '../../lib/api';
-import { authHeaders } from '../../lib/auth';
 
 type Incident = {
   id: string;
@@ -24,21 +23,79 @@ type BroadcastAlert = {
   target: string;
   status: 'ongoing' | 'resolved';
   time: string;
+  updates: { id: string; body: string; time: string; createdAt: string }[];
 };
 
-type CitizenAlert = {
-  id: string;
-  title: string;
-  message: string;
-  crisis_type: string;
-  severity: 'critical' | 'high' | 'medium' | 'low';
-  region: string | null;
-  status: 'active' | 'monitoring' | 'resolved';
-  created_at: string;
-  resolved_at: string | null;
-};
+const incidents: Incident[] = [
+  {
+    id: 'INC-0041',
+    title: 'Flash Flood Warning — Orchard Road & East Coast',
+    severity: 'critical',
+    type: 'Weather',
+    region: 'Central, East',
+    status: 'active',
+    verified: true,
+    updates: [
+      { time: 'Jun 5, 14:30 SGT', text: 'Update — Water levels rising at Orchard Road underpass. Avoid the area. Alternative routes advised.' },
+      { time: 'Jun 5, 14:10 SGT', text: 'Monitoring — Flash flood risk elevated. PUB drainage teams deployed.' },
+      { time: 'Jun 5, 13:55 SGT', text: 'Investigating — Heavy rainfall reported in multiple zones. Assessing flood risk.' },
+    ],
+  },
+  {
+    id: 'INC-0040',
+    title: 'Dengue Red Zone — Bedok North Ave 1',
+    severity: 'high',
+    type: 'Health',
+    region: 'East',
+    status: 'active',
+    verified: true,
+    updates: [
+      { time: 'Jun 5, 13:00 SGT', text: 'Update — 23 confirmed cases in cluster. NEA fogging operations underway.' },
+      { time: 'Jun 5, 10:30 SGT', text: 'Identified — New dengue red zone declared at Bedok North Ave 1.' },
+    ],
+  },
+  {
+    id: 'INC-0039',
+    title: 'Panadol Menstrual Shortage — Islandwide',
+    severity: 'medium',
+    type: 'Supply',
+    region: 'Nationwide',
+    status: 'monitoring',
+    verified: true,
+    updates: [
+      { time: 'Jun 5, 09:45 SGT', text: 'Update — Alternate suppliers contacted. Estimated restock within 4 days. Pharmacists advised to recommend paracetamol alternatives.' },
+      { time: 'Jun 5, 08:00 SGT', text: 'Identified — Islandwide shortage confirmed at 87 outlets. Enterprise SG coordinating response.' },
+    ],
+  },
+  {
+    id: 'INC-0038',
+    title: 'Air Quality Advisory — PSI at Unhealthy Levels',
+    severity: 'medium',
+    type: 'Weather',
+    region: 'Nationwide',
+    status: 'monitoring',
+    verified: true,
+    updates: [
+      { time: 'Jun 5, 06:30 SGT', text: 'Monitoring — PSI at 156 (Unhealthy). Vulnerable groups should avoid prolonged outdoor activity. Wear N95 masks if going out.' },
+    ],
+  },
+];
 
-type PastIncidentGroup = { date: string; items: { title: string; type: string; note: string }[] };
+const pastIncidents: { date: string; items: { title: string; type: string; note: string }[] }[] = [
+  {
+    date: 'Jun 4, 2026',
+    items: [
+      { title: 'MRT East-West Line Disruption', type: 'Infrastructure', note: 'Resolved — Service resumed at 6:45 PM.' },
+      { title: 'Covid-19 Cluster — Jurong West MRT', type: 'Health', note: 'Resolved — Cluster isolated. Enhanced cleaning completed.' },
+    ],
+  },
+  {
+    date: 'Jun 3, 2026',
+    items: [
+      { title: 'Haze Advisory lifted', type: 'Weather', note: 'Resolved — PSI returned to Good range.' },
+    ],
+  },
+];
 
 const severityConfig: Record<string, { banner: string; dot: string; badge: string; label: string }> = {
   critical: { banner: 'bg-red-950/60 border-red-700', dot: 'bg-red-500', badge: 'bg-red-900 text-red-400', label: 'CRITICAL' },
@@ -54,12 +111,9 @@ const statusConfig: Record<string, string> = {
 };
 
 export default function PublicAlerts() {
-  const { data, loading, error } = useApi<{ incidents: Incident[]; pastIncidents: PastIncidentGroup[] }>('/api/citizen/incidents');
-  const { data: liveAlertsData } = useApi<{ items: CitizenAlert[] }>('/api/citizen/alerts');
+  const { data, loading, error } = useApi<{ incidents: Incident[]; pastIncidents: typeof pastIncidents }>('/api/citizen/incidents');
   const [broadcasts, setBroadcasts] = useState<BroadcastAlert[]>([]);
-  const snapshotIncidents = data?.incidents ?? [];
-  const liveIncidents = (liveAlertsData?.items ?? []).map(mapAlertToIncident);
-  const incidents = liveIncidents.length > 0 ? liveIncidents : snapshotIncidents;
+  const incidents = data?.incidents ?? [];
   const pastIncidents = data?.pastIncidents ?? [];
   const [subscribed, setSubscribed] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -69,7 +123,7 @@ export default function PublicAlerts() {
   const resolvedBroadcasts = broadcasts.filter((item) => item.status === 'resolved');
 
   useEffect(() => {
-    fetch(apiUrl('/api/citizen/broadcasts'), { headers: authHeaders() })
+    fetch(apiUrl('/api/citizen/broadcasts'))
       .then((response) => {
         if (!response.ok) throw new Error('Broadcasts unavailable');
         return response.json() as Promise<{ items: BroadcastAlert[] }>;
@@ -120,6 +174,16 @@ export default function PublicAlerts() {
                     <span className="text-xs text-zinc-500">{broadcast.time}</span>
                   </div>
                   <p className="text-sm text-zinc-300">{broadcast.message}</p>
+                  {Boolean(broadcast.updates?.length) && (
+                    <div className="mt-4 space-y-2 border-l border-white/15 pl-3">
+                      {broadcast.updates.map((update) => (
+                        <div key={update.id}>
+                          <div className="text-xs text-zinc-500">{update.time}</div>
+                          <p className="text-sm text-zinc-300">{update.body}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                     <span>{broadcast.target}</span>
                     <span>Government Verified</span>
@@ -142,11 +206,6 @@ export default function PublicAlerts() {
         </div>
 
         <div className="space-y-3">
-          {incidents.length === 0 && (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
-              No current incidents. Historical advisories are listed below.
-            </div>
-          )}
           {incidents.map((incident) => {
             const cfg = severityConfig[incident.severity];
             const isExpanded = expandedId === incident.id;
@@ -225,6 +284,15 @@ export default function PublicAlerts() {
                       <span className="text-xs px-2 py-0.5 bg-green-900/50 text-green-400 rounded">Resolved</span>
                     </div>
                     <div className="text-xs text-zinc-500">{broadcast.target} - {broadcast.message}</div>
+                    {Boolean(broadcast.updates?.length) && (
+                      <div className="mt-2 space-y-1 border-l border-zinc-700 pl-3">
+                        {broadcast.updates.map((update) => (
+                          <div key={update.id} className="text-xs text-zinc-500">
+                            {update.time} - {update.body}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -260,42 +328,4 @@ export default function PublicAlerts() {
       </div>
     </div>
   );
-}
-
-function mapAlertToIncident(alert: CitizenAlert): Incident {
-  return {
-    id: alert.id,
-    title: alert.title,
-    severity: alert.severity,
-    type: formatCrisisType(alert.crisis_type),
-    region: alert.region ?? 'Nationwide',
-    status: alert.status,
-    verified: true,
-    updates: [
-      {
-        time: formatAlertTime(alert.created_at),
-        text: alert.message,
-      },
-    ],
-  };
-}
-
-function formatCrisisType(value: string) {
-  return value
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-function formatAlertTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('en-SG', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'Asia/Singapore',
-  }).format(date).replace(',', '') + ' SGT';
 }

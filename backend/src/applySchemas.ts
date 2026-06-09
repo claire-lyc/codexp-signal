@@ -13,6 +13,7 @@ const schemaFiles = [
   '005_ticket_chat.sql',
   '006_user_preferences.sql',
   '007_volunteers.sql',
+  '008_broadcast_updates.sql',
 ];
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
