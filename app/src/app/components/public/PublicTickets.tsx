@@ -62,10 +62,6 @@ type TicketRecord = {
   comments?: TicketComment[];
   images?: TicketImage[];
   chatEnabled?: boolean;
-  subjectTag?: SubjectTag | null;
-  startedWorkAt?: string | null;
-  startedWorkBy?: string | null;
-  currentHandler?: string | null;
 };
 
 type AuthUser = {
@@ -82,13 +78,6 @@ type FieldErrors = {
   location?: string;
   image?: string;
   auth?: string;
-};
-
-type SubjectTag = {
-  id: string;
-  label: string;
-  description: string | null;
-  categories: string[];
 };
 
 const ticketTags = [
@@ -109,9 +98,7 @@ export default function PublicTickets() {
   const [loginError, setLoginError] = useState('');
   const [loginBusy, setLoginBusy] = useState(false);
 
-  const [reportTypes, setReportTypes] = useState<string[]>([]);
-  const [subjectTags, setSubjectTags] = useState<SubjectTag[]>([]);
-  const [selectedSubjectTagId, setSelectedSubjectTagId] = useState<string | null>(null);
+  const [reportType, setReportType] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
   const [latitude, setLatitude] = useState<number | null>(null);
@@ -127,28 +114,15 @@ export default function PublicTickets() {
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [submitMessage, setSubmitMessage] = useState('');
   const [showAllTags, setShowAllTags] = useState(false);
-  const [reportComposerOpen, setReportComposerOpen] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [reportComposerOpen, setReportComposerOpen] = useState(false);
+
   const visibleTags = showAllTags ? ticketTags : ticketTags.slice(0, 5);
-  const matchingSubjectTags = useMemo(() => {
-    if (!reportTypes.length) return [];
-    return subjectTags.filter((tag) => reportTypes.every((reportType) => tag.categories.includes(reportType)));
-  }, [reportTypes, subjectTags]);
   const imagePreviews = useMemo(() => files.map((file) => ({ file, url: URL.createObjectURL(file) })), [files]);
 
   useEffect(() => {
     fetchMe();
-    fetch(apiUrl('/api/report-subject-tags'), { headers: authHeaders() })
-      .then((response) => response.ok ? response.json() as Promise<{ items: SubjectTag[] }> : Promise.reject())
-      .then((data) => setSubjectTags(data.items))
-      .catch(() => setSubjectTags(defaultSubjectTags));
   }, []);
-
-  useEffect(() => {
-    if (selectedSubjectTagId && !matchingSubjectTags.some((tag) => tag.id === selectedSubjectTagId)) {
-      setSelectedSubjectTagId(null);
-    }
-  }, [matchingSubjectTags, selectedSubjectTagId]);
 
   useEffect(() => {
     if (!authUser) return;
@@ -277,6 +251,7 @@ export default function PublicTickets() {
   const validate = () => {
     const nextErrors: FieldErrors = {};
     if (!authUser) nextErrors.auth = 'Sign in before submitting a report.';
+    if (!reportType) nextErrors.reportType = 'Choose a tag.';
     if (!description.trim()) nextErrors.description = 'Describe what happened.';
     if (files.some((file) => file.size > 5 * 1024 * 1024)) nextErrors.image = 'Each image must be 5 MB or smaller.';
     setFieldErrors(nextErrors);
@@ -293,10 +268,8 @@ export default function PublicTickets() {
     }
 
     const formData = new FormData();
-    const primaryReportType = reportTypes[0] ?? 'general';
-    formData.append('reportType', primaryReportType);
-    formData.append('crisisType', primaryReportType);
-    if (selectedSubjectTagId && !selectedSubjectTagId.startsWith('default-')) formData.append('subjectTagId', selectedSubjectTagId);
+    formData.append('reportType', reportType);
+    formData.append('crisisType', reportType);
     formData.append('description', description.trim());
     formData.append('locationText', location.trim());
     if (latitude !== null) formData.append('latitude', String(latitude));
@@ -312,33 +285,25 @@ export default function PublicTickets() {
       });
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
       const data = (await response.json()) as CreatedTicket;
-      const item = data.item ?? ticketFromCreated(data, { reportType: primaryReportType, subjectTag: selectedSubjectTag(), description, location, hasImage: files.length > 0 });
+      const item = data.item ?? ticketFromCreated(data, { reportType, description, location, hasImage: files.length > 0 });
       setCreatedTicket(data);
       setTickets((current) => [item, ...current.filter((ticket) => ticket.id !== item.id)]);
       setSelectedTicket(item);
-      setReportComposerOpen(false);
       setDescription('');
       setLocation('');
       setLatitude(null);
       setLongitude(null);
       setFiles([]);
-      setSelectedSubjectTagId(null);
       setFieldErrors({});
       setSubmitState('success');
       setSubmitMessage(`Report ${data.publicReportId} submitted and sent to ${data.assignedAgency}.`);
+      setReportComposerOpen(false);
       loadMyTickets(true);
     } catch {
       setSubmitState('error');
       setSubmitMessage('Upload failed. Try again.');
     }
   };
-
-  const toggleReportType = (value: string) => {
-    setReportTypes((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
-    setFieldErrors((current) => ({ ...current, reportType: undefined }));
-  };
-
-  const selectedSubjectTag = () => subjectTags.find((tag) => tag.id === selectedSubjectTagId) ?? null;
 
   const handleTrack = async () => {
     const normalizedId = trackId.trim().toUpperCase();
@@ -390,6 +355,7 @@ export default function PublicTickets() {
     return (
       <div className="mx-auto max-w-xl space-y-6">
         <EmergencyBanner />
+        <ReportGuidanceCard />
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
           <div className="mb-5 flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-950 text-blue-300">
@@ -433,91 +399,50 @@ export default function PublicTickets() {
   return (
     <div className="space-y-6">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-bold">My Reports</h1>
-            <p className="text-zinc-400">Track submitted reports, open any case for follow-up messages, and file a new report when needed.</p>
+            <h1 className="text-3xl font-bold">Report an Issue</h1>
+            <p className="text-zinc-400">Send non-emergency reports and receive follow-up updates from the relevant agency</p>
           </div>
           <button
             type="button"
-            onClick={() => setReportComposerOpen((open) => !open)}
-            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${reportComposerOpen ? 'bg-zinc-800 text-zinc-100 hover:bg-zinc-700' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+            onClick={() => setReportComposerOpen(true)}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-700"
           >
-            {reportComposerOpen ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-            {reportComposerOpen ? 'Close report form' : 'Submit a report'}
+            <Plus className="h-4 w-4" />
+            Submit a Report
           </button>
         </div>
         <EmergencyBanner />
+        <ReportGuidanceCard />
       </div>
 
-      <div className="mx-auto max-w-7xl space-y-4">
-        {reportComposerOpen && (
-          <section className="rounded-xl border border-zinc-800 bg-zinc-900">
+      <div className="mx-auto grid max-w-7xl gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.85fr)]">
+        <section className="min-w-0 space-y-4">
+          {reportComposerOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-900 shadow-2xl">
             <div className="border-b border-zinc-800 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <Ticket className="h-5 w-5 text-blue-400" />
                   <h2 className="font-semibold">Submit a Report</h2>
                 </div>
-                <div className="text-xs text-zinc-500">{authUser.username ?? authUser.email}</div>
+                <div className="flex items-center gap-3">
+                  <div className="text-xs text-zinc-500">{authUser.username ?? authUser.email}</div>
+                  <button
+                    type="button"
+                    onClick={() => setReportComposerOpen(false)}
+                    className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+                    aria-label="Close submit report"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
 
             <div className="space-y-4 p-4">
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Tag className="h-4 w-4 text-zinc-400" />
-                  {visibleTags.map((item) => (
-                    <button
-                      key={item.value}
-                      type="button"
-                      onClick={() => toggleReportType(item.value)}
-                      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
-                        reportTypes.includes(item.value)
-                          ? 'border-blue-500 bg-blue-600/20 text-blue-200'
-                          : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-zinc-600'
-                      }`}
-                    >
-                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-700 text-[10px]">{item.icon}</span>
-                      {item.label}
-                    </button>
-                  ))}
-                  {!showAllTags && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllTags(true)}
-                      className="inline-flex items-center gap-1 rounded-full bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-700"
-                    >
-                      +{ticketTags.length - visibleTags.length}
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-                <div className="text-xs text-zinc-500">Select crisis tags to narrow the optional subject tags.</div>
-              </div>
-
-              {matchingSubjectTags.length > 0 && (
-                <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
-                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Subject tags</div>
-                  <div className="flex flex-wrap gap-2">
-                    {matchingSubjectTags.map((tag) => (
-                      <button
-                        key={tag.id}
-                        type="button"
-                        onClick={() => setSelectedSubjectTagId((current) => current === tag.id ? null : tag.id)}
-                        className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                          selectedSubjectTagId === tag.id
-                            ? 'border-blue-500 bg-blue-600/20 text-blue-200'
-                            : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-zinc-600'
-                        }`}
-                      >
-                        {tag.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               <textarea
                 value={description}
                 onChange={(event) => {
@@ -529,6 +454,39 @@ export default function PublicTickets() {
                 className={inputClass(Boolean(fieldErrors.description), 'min-h-32 resize-y')}
               />
               {fieldErrors.description && <ErrorLine text={fieldErrors.description} />}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Tag className="h-4 w-4 text-zinc-400" />
+                {visibleTags.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => {
+                      setReportType(item.value);
+                      setFieldErrors((current) => ({ ...current, reportType: undefined }));
+                    }}
+                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                      reportType === item.value
+                        ? 'border-blue-500 bg-blue-600/20 text-blue-200'
+                        : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-zinc-600'
+                    }`}
+                  >
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-700 text-[10px]">{item.icon}</span>
+                    {item.label}
+                  </button>
+                ))}
+                {!showAllTags && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllTags(true)}
+                    className="inline-flex items-center gap-1 rounded-full bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-700"
+                  >
+                    +{ticketTags.length - visibleTags.length}
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              {fieldErrors.reportType && <ErrorLine text={fieldErrors.reportType} />}
 
               <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
                 <div>
@@ -603,52 +561,40 @@ export default function PublicTickets() {
                 )}
               </div>
             </div>
-          </section>
-        )}
+          </div>
+          </div>
+          )}
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(360px,0.85fr)_minmax(0,1.15fr)]">
-        <section className="min-w-0 space-y-4">
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="font-semibold">My Reports</h2>
-                <p className="mt-1 text-sm text-zinc-500">Track submitted reports and open any case for follow-up messages.</p>
-              </div>
-              <div className="flex gap-2">
-                <input
-                  value={trackId}
-                  onChange={(event) => setTrackId(event.target.value)}
-                  placeholder="Find report, e.g. TKT-0042"
-                  className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
-                />
-                <button onClick={handleTrack} className="rounded-lg bg-zinc-800 px-3 py-2 hover:bg-zinc-700">
-                  <Search className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
+          <div className="flex gap-2">
+            <input
+              value={trackId}
+              onChange={(event) => setTrackId(event.target.value)}
+              placeholder="Find report, e.g. TKT-0042"
+              className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+            />
+            <button onClick={handleTrack} className="rounded-lg bg-zinc-800 px-3 py-2 hover:bg-zinc-700">
+              <Search className="h-4 w-4" />
+            </button>
+          </div>
 
-            <div className="space-y-3">
-              {(tickets.length ? tickets : createdTicket?.item ? [createdTicket.item] : []).map((ticket) => (
-                <TicketCard key={ticket.id} ticket={ticket} selected={selectedTicket?.id === ticket.id} onClick={() => openTicket(ticket)} />
-              ))}
-              {ticketsLoading && (
-                <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-5 text-sm text-zinc-500">
-                  Loading your reports...
-                </div>
-              )}
-              {!ticketsLoading && !tickets.length && !createdTicket?.item && (
-                <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-5 text-sm text-zinc-500">
-                  Your submitted or tracked reports will appear here.
-                </div>
-              )}
-            </div>
+          <div className="space-y-3">
+            {(tickets.length ? tickets : createdTicket?.item ? [createdTicket.item] : []).map((ticket) => (
+              <TicketCard key={ticket.id} ticket={ticket} selected={selectedTicket?.id === ticket.id} onClick={() => openTicket(ticket)} />
+            ))}
+            {ticketsLoading && (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
+                Loading your reports...
+              </div>
+            )}
+            {!ticketsLoading && !tickets.length && !createdTicket?.item && (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
+                Your submitted or tracked reports will appear here.
+              </div>
+            )}
           </div>
         </section>
 
-        <aside className="space-y-4">
-          <DiscussionPanel ticket={selectedTicket} reply={reply} setReply={setReply} sendReply={sendReply} />
-        </aside>
-        </div>
+        <DiscussionPanel ticket={selectedTicket} reply={reply} setReply={setReply} sendReply={sendReply} />
       </div>
     </div>
   );
@@ -685,6 +631,19 @@ function EmergencyBanner() {
   );
 }
 
+function ReportGuidanceCard() {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-blue-800/50 bg-blue-950/20 px-4 py-3 text-sm text-zinc-300">
+        Use this page to report issues, upload photos, and follow agency updates in one place.
+      </div>
+      <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-xs text-zinc-400">
+        False reports may delay response to real incidents.
+      </div>
+    </div>
+  );
+}
+
 function TicketCard({ ticket, selected, onClick }: { ticket: TicketRecord; selected: boolean; onClick: () => void }) {
   const resolved = isResolved(ticket);
   return (
@@ -695,7 +654,6 @@ function TicketCard({ ticket, selected, onClick }: { ticket: TicketRecord; selec
     >
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Badge icon={<Tag className="h-3.5 w-3.5" />} text={ticket.crisisType} blue={selected && !resolved} green={selected && resolved} />
-        {ticket.subjectTag && <Badge icon={<Tag className="h-3.5 w-3.5" />} text={ticket.subjectTag.label} blue={selected && !resolved} green={selected && resolved} />}
         <Badge icon={<Shield className="h-3.5 w-3.5" />} text={ticket.assignedAgency} />
         {ticket.hasImage && <Badge icon={<ImageIcon className="h-3.5 w-3.5" />} text="Photo" />}
         <span className="ml-auto font-mono text-xs text-zinc-500">{ticket.id}</span>
@@ -750,7 +708,6 @@ function DiscussionPanel({
         <div>
           <div className="mb-2 flex flex-wrap gap-2">
             <Badge icon={<Tag className="h-3.5 w-3.5" />} text={ticket.crisisType} blue={!resolved} green={resolved} />
-            {ticket.subjectTag && <Badge icon={<Tag className="h-3.5 w-3.5" />} text={ticket.subjectTag.label} blue={!resolved} green={resolved} />}
             <Badge icon={<MapPin className="h-3.5 w-3.5" />} text={ticket.location} />
             {ticket.hasImage && <Badge icon={<ImageIcon className="h-3.5 w-3.5" />} text={`${ticket.images?.length || 1} photo`} />}
           </div>
@@ -871,7 +828,7 @@ function inputClass(error: boolean, extra = '') {
   return `w-full rounded-lg border bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 ${error ? 'border-red-700 focus:ring-red-600' : 'border-zinc-700 focus:ring-blue-600'} ${extra}`;
 }
 
-function ticketFromCreated(data: CreatedTicket, input: { reportType: string; subjectTag: SubjectTag | null; description: string; location: string; hasImage: boolean }): TicketRecord {
+function ticketFromCreated(data: CreatedTicket, input: { reportType: string; description: string; location: string; hasImage: boolean }): TicketRecord {
   return {
     id: data.publicReportId,
     reporter: 'You',
@@ -885,24 +842,8 @@ function ticketFromCreated(data: CreatedTicket, input: { reportType: string; sub
     comments: [],
     images: [],
     chatEnabled: true,
-    subjectTag: input.subjectTag,
   };
 }
-
-const defaultSubjectTags: SubjectTag[] = [
-  { id: 'default-covid-19', label: 'Covid-19', description: null, categories: ['health'] },
-  { id: 'default-hospital-crowding', label: 'Hospital crowding', description: null, categories: ['health'] },
-  { id: 'default-dengue-symptoms', label: 'Dengue symptoms', description: null, categories: ['health', 'environment'] },
-  { id: 'default-orchard-road-flooding', label: 'Orchard Road flooding', description: null, categories: ['flood', 'transport', 'infrastructure'] },
-  { id: 'default-mrt-disruption', label: 'MRT disruption', description: null, categories: ['transport', 'infrastructure'] },
-  { id: 'default-medicine-shortage', label: 'Medicine shortage', description: null, categories: ['supply', 'health'] },
-  { id: 'default-flash-flood', label: 'Flash flood', description: null, categories: ['flood', 'weather'] },
-  { id: 'default-road-obstruction', label: 'Road obstruction', description: null, categories: ['transport', 'infrastructure'] },
-  { id: 'default-haze', label: 'Haze', description: null, categories: ['environment', 'health'] },
-  { id: 'default-power-outage', label: 'Power outage', description: null, categories: ['infrastructure'] },
-  { id: 'default-fire-smoke', label: 'Fire/smoke', description: null, categories: ['infrastructure', 'environment'] },
-  { id: 'default-public-safety', label: 'Public safety', description: null, categories: ['other', 'infrastructure'] },
-];
 
 function groupMessages(ticket: TicketRecord): MessageGroupData[] {
   const messages: MessageGroupData[] = [
