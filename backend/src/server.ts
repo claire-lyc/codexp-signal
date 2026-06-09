@@ -38,6 +38,14 @@ import {
   setBroadcastAction,
   type BroadcastSeverity,
 } from './broadcastRepository.js';
+import {
+  enqueueAgencyPingNotifications,
+  enqueueBroadcastNotifications,
+  enqueueCitizenReplyNotifications,
+  enqueueGovernmentReplyNotification,
+  listUserNotifications,
+  markUserNotificationRead,
+} from './notificationRepository.js';
 import { detectPotentialMisinformation } from './misinformationDetector.js';
 import { detectTicketUrgency } from './severityDetector.js';
 
@@ -71,6 +79,35 @@ app.use('/api/auth', createAuthRouter());
 
 app.get('/health', (_request, response) => {
   response.json({ ok: true });
+});
+
+app.get('/api/notifications', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
+  try {
+    if (!request.user?.id) {
+      response.status(401).json({ error: 'Bearer token is required' });
+      return;
+    }
+    response.json({ items: await listUserNotifications(request.user.id, { unreadOnly: true }) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch('/api/notifications/:id/read', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
+  try {
+    if (!request.user?.id) {
+      response.status(401).json({ error: 'Bearer token is required' });
+      return;
+    }
+    const item = await markUserNotificationRead(request.user.id, request.params.id);
+    if (!item) {
+      response.status(404).json({ error: 'Notification not found' });
+      return;
+    }
+    response.json({ item });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get('/api/forum/posts', (_request, response) => {
@@ -288,6 +325,11 @@ app.post('/api/citizen/reports/:publicReportId/comments', authenticateJwt as exp
       response.status(404).json({ error: 'Report not found' });
       return;
     }
+    if (request.user?.actor_type === 'government_user') {
+      await enqueueGovernmentReplyNotification(request.params.publicReportId, body);
+    } else {
+      await enqueueCitizenReplyNotifications(request.params.publicReportId, body);
+    }
     response.status(201).json({ item: ticket });
   } catch (error) {
     if (error instanceof TicketChatClosedError) {
@@ -354,6 +396,9 @@ app.post('/api/tickets/:id/comments', ...requireGovUser, async (request: Authent
       response.status(404).json({ error: 'Ticket not found' });
       return;
     }
+    if (visibility === 'public') {
+      await enqueueGovernmentReplyNotification(request.params.id, body);
+    }
     response.status(201).json({ item: ticket });
   } catch (error) {
     next(error);
@@ -375,6 +420,11 @@ app.post('/api/tickets/:id/ping-agencies', ...requireGovUser, async (request: Au
       response.status(404).json({ error: 'Ticket not found' });
       return;
     }
+    await enqueueAgencyPingNotifications(
+      result.ticket.id,
+      result.pingedAgencies,
+      `You were pinged on ${result.ticket.id}.`,
+    );
     response.json({
       item: result.ticket,
       ticketId: result.ticket.id,
@@ -451,6 +501,7 @@ app.post('/api/broadcasts', ...requireGovUser, async (request: AuthenticatedRequ
       targetRegions: Array.isArray(request.body?.targetRegions) ? request.body.targetRegions.filter((item: unknown) => typeof item === 'string') : [],
       platforms: Array.isArray(request.body?.platforms) ? request.body.platforms.filter((item: unknown) => typeof item === 'string') : ['web'],
     });
+    await enqueueBroadcastNotifications(item);
     response.status(201).json({ item });
   } catch (error) {
     next(error);

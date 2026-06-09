@@ -18,6 +18,8 @@ import {
   Ticket,
   UserCircle,
   LogOut,
+  Settings,
+  Reply,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { apiUrl } from '../../lib/api';
@@ -29,6 +31,14 @@ type ProfileUser = {
   username: string | null;
   role: string | null;
   agencyCode?: string | null;
+};
+
+type NotificationItem = {
+  id: string;
+  type: 'alert' | 'reply' | 'agency_ping' | 'volunteer';
+  title: string;
+  text: string;
+  to: string;
 };
 
 const navItems = [
@@ -50,6 +60,7 @@ export default function GovLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileUser, setProfileUser] = useState<ProfileUser | null>(null);
   const currentTime = new Date().toLocaleString('en-SG', {
@@ -66,6 +77,10 @@ export default function GovLayout() {
       })
       .then((data) => setProfileUser(data.user))
       .catch(() => setProfileUser(null));
+  }, []);
+
+  useEffect(() => {
+    loadGovNotifications().then(setNotifications).catch(() => setNotifications([]));
   }, []);
 
   const profileName = profileUser?.displayName ?? profileUser?.username ?? profileUser?.email ?? 'Authorized User';
@@ -130,14 +145,34 @@ export default function GovLayout() {
                 <Search className="w-5 h-5 text-zinc-400" />
               </button>
               <div className="relative">
-                <button onClick={() => setNotificationsOpen((open) => !open)} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors relative">
+                <button
+                  onClick={() => {
+                    setNotificationsOpen((open) => !open);
+                    void loadGovNotifications().then(setNotifications).catch(() => setNotifications([]));
+                  }}
+                  className="p-2 hover:bg-zinc-800 rounded-lg transition-colors relative"
+                >
                   <Bell className="w-5 h-5 text-zinc-400" />
-                  <div className="absolute top-1 right-1 w-2 h-2 bg-red-600 rounded-full"></div>
+                  {notifications.length > 0 && <div className="absolute top-1 right-1 w-2 h-2 bg-red-600 rounded-full"></div>}
                 </button>
                 {notificationsOpen && (
                   <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-lg border border-zinc-800 bg-zinc-900 p-2 shadow-2xl">
-                    <NotificationLink to="/gov/form-handling?ticket=TKT-0040" icon={Ticket} title="Agency ping" text="PUB was pinged on flood report TKT-0040" onClick={() => setNotificationsOpen(false)} />
-                    <NotificationLink to="/gov/broadcast" icon={Radio} title="Active broadcast" text="Flash flood warning remains ongoing" onClick={() => setNotificationsOpen(false)} />
+                    {notifications.length ? notifications.map((item) => (
+                      <NotificationLink
+                        key={item.id}
+                        id={item.id}
+                        type={item.type}
+                        to={item.to}
+                        title={item.title}
+                        text={item.text}
+                        onClick={() => {
+                          setNotificationsOpen(false);
+                          setNotifications((current) => current.filter((notification) => notification.id !== item.id));
+                        }}
+                      />
+                    )) : (
+                      <div className="px-3 py-4 text-sm text-zinc-500">No notifications right now.</div>
+                    )}
                   </div>
                 )}
               </div>
@@ -165,6 +200,14 @@ export default function GovLayout() {
                         <div className="truncate text-xs text-zinc-500">{profileSubtext}</div>
                       </div>
                     </div>
+                    <Link
+                      to="/gov-profile"
+                      onClick={() => setProfileOpen(false)}
+                      className="mb-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
+                    >
+                      <Settings className="h-4 w-4" />
+                      Profile settings
+                    </Link>
                     <button
                       type="button"
                       onClick={logout}
@@ -188,9 +231,31 @@ export default function GovLayout() {
   );
 }
 
-function NotificationLink({ to, icon: Icon, title, text, onClick }: { to: string; icon: LucideIcon; title: string; text: string; onClick: () => void }) {
+async function loadGovNotifications(): Promise<NotificationItem[]> {
+  const response = await fetch(apiUrl('/api/notifications'), { headers: authHeaders() });
+  if (!response.ok) return [];
+  const data = await response.json() as { items: NotificationItem[] };
+  return data.items;
+}
+
+async function markNotificationRead(id: string) {
+  await fetch(apiUrl(`/api/notifications/${id}/read`), {
+    method: 'PATCH',
+    headers: authHeaders(),
+  });
+}
+
+function NotificationLink({ id, type, to, title, text, onClick }: { id: string; type: NotificationItem['type']; to: string; title: string; text: string; onClick: () => void }) {
+  const Icon = notificationIcon(type);
   return (
-    <Link to={to} onClick={onClick} className="flex items-start gap-3 rounded-lg px-3 py-2 text-left hover:bg-zinc-800">
+    <Link
+      to={to}
+      onClick={() => {
+        void markNotificationRead(id);
+        onClick();
+      }}
+      className="flex items-start gap-3 rounded-lg px-3 py-2 text-left hover:bg-zinc-800"
+    >
       <Icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-400" />
       <span>
         <span className="block text-sm font-medium text-zinc-100">{title}</span>
@@ -198,4 +263,11 @@ function NotificationLink({ to, icon: Icon, title, text, onClick }: { to: string
       </span>
     </Link>
   );
+}
+
+function notificationIcon(type: NotificationItem['type']): LucideIcon {
+  if (type === 'reply') return Reply;
+  if (type === 'agency_ping') return Ticket;
+  if (type === 'volunteer') return Users;
+  return Radio;
 }

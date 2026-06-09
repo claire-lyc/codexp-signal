@@ -53,6 +53,7 @@ export const router = createBrowserRouter([
           { path: "volunteer", lazy: lazyRoute(() => import("./components/public/PublicVolunteer")) },
           { path: "forum", lazy: lazyRoute(() => import("./components/public/PublicForum")) },
           { path: "profile", lazy: lazyRoute(() => import("./components/public/PublicProfile")) },
+          { path: "settings", lazy: lazyRoute(() => import("./components/public/PublicSettings")) },
         ],
       },
     ],

@@ -24,7 +24,6 @@ type BroadcastAlert = {
   target: string;
   status: 'ongoing' | 'resolved';
   time: string;
-  notificationAction?: 'notify' | 'ignore' | null;
 };
 
 const incidents: Incident[] = [
@@ -133,15 +132,6 @@ export default function PublicAlerts() {
       .catch(() => setBroadcasts([]));
   }, []);
 
-  const setBroadcastAction = async (id: string, action: 'notify' | 'ignore') => {
-    setBroadcasts((current) => current.map((item) => item.id === id ? { ...item, notificationAction: action } : item));
-    await fetch(apiUrl(`/api/citizen/broadcasts/${id}/action`), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ action }),
-    }).catch(() => undefined);
-  };
-
   return (
     <div className="space-y-8 max-w-3xl mx-auto">
       {/* Subscribe bar */}
@@ -188,12 +178,6 @@ export default function PublicAlerts() {
                     <span>{broadcast.target}</span>
                     <span>Government Verified</span>
                   </div>
-                  {!broadcast.notificationAction && (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <button onClick={() => setBroadcastAction(broadcast.id, 'notify')} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">Turn on notification</button>
-                      <button onClick={() => setBroadcastAction(broadcast.id, 'ignore')} className="rounded-lg bg-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-700">Ignore</button>
-                    </div>
-                  )}
                 </div>
               );
             })}

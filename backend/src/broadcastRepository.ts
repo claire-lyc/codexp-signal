@@ -120,6 +120,19 @@ export async function setBroadcastAction(userId: string, broadcastId: string, ac
     `,
     [userId, broadcastId, action],
   );
+
+  if (action === 'ignore') {
+    await query(
+      `
+        UPDATE auth.user_notifications
+        SET read_at = COALESCE(read_at, now())
+        WHERE user_id = $1
+          AND source_type = 'broadcast'
+          AND source_id = $2
+      `,
+      [userId, broadcastId],
+    );
+  }
 }
 
 function toBroadcastItem(row: BroadcastRow): BroadcastItem {

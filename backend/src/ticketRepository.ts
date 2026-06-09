@@ -59,6 +59,7 @@ type ReportRow = {
   severity: TicketUrgency;
   status: ReportStatus;
   assigned_agency_code: string | null;
+  grouped_report_id: string | null;
   grouped_public_report_id: string | null;
   chat_enabled: boolean;
   created_at: string;
@@ -145,6 +146,7 @@ export async function listTickets(filters: {
         reports.severity,
         reports.status,
         agency.code AS assigned_agency_code,
+        reports.grouped_report_id,
         grouped.public_report_id AS grouped_public_report_id,
         reports.chat_enabled,
         reports.created_at
@@ -187,6 +189,7 @@ export async function getTicketByPublicId(publicReportId: string) {
         reports.severity,
         reports.status,
         agency.code AS assigned_agency_code,
+        reports.grouped_report_id,
         grouped.public_report_id AS grouped_public_report_id,
         reports.chat_enabled,
         reports.created_at
@@ -223,6 +226,7 @@ export async function listTicketsForReporter(userId: string) {
         reports.severity,
         reports.status,
         agency.code AS assigned_agency_code,
+        reports.grouped_report_id,
         grouped.public_report_id AS grouped_public_report_id,
         reports.chat_enabled,
         reports.created_at
