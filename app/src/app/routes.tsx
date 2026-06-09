@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import { createBrowserRouter } from "react-router";
 import LandingPage from "./components/LandingPage";
 import NotFoundPage from "./components/NotFoundPage";
+import RouteErrorBoundary from "./components/RouteErrorBoundary";
 import RequireAuth from "./components/auth/RequireAuth";
 
 const lazyRoute = (load: () => Promise<{ default: ComponentType }>) => async () => ({
@@ -12,17 +13,21 @@ export const router = createBrowserRouter([
   {
     path: "/",
     Component: LandingPage,
+    errorElement: <RouteErrorBoundary />,
   },
   {
     path: "/login",
     lazy: lazyRoute(() => import("./components/auth/LoginPage")),
+    errorElement: <RouteErrorBoundary />,
   },
   {
     Component: RequireAuth,
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         path: "gov",
         lazy: lazyRoute(() => import("./components/government/GovLayout")),
+        errorElement: <RouteErrorBoundary />,
         children: [
           { index: true, lazy: lazyRoute(() => import("./components/government/GovOverview")) },
           { path: "pandemic", lazy: lazyRoute(() => import("./components/government/GovPandemic")) },
@@ -47,6 +52,7 @@ export const router = createBrowserRouter([
       {
         path: "public",
         lazy: lazyRoute(() => import("./components/public/PublicLayout")),
+        errorElement: <RouteErrorBoundary />,
         children: [
           { index: true, lazy: lazyRoute(() => import("./components/public/PublicHome")) },
           { path: "alerts", lazy: lazyRoute(() => import("./components/public/PublicAlerts")) },

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import mapData from '../../data/singapore-planning-areas.json';
 
-type RiskLevel = 'high' | 'medium' | 'low';
+type RiskLevel = 'critical' | 'high' | 'medium' | 'low';
 type Point = [number, number];
 
 export type HeatmapPalette = 'temperature' | 'rainfall' | 'wind' | 'psi';
@@ -42,7 +42,7 @@ export type MapMarker = {
   longitude: number;
   value: string;
   detail: string;
-  severity: RiskLevel;
+  severity: RiskLevel | string;
 };
 
 type SingaporeRegionMapProps = {
@@ -96,13 +96,14 @@ const labelOffsets: Record<string, Point> = {
 };
 
 const riskStyles: Record<RiskLevel, { dot: string; label: string; hover: string }> = {
+  critical: { dot: '#dc2626', label: 'Critical severity', hover: '#7f1d1d' },
   high: { dot: '#ef4444', label: 'High severity', hover: '#991b1b' },
   medium: { dot: '#eab308', label: 'Moderate severity', hover: '#854d0e' },
   low: { dot: '#3b82f6', label: 'Low severity', hover: '#1e40af' },
 };
 
 const neutralStyle = { dot: '#71717a', label: 'No reported data', hover: '#3f3f46' };
-const severityRank: Record<RiskLevel, number> = { low: 1, medium: 2, high: 3 };
+const severityRank: Record<RiskLevel, number> = { low: 1, medium: 2, high: 3, critical: 4 };
 const heatmapPalettes: Record<HeatmapPalette, string[]> = {
   temperature: ['#38bdf8', '#22c55e', '#facc15', '#f97316', '#ef4444'],
   rainfall: ['#1e3a8a', '#2563eb', '#06b6d4', '#facc15', '#ef4444'],
@@ -158,6 +159,16 @@ function projectCoordinates(latitude: number, longitude: number): Point {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function normalizeRiskLevel(value: string | null | undefined): RiskLevel | null {
+  if (value === 'critical' || value === 'high' || value === 'medium' || value === 'low') return value;
+  return null;
+}
+
+function riskStyleFor(value: string | null | undefined) {
+  const severity = normalizeRiskLevel(value);
+  return severity ? riskStyles[severity] : neutralStyle;
 }
 
 function hexToRgb(hex: string) {
@@ -250,13 +261,11 @@ export default function SingaporeRegionMap({
           const areaMarkers = markers.filter((marker) =>
             pointInArea(projectCoordinates(marker.latitude, marker.longitude), area.polygons),
           );
-          const severity = areaMarkers.reduce<RiskLevel | null>(
-            (highest, marker) =>
-              !highest || severityRank[marker.severity] > severityRank[highest]
-                ? marker.severity
-                : highest,
-            null,
-          );
+          const severity = areaMarkers.reduce<RiskLevel | null>((highest, marker) => {
+            const markerSeverity = normalizeRiskLevel(marker.severity);
+            if (!markerSeverity) return highest;
+            return !highest || severityRank[markerSeverity] > severityRank[highest] ? markerSeverity : highest;
+          }, null);
 
           return [area.id, { markers: areaMarkers, severity }] as const;
         }),
@@ -635,7 +644,7 @@ export default function SingaporeRegionMap({
           {planningAreas.map((area) => {
             const isActive = activeAreaId === area.id;
             const status = areaStatuses.get(area.id);
-            const style = status?.severity ? riskStyles[status.severity] : neutralStyle;
+            const style = riskStyleFor(status?.severity);
             const fillOpacity = heatmapLayer ? (isActive ? 0.2 : 0.03) : 1;
 
             return (
@@ -677,7 +686,7 @@ export default function SingaporeRegionMap({
             className="pointer-events-none"
             style={{
               filter: `drop-shadow(0 0 4px ${
-                activeStatus.severity ? riskStyles[activeStatus.severity].dot : neutralStyle.dot
+                riskStyleFor(activeStatus.severity).dot
               })`,
             }}
           />
@@ -687,7 +696,7 @@ export default function SingaporeRegionMap({
           {markers.map((marker) => {
             const [x, y] = projectCoordinates(marker.latitude, marker.longitude);
             const isActive = activeMarkerId === marker.id;
-            const style = riskStyles[marker.severity];
+            const style = riskStyleFor(marker.severity);
 
             return (
               <g
@@ -733,7 +742,7 @@ export default function SingaporeRegionMap({
         {showAreaLabels && <g className="pointer-events-none">
           {planningAreas.map((area) => {
             const status = areaStatuses.get(area.id);
-            const style = status?.severity ? riskStyles[status.severity] : neutralStyle;
+            const style = riskStyleFor(status?.severity);
             const [dotX, dotY] = area.label;
             const [offsetX = 0, offsetY = 0] = labelOffsets[area.name] ?? [];
             const labelX = dotX + offsetX;
@@ -832,7 +841,7 @@ export default function SingaporeRegionMap({
             <div className="flex items-center gap-2 text-sm font-semibold text-white">
               <span
                 className="h-2 w-2 shrink-0 rounded-full"
-                style={{ backgroundColor: riskStyles[activeMarker.severity].dot }}
+                style={{ backgroundColor: riskStyleFor(activeMarker.severity).dot }}
               />
               {activeMarker.name}
             </div>
@@ -846,7 +855,7 @@ export default function SingaporeRegionMap({
                 className="h-2 w-2 shrink-0 rounded-full"
                 style={{
                   backgroundColor: activeStatus.severity
-                    ? riskStyles[activeStatus.severity].dot
+                    ? riskStyleFor(activeStatus.severity).dot
                     : neutralStyle.dot,
                 }}
               />
@@ -868,7 +877,7 @@ export default function SingaporeRegionMap({
                 </>
               ) : activeStatus.markers.length ? (
                 `${activeStatus.markers.length} ${problemLabel} - Highest level: ${
-                  riskStyles[activeStatus.severity ?? 'low'].label
+                  riskStyleFor(activeStatus.severity).label
                 }`
               ) : (
                 `No ${problemLabel} mapped in this area`

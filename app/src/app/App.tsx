@@ -1,6 +1,7 @@
 import { RouterProvider } from 'react-router';
 import { useEffect } from 'react';
 import { router } from './routes';
+import RouteErrorNotice from './components/RouteErrorNotice';
 
 const routeFallback = (
   <div className="min-h-screen bg-zinc-950 text-zinc-400 grid place-items-center">
@@ -18,6 +19,7 @@ export default function App() {
 
   return (
     <div className="dark">
+      <RouteErrorNotice />
       <RouterProvider router={router} fallbackElement={routeFallback} />
     </div>
   );
