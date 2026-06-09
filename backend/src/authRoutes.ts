@@ -18,13 +18,18 @@ import {
 } from './authMiddleware.js';
 
 const emailSchema = z.string().trim().email().max(320).transform((value) => value.toLowerCase());
+const usernameSchema = z.string().trim().min(3).max(64);
 const passwordSchema = z.string().min(8).max(128);
 const loginPasswordSchema = z.string().min(1).max(128);
 
 const registerSchema = z.object({
-  email: emailSchema,
+  email: emailSchema.optional(),
+  username: usernameSchema.optional(),
   password: passwordSchema,
   displayName: z.string().trim().min(1).max(120).optional(),
+}).refine((value) => Boolean(value.email || value.username), {
+  message: 'Email or username is required',
+  path: ['email'],
 });
 
 const loginSchema = z.object({
@@ -75,6 +80,7 @@ export function createAuthRouter(): Router {
     try {
       const user = await createPasswordUser({
         email: parsed.data.email,
+        username: parsed.data.username,
         password: parsed.data.password,
         displayName: parsed.data.displayName,
         actorType: 'citizen',

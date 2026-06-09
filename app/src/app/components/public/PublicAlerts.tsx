@@ -26,60 +26,17 @@ type BroadcastAlert = {
   time: string;
 };
 
-const incidents: Incident[] = [
-  {
-    id: 'INC-0041',
-    title: 'Flash Flood Warning — Orchard Road & East Coast',
-    severity: 'critical',
-    type: 'Weather',
-    region: 'Central, East',
-    status: 'active',
-    verified: true,
-    updates: [
-      { time: 'Jun 5, 14:30 SGT', text: 'Update — Water levels rising at Orchard Road underpass. Avoid the area. Alternative routes advised.' },
-      { time: 'Jun 5, 14:10 SGT', text: 'Monitoring — Flash flood risk elevated. PUB drainage teams deployed.' },
-      { time: 'Jun 5, 13:55 SGT', text: 'Investigating — Heavy rainfall reported in multiple zones. Assessing flood risk.' },
-    ],
-  },
-  {
-    id: 'INC-0040',
-    title: 'Dengue Red Zone — Bedok North Ave 1',
-    severity: 'high',
-    type: 'Health',
-    region: 'East',
-    status: 'active',
-    verified: true,
-    updates: [
-      { time: 'Jun 5, 13:00 SGT', text: 'Update — 23 confirmed cases in cluster. NEA fogging operations underway.' },
-      { time: 'Jun 5, 10:30 SGT', text: 'Identified — New dengue red zone declared at Bedok North Ave 1.' },
-    ],
-  },
-  {
-    id: 'INC-0039',
-    title: 'Panadol Menstrual Shortage — Islandwide',
-    severity: 'medium',
-    type: 'Supply',
-    region: 'Nationwide',
-    status: 'monitoring',
-    verified: true,
-    updates: [
-      { time: 'Jun 5, 09:45 SGT', text: 'Update — Alternate suppliers contacted. Estimated restock within 4 days. Pharmacists advised to recommend paracetamol alternatives.' },
-      { time: 'Jun 5, 08:00 SGT', text: 'Identified — Islandwide shortage confirmed at 87 outlets. Enterprise SG coordinating response.' },
-    ],
-  },
-  {
-    id: 'INC-0038',
-    title: 'Air Quality Advisory — PSI at Unhealthy Levels',
-    severity: 'medium',
-    type: 'Weather',
-    region: 'Nationwide',
-    status: 'monitoring',
-    verified: true,
-    updates: [
-      { time: 'Jun 5, 06:30 SGT', text: 'Monitoring — PSI at 156 (Unhealthy). Vulnerable groups should avoid prolonged outdoor activity. Wear N95 masks if going out.' },
-    ],
-  },
-];
+type CitizenAlert = {
+  id: string;
+  title: string;
+  message: string;
+  crisis_type: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  region: string | null;
+  status: 'active' | 'monitoring' | 'resolved';
+  created_at: string;
+  resolved_at: string | null;
+};
 
 const pastIncidents: { date: string; items: { title: string; type: string; note: string }[] }[] = [
   {
@@ -112,8 +69,11 @@ const statusConfig: Record<string, string> = {
 
 export default function PublicAlerts() {
   const { data, loading, error } = useApi<{ incidents: Incident[]; pastIncidents: typeof pastIncidents }>('/api/citizen/incidents');
+  const { data: liveAlertsData } = useApi<{ items: CitizenAlert[] }>('/api/citizen/alerts');
   const [broadcasts, setBroadcasts] = useState<BroadcastAlert[]>([]);
-  const incidents = data?.incidents ?? [];
+  const snapshotIncidents = data?.incidents ?? [];
+  const liveIncidents = (liveAlertsData?.items ?? []).map(mapAlertToIncident);
+  const incidents = liveIncidents.length > 0 ? liveIncidents : snapshotIncidents;
   const pastIncidents = data?.pastIncidents ?? [];
   const [subscribed, setSubscribed] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -309,4 +269,42 @@ export default function PublicAlerts() {
       </div>
     </div>
   );
+}
+
+function mapAlertToIncident(alert: CitizenAlert): Incident {
+  return {
+    id: alert.id,
+    title: alert.title,
+    severity: alert.severity,
+    type: formatCrisisType(alert.crisis_type),
+    region: alert.region ?? 'Nationwide',
+    status: alert.status,
+    verified: true,
+    updates: [
+      {
+        time: formatAlertTime(alert.created_at),
+        text: alert.message,
+      },
+    ],
+  };
+}
+
+function formatCrisisType(value: string) {
+  return value
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function formatAlertTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('en-SG', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Singapore',
+  }).format(date).replace(',', '') + ' SGT';
 }

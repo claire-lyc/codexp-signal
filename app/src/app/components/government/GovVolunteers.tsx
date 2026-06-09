@@ -111,14 +111,6 @@ function bestRoleForProfile(profile: VolunteerProfile, opportunity: VolunteerOpp
     ?? opportunity.roleSlots[0];
 }
 
-function isSuitableForRole(profile: VolunteerProfile, opportunity: VolunteerOpportunity, role: VolunteerRoleSlot) {
-  if (profile.status !== 'verified') return false;
-  const score = scoreVolunteerForOpportunity(profile, opportunity);
-  const skillHits = role.requiredSkills.filter((skill) => profile.skills.includes(skill)).length;
-  const hasNeededSkills = role.specialRequirements ? skillHits === role.requiredSkills.length : skillHits > 0;
-  return score >= 60 && hasNeededSkills;
-}
-
 function activeAssignmentsForRole(profiles: VolunteerProfile[], opportunityId: number, roleId: string) {
   return profiles.flatMap((profile) => (
     profile.assignments
@@ -314,144 +306,14 @@ export default function GovVolunteers() {
       return;
     }
 
-    const assignment = makeAssignment(opportunity, role, 'accepted');
+    const assignment = makeAssignment(opportunity, role, 'offered');
 
     updateProfile(profile, {
       status: 'assigned',
       appliedOpportunityIds: Array.from(new Set([...profile.appliedOpportunityIds, opportunity.id])),
       assignments: [...profile.assignments.filter((item) => item.opportunityId !== opportunity.id), assignment],
     });
-    pushActivity(`${profile.name} accepted for ${role.title}`);
-  };
-
-  const notifySuitableVolunteers = (opportunity: VolunteerOpportunity, role: VolunteerRoleSlot) => {
-    if (!canAllocate(opportunity)) {
-      pushActivity(`${currentAgency} cannot invite volunteers for ${opportunity.title}`);
-      return;
-    }
-
-    const openSlots = Math.max(0, role.needed - filledSlotsForRole(rawApplicants, opportunity.id, role));
-    if (!openSlots) {
-      pushActivity(`${role.title} has no open slots left`);
-      return;
-    }
-
-    const suitable = rawApplicants
-      .filter((profile) => isSuitableForRole(profile, opportunity, role))
-      .filter((profile) => !profile.assignments.some((assignment) => assignment.opportunityId === opportunity.id && assignment.status !== 'declined'))
-      .slice(0, openSlots);
-
-    if (!suitable.length) {
-      pushActivity(`No suitable volunteers found for ${role.title}`);
-      return;
-    }
-
-    const notifications: VolunteerNotification[] = [];
-    const assignmentByVolunteer = new Map<string, VolunteerAssignment>();
-
-    suitable.forEach((profile) => {
-      const assignment = makeAssignment(opportunity, role);
-      assignmentByVolunteer.set(profile.id, assignment);
-      notifications.push({
-        id: `CB-${Date.now()}-${profile.id}`,
-        volunteerId: profile.id,
-        opportunityId: opportunity.id,
-        roleId: role.id,
-        roleTitle: role.title,
-        agency: currentAgency,
-        message: `${currentAgency} has offered you ${role.title} for ${opportunity.title}. Please accept or reject the assignment.`,
-        status: 'sent',
-        createdAt: new Date().toISOString(),
-      });
-    });
-
-    if (citizenProfile && assignmentByVolunteer.has(citizenProfile.id)) {
-      const assignment = assignmentByVolunteer.get(citizenProfile.id)!;
-      const nextProfile: VolunteerProfile = {
-        ...citizenProfile,
-        status: 'assigned',
-        appliedOpportunityIds: Array.from(new Set([...citizenProfile.appliedOpportunityIds, opportunity.id])),
-        assignments: [...citizenProfile.assignments.filter((item) => item.opportunityId !== opportunity.id), assignment],
-      };
-      saveVolunteerProfile(nextProfile);
-      setCitizenProfile(nextProfile);
-    }
-
-    setDemoProfiles((current) => current.map((profile) => {
-      const assignment = assignmentByVolunteer.get(profile.id);
-      if (!assignment) return profile;
-      return {
-        ...profile,
-        status: 'assigned',
-        appliedOpportunityIds: Array.from(new Set([...profile.appliedOpportunityIds, opportunity.id])),
-        assignments: [...profile.assignments.filter((item) => item.opportunityId !== opportunity.id), assignment],
-      };
-    }));
-
-    saveVolunteerNotifications([...notifications, ...readVolunteerNotifications()]);
-    pushActivity(`Notified ${suitable.length} suitable volunteer${suitable.length > 1 ? 's' : ''} for ${role.title}`);
-  };
-
-  const fastAcceptableVolunteers = (opportunity: VolunteerOpportunity, role: VolunteerRoleSlot) => {
-    const openSlots = Math.max(0, role.needed - filledSlotsForRole(rawApplicants, opportunity.id, role));
-    if (!openSlots || role.specialRequirements) return [];
-
-    return rawApplicants
-      .filter((profile) => isSuitableForRole(profile, opportunity, role))
-      .filter((profile) => !profile.assignments.some((assignment) => assignment.opportunityId === opportunity.id && assignment.status !== 'declined'))
-      .slice(0, openSlots);
-  };
-
-  const fastAcceptSuitableVolunteers = (opportunity: VolunteerOpportunity, role: VolunteerRoleSlot) => {
-    if (!canAllocate(opportunity)) {
-      pushActivity(`${currentAgency} cannot accept volunteers for ${opportunity.title}`);
-      return;
-    }
-
-    if (role.specialRequirements) {
-      pushActivity(`${role.title} needs manual review before acceptance`);
-      return;
-    }
-
-    const suitable = fastAcceptableVolunteers(opportunity, role);
-
-    if (!suitable.length) {
-      pushActivity(`No suitable volunteers can be fast accepted for ${role.title}`);
-      return;
-    }
-
-    const acceptedByVolunteer = new Map<string, VolunteerAssignment>();
-    suitable.forEach((profile) => {
-      acceptedByVolunteer.set(profile.id, {
-        ...makeAssignment(opportunity, role),
-        status: 'accepted',
-      });
-    });
-
-    if (citizenProfile && acceptedByVolunteer.has(citizenProfile.id)) {
-      const assignment = acceptedByVolunteer.get(citizenProfile.id)!;
-      const nextProfile: VolunteerProfile = {
-        ...citizenProfile,
-        status: 'assigned',
-        appliedOpportunityIds: Array.from(new Set([...citizenProfile.appliedOpportunityIds, opportunity.id])),
-        assignments: [...citizenProfile.assignments.filter((item) => item.opportunityId !== opportunity.id), assignment],
-      };
-      saveVolunteerProfile(nextProfile);
-      setCitizenProfile(nextProfile);
-    }
-
-    setDemoProfiles((current) => current.map((profile) => {
-      const assignment = acceptedByVolunteer.get(profile.id);
-      if (!assignment) return profile;
-      return {
-        ...profile,
-        status: 'assigned',
-        appliedOpportunityIds: Array.from(new Set([...profile.appliedOpportunityIds, opportunity.id])),
-        assignments: [...profile.assignments.filter((item) => item.opportunityId !== opportunity.id), assignment],
-      };
-    }));
-
-    pushActivity(`Fast accepted ${suitable.length} suitable volunteer${suitable.length > 1 ? 's' : ''} for ${role.title}`);
+    pushActivity(`${profile.name} offered ${role.title}`);
   };
 
   const rejectVolunteer = (profile: VolunteerProfile, opportunity: VolunteerOpportunity, role: VolunteerRoleSlot) => {
@@ -690,7 +552,6 @@ export default function GovVolunteers() {
                     {opportunity.roleSlots.map((role) => {
                       const filledSlots = filledSlotsForRole(rawApplicants, opportunity.id, role);
                       const openSlots = Math.max(0, role.needed - filledSlots);
-                      const fastCandidates = fastAcceptableVolunteers(opportunity, role);
 
                       return (
                         <div key={role.id} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
@@ -698,7 +559,7 @@ export default function GovVolunteers() {
                             <div>
                               <div className="font-medium">{role.title}</div>
                               <div className="mt-1 text-xs text-zinc-500">
-                                {opportunity.candidates.filter((candidate) => isSuitableForRole(candidate.profile, opportunity, role)).length} suitable verified volunteers
+                                {opportunity.candidates.filter((candidate) => candidate.applied && !candidate.assigned).length} waiting or unassigned applicants
                               </div>
                             </div>
                             <div className="flex flex-wrap items-start justify-end gap-2">
@@ -706,19 +567,6 @@ export default function GovVolunteers() {
                                 <div>{openSlots} open / {role.needed} total</div>
                                 <div className="text-zinc-600">{filledSlots} accepted or offered</div>
                               </div>
-                              {canAllocate(opportunity) && (
-                                <>
-                                  {!role.specialRequirements && (
-                                    <FastAcceptDropdown
-                                      candidates={fastCandidates}
-                                      onAccept={() => fastAcceptSuitableVolunteers(opportunity, role)}
-                                    />
-                                  )}
-                                  <button onClick={() => notifySuitableVolunteers(opportunity, role)} className="rounded bg-green-700 px-3 py-1.5 text-xs font-medium hover:bg-green-600">
-                                    Notify suitable volunteers
-                                  </button>
-                                </>
-                              )}
                             </div>
                           </div>
                           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -941,47 +789,6 @@ function VolunteerProfileCard({ profile }: { profile: VolunteerProfile }) {
       </div>
       <div className="text-xs text-zinc-500">{profile.region} - {profile.availability.join(', ') || 'Availability not stated'}</div>
       <div className="mt-2 rounded bg-zinc-900 px-2 py-1 text-xs text-zinc-400">{profile.certifications || 'No certification notes provided.'}</div>
-    </div>
-  );
-}
-
-function FastAcceptDropdown({ candidates, onAccept }: { candidates: VolunteerProfile[]; onAccept: () => void }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="relative">
-      <button onClick={() => setOpen((value) => !value)} className="inline-flex items-center gap-1.5 rounded bg-blue-700 px-3 py-1.5 text-xs font-medium hover:bg-blue-600">
-        Fast accept
-        <span className="rounded bg-blue-950 px-1.5 py-0.5 text-[10px] text-blue-200">{candidates.length}</span>
-        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <div className="absolute right-0 z-20 mt-2 w-72 rounded-lg border border-zinc-700 bg-zinc-950 p-3 shadow-xl">
-          <div className="mb-2 text-xs font-medium text-zinc-300">Volunteers to accept now</div>
-          <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-            {candidates.map((profile) => (
-              <div key={profile.id} className="rounded border border-zinc-800 bg-zinc-900 px-2.5 py-2">
-                <div className="text-sm font-medium text-zinc-100">{profile.name}</div>
-                <div className="text-xs text-zinc-500">{profile.region} - {profile.availability.join(', ') || 'Availability not stated'}</div>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {profile.skills.slice(0, 3).map((skill) => <span key={skill} className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-300">{skill}</span>)}
-                </div>
-              </div>
-            ))}
-            {!candidates.length && <div className="rounded border border-zinc-800 bg-zinc-900 px-2.5 py-2 text-xs text-zinc-500">No eligible volunteers for the remaining open slots.</div>}
-          </div>
-          <button
-            onClick={() => {
-              onAccept();
-              setOpen(false);
-            }}
-            disabled={!candidates.length}
-            className="mt-3 w-full rounded bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
-          >
-            Accept {candidates.length} volunteer{candidates.length === 1 ? '' : 's'}
-          </button>
-        </div>
-      )}
     </div>
   );
 }

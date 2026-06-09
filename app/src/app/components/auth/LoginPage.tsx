@@ -104,6 +104,13 @@ export default function LoginPage() {
         if (!displayName.trim()) {
           throw new Error('Name is required');
         }
+        const looksLikeEmail = identifier.includes('@');
+        if (looksLikeEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier.trim())) {
+          throw new Error('Enter a valid email address');
+        }
+        if (!looksLikeEmail && identifier.trim().length < 3) {
+          throw new Error('Username must be at least 3 characters');
+        }
         if (password.length < 8) {
           throw new Error('Password must be at least 8 characters');
         }
@@ -118,7 +125,8 @@ export default function LoginPage() {
         body: JSON.stringify(
           mode === 'register'
             ? {
-                email: identifier,
+                email: identifier.includes('@') ? identifier.trim() : undefined,
+                username: identifier.includes('@') ? undefined : identifier.trim(),
                 password,
                 displayName: displayName.trim(),
               }
@@ -243,13 +251,13 @@ export default function LoginPage() {
                 ) : null}
 
                 <label className="block">
-                  <div className="mb-2 text-sm text-zinc-400">{mode === 'register' ? 'Email' : 'Username or email'}</div>
+                  <div className="mb-2 text-sm text-zinc-400">{mode === 'register' ? 'Email or username' : 'Username or email'}</div>
                   <input
                     value={identifier}
                     onChange={(event) => setIdentifier(event.target.value)}
-                    placeholder={mode === 'register' ? 'Enter your email' : 'Enter your username or email'}
+                    placeholder={mode === 'register' ? 'Enter your email or username' : 'Enter your username or email'}
                     className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-white outline-none transition-colors focus:border-red-500"
-                    autoComplete={mode === 'register' ? 'email' : 'username'}
+                    autoComplete="username"
                   />
                 </label>
 

@@ -23,7 +23,6 @@ import {
   Reply,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import EmergencySnapshot from '../shared/EmergencySnapshot';
 import { apiUrl } from '../../lib/api';
 import { authHeaders, clearAuthTokens } from '../../lib/auth';
 
@@ -254,9 +253,6 @@ export default function GovLayout() {
         </header>
 
         <main className="flex-1 overflow-y-auto p-6">
-          <div className="-mx-6 -mt-6 mb-6">
-            <EmergencySnapshot portal="gov" />
-          </div>
           <Outlet />
         </main>
       </div>

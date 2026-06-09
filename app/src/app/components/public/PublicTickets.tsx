@@ -115,7 +115,6 @@ export default function PublicTickets() {
   const [submitMessage, setSubmitMessage] = useState('');
   const [showAllTags, setShowAllTags] = useState(false);
   const [locating, setLocating] = useState(false);
-
   const visibleTags = showAllTags ? ticketTags : ticketTags.slice(0, 5);
   const imagePreviews = useMemo(() => files.map((file) => ({ file, url: URL.createObjectURL(file) })), [files]);
 
@@ -399,10 +398,9 @@ export default function PublicTickets() {
       <div className="mx-auto max-w-7xl">
         <div className="mb-5">
           <h1 className="text-3xl font-bold">Report an Issue</h1>
-          <p className="text-zinc-400">Send non-emergency reports and receive follow-up updates from the relevant agency</p>
+          <p className="text-zinc-400">Send a report, then follow replies and status updates from the assigned agency in one place.</p>
         </div>
         <EmergencyBanner />
-        <ReportGuidanceCard />
       </div>
 
       <div className="mx-auto grid max-w-7xl gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.85fr)]">
@@ -419,6 +417,8 @@ export default function PublicTickets() {
             </div>
 
             <div className="space-y-4 p-4">
+              <ReportGuidanceCard />
+
               <textarea
                 value={description}
                 onChange={(event) => {
@@ -538,37 +538,47 @@ export default function PublicTickets() {
               </div>
             </div>
           </div>
-
-          <div className="flex gap-2">
-            <input
-              value={trackId}
-              onChange={(event) => setTrackId(event.target.value)}
-              placeholder="Find report, e.g. TKT-0042"
-              className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
-            />
-            <button onClick={handleTrack} className="rounded-lg bg-zinc-800 px-3 py-2 hover:bg-zinc-700">
-              <Search className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            {(tickets.length ? tickets : createdTicket?.item ? [createdTicket.item] : []).map((ticket) => (
-              <TicketCard key={ticket.id} ticket={ticket} selected={selectedTicket?.id === ticket.id} onClick={() => openTicket(ticket)} />
-            ))}
-            {ticketsLoading && (
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
-                Loading your reports...
-              </div>
-            )}
-            {!ticketsLoading && !tickets.length && !createdTicket?.item && (
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
-                Your submitted or tracked reports will appear here.
-              </div>
-            )}
-          </div>
         </section>
 
-        <DiscussionPanel ticket={selectedTicket} reply={reply} setReply={setReply} sendReply={sendReply} />
+        <aside className="space-y-4">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="font-semibold">My Reports</h2>
+                <p className="mt-1 text-sm text-zinc-500">Track submitted reports and open any case for follow-up messages.</p>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  value={trackId}
+                  onChange={(event) => setTrackId(event.target.value)}
+                  placeholder="Find report, e.g. TKT-0042"
+                  className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+                <button onClick={handleTrack} className="rounded-lg bg-zinc-800 px-3 py-2 hover:bg-zinc-700">
+                  <Search className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {(tickets.length ? tickets : createdTicket?.item ? [createdTicket.item] : []).map((ticket) => (
+                <TicketCard key={ticket.id} ticket={ticket} selected={selectedTicket?.id === ticket.id} onClick={() => openTicket(ticket)} />
+              ))}
+              {ticketsLoading && (
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-5 text-sm text-zinc-500">
+                  Loading your reports...
+                </div>
+              )}
+              {!ticketsLoading && !tickets.length && !createdTicket?.item && (
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-5 text-sm text-zinc-500">
+                  Your submitted or tracked reports will appear here.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DiscussionPanel ticket={selectedTicket} reply={reply} setReply={setReply} sendReply={sendReply} />
+        </aside>
       </div>
     </div>
   );
@@ -607,13 +617,8 @@ function EmergencyBanner() {
 
 function ReportGuidanceCard() {
   return (
-    <div className="space-y-4">
-      <div className="rounded-lg border border-blue-800/50 bg-blue-950/20 px-4 py-3 text-sm text-zinc-300">
-        Use this page to report issues, upload photos, and follow agency updates in one place.
-      </div>
-      <div className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-xs text-zinc-400">
-        False reports may delay response to real incidents.
-      </div>
+    <div className="rounded-lg border border-blue-800/50 bg-blue-950/20 px-4 py-3 text-sm text-zinc-300">
+      Submit one clear report with location and photos if available. False reports may delay response to real incidents.
     </div>
   );
 }

@@ -26,7 +26,6 @@ import {
   type VolunteerNotification,
   type VolunteerOpportunity,
   type VolunteerProfile,
-  type VolunteerRoleSlot,
 } from '../../lib/volunteerFlow';
 
 type FormState = {
@@ -250,38 +249,12 @@ export default function PublicVolunteer() {
 
   const applyForOpportunity = (opportunityId: number) => {
     if (!profile) return;
-    const opportunity = opportunities.find((item) => item.id === opportunityId);
-    if (!opportunity) return;
-
-    const matchedRole = findImmediateMatch(profile, opportunity);
-    if (matchedRole) {
-      const nextAssignment: VolunteerAssignment = {
-        id: `ASN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        opportunityId: opportunity.id,
-        roleId: matchedRole.id,
-        roleTitle: matchedRole.title,
-        status: 'accepted',
-        assignedAt: new Date().toISOString(),
-        note: matchedRole.specialRequirements
-          ? `${matchedRole.specialRequirements}. Report to ${opportunity.reportingPoint}`
-          : `Report to ${opportunity.reportingPoint}`,
-      };
-      const nextProfile = {
-        ...profile,
-        status: 'assigned' as const,
-        appliedOpportunityIds: Array.from(new Set([...profile.appliedOpportunityIds, opportunityId])),
-        assignments: [...profile.assignments.filter((assignment) => assignment.opportunityId !== opportunity.id), nextAssignment],
-      };
-      persistVolunteerProfile(nextProfile, `Accepted immediately for ${matchedRole.title}. Your reporting details are ready.`);
-      return;
-    }
-
     const nextProfile = {
       ...profile,
       appliedOpportunityIds: Array.from(new Set([...profile.appliedOpportunityIds, opportunityId])),
     };
     setWorkTab('applications');
-    persistVolunteerProfile(nextProfile, 'Application submitted. It will stay pending until the agency offers you a role.');
+    persistVolunteerProfile(nextProfile, 'Application sent to the coordinating agency for assignment.');
   };
 
   const updateAssignment = (assignmentId: string, status: VolunteerAssignment['status'], nextMessage: string) => {
@@ -883,15 +856,4 @@ function DonationPanel({ authenticated }: { authenticated: boolean }) {
       </div>
     </div>
   );
-}
-
-function findImmediateMatch(profile: VolunteerProfile, opportunity: VolunteerOpportunity): VolunteerRoleSlot | null {
-  if (profile.status === 'pending_review') return null;
-
-  return opportunity.roleSlots.find((role) => {
-    const slotOpen = role.assigned < role.needed;
-    const hasAllSkills = role.requiredSkills.every((skill) => profile.skills.includes(skill));
-    const strongOverallMatch = scoreVolunteerForOpportunity(profile, opportunity) >= 60;
-    return slotOpen && hasAllSkills && strongOverallMatch;
-  }) ?? null;
 }

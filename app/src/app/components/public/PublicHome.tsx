@@ -1,14 +1,10 @@
 // GET /api/citizen/alerts
 // GET /api/heatmap?layer=crises&public=true
 import { AlertTriangle, MapPin, Activity, Shield, TrendingUp, Navigation } from 'lucide-react';
+import { useMemo } from 'react';
 import { Link } from 'react-router';
-import SingaporeRegionMap from '../SingaporeRegionMap';
+import SingaporeRegionMap, { type MapMarker } from '../SingaporeRegionMap';
 import { useApi } from '../../lib/api';
-
-const activeAlerts = [
-  { id: 1, type: 'Weather', message: 'Flash flood risk in Orchard & East Coast regions', severity: 'high', region: 'East / Central' },
-  { id: 2, type: 'Health', message: 'Air quality advisory — PSI at 156 (Unhealthy). Avoid prolonged outdoor activity.', severity: 'medium', region: 'All' },
-];
 
 const nearbyResources = [
   { name: 'Singapore General Hospital', type: 'Hospital', distance: '1.2 km', status: 'Available' },
@@ -40,27 +36,45 @@ const statColours: Record<string, { bg: string; text: string }> = {
   green: { bg: 'bg-green-950', text: 'text-green-500' },
   blue: { bg: 'bg-blue-950', text: 'text-blue-500' },
 };
+const regionCoordinates: Record<string, { latitude: number; longitude: number }> = {
+  Nationwide: { latitude: 1.3521, longitude: 103.8198 },
+  North: { latitude: 1.4291, longitude: 103.8354 },
+  South: { latitude: 1.276, longitude: 103.8457 },
+  East: { latitude: 1.3529, longitude: 103.9441 },
+  West: { latitude: 1.3456, longitude: 103.7019 },
+  Central: { latitude: 1.3021, longitude: 103.8398 },
+  All: { latitude: 1.3521, longitude: 103.8198 },
+};
 
 export default function PublicHome() {
   const { data: publicHome, loading, error } = useApi<PublicHomeData>('/api/citizen/home');
-  const activeAlerts = publicHome?.activeAlerts ?? [];
+  const { data: citizenAlerts } = useApi<{ items: Array<{ id: number | string; type: string; message: string; severity: string; region: string; time?: string }> }>('/api/citizen/alerts');
+  const activeAlerts = citizenAlerts?.items ?? publicHome?.activeAlerts ?? [];
   const nearbyResources = publicHome?.nearbyResources ?? [];
   const updates = publicHome?.updates ?? [];
   const stats = publicHome?.stats ?? publicStats;
+  const mapMarkers = useMemo<MapMarker[]>(() => activeAlerts.map((alert) => {
+    const regionName = Object.keys(regionCoordinates).find((region) => alert.region?.includes(region)) ?? 'Nationwide';
+    const coordinates = regionCoordinates[regionName] ?? regionCoordinates.Nationwide;
+    return {
+      id: String(alert.id),
+      name: alert.region || 'Nationwide',
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
+      value: alert.severity.toUpperCase(),
+      detail: alert.message,
+      severity: (alert.severity === 'high' || alert.severity === 'medium' || alert.severity === 'low') ? alert.severity : 'medium',
+    };
+  }), [activeAlerts]);
 
   return (
     <div className="space-y-8">
-      {/* Status banner — no universal threat level tag */}
-      <div className="bg-gradient-to-r from-zinc-900 to-zinc-800 border border-zinc-700 rounded-2xl p-8">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8">
         <div className="flex items-start gap-4">
-          <div className="p-3 bg-red-950 rounded-xl">
-            <AlertTriangle className="w-8 h-8 text-red-500" />
+          <div className="p-3 bg-zinc-800 rounded-xl">
+            <Shield className="w-8 h-8 text-blue-400" />
           </div>
           <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-              <span className="text-sm font-medium text-red-400">Active crises: {publicHome?.activeCrisisLabels.join(', ') ?? 'Loading'}</span>
-            </div>
             <h2 className="text-2xl font-bold mb-2">Stay Informed & Safe</h2>
             <p className="text-zinc-400">
               {publicHome?.summary ?? 'Loading current public advisories...'}
@@ -102,7 +116,7 @@ export default function PublicHome() {
           </div>
         </div>
         <div className="h-[500px]">
-          <SingaporeRegionMap />
+          <SingaporeRegionMap markers={mapMarkers} />
         </div>
         <p className="text-xs text-zinc-500 mt-2">Hover or focus a region for current alert details. Regional status is linked to government crisis data.</p>
       </div>

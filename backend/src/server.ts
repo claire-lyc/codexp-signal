@@ -10,6 +10,7 @@ import {
   createForumReply,
   likeForumPost,
   listForumPosts,
+  moderateForumPost,
   reportForumPost,
 } from './forumRepository.js';
 import {
@@ -177,6 +178,75 @@ app.post('/api/forum/posts/:id/replies', (request, response) => {
   const post = createForumReply(request.params.id, {
     author: stringBody(request.body?.author),
     content,
+  });
+  if (!post) {
+    response.status(404).json({ error: 'Forum post not found' });
+    return;
+  }
+  response.status(201).json({ item: post });
+});
+
+app.get('/api/forum/posts/moderation', ...requireGovUser, (_request, response) => {
+  response.json({ items: listForumPosts() });
+});
+
+app.post('/api/forum/posts/official', ...requireGovUser, async (request: AuthenticatedRequest, response, next) => {
+  const content = stringBody(request.body?.content);
+  if (!content) {
+    response.status(400).json({ error: 'Post content is required' });
+    return;
+  }
+
+  try {
+    const post = createForumPost({
+      author: request.user?.display_name ?? request.user?.username ?? request.user?.email ?? 'Government Official',
+      content,
+      category: stringBody(request.body?.category),
+      verified: true,
+      moderationState: 'verified',
+    });
+    response.status(201).json({ item: post });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/forum/posts/:id/moderation', ...requireGovUser, (request: AuthenticatedRequest, response) => {
+  const action = request.body?.action === 'verify'
+    ? 'verify'
+    : request.body?.action === 'hide'
+      ? 'hide'
+      : request.body?.action === 'review'
+        ? 'review'
+        : null;
+
+  if (!action) {
+    response.status(400).json({ error: 'Valid moderation action is required' });
+    return;
+  }
+
+  const post = moderateForumPost(request.params.id, {
+    action,
+    moderator: request.user?.display_name ?? request.user?.username ?? request.user?.email ?? 'Government Moderator',
+  });
+  if (!post) {
+    response.status(404).json({ error: 'Forum post not found' });
+    return;
+  }
+  response.json({ item: post });
+});
+
+app.post('/api/forum/posts/:id/official-replies', ...requireGovUser, (request: AuthenticatedRequest, response) => {
+  const content = stringBody(request.body?.content);
+  if (!content) {
+    response.status(400).json({ error: 'Reply content is required' });
+    return;
+  }
+
+  const post = createForumReply(request.params.id, {
+    author: request.user?.display_name ?? request.user?.username ?? request.user?.email ?? 'Government Official',
+    content,
+    official: true,
   });
   if (!post) {
     response.status(404).json({ error: 'Forum post not found' });
