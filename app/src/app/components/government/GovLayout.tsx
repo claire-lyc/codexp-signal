@@ -20,6 +20,7 @@ import {
   LogOut,
   Settings,
   Languages,
+  ChevronLeft,
   ChevronRight,
   X,
 } from 'lucide-react';
@@ -77,9 +78,11 @@ export default function GovLayout() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileUser, setProfileUser] = useState<ProfileUser | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const notificationsRef = useRef<HTMLDivElement | null>(null);
   const profileRef = useRef<HTMLDivElement | null>(null);
   const profileModalRef = useRef<HTMLDivElement | null>(null);
+  const sidebarExpanded = !sidebarCollapsed;
   const currentTime = new Date().toLocaleString('en-SG', {
     timeZone: 'Asia/Singapore',
     dateStyle: 'medium',
@@ -107,7 +110,7 @@ export default function GovLayout() {
 
       if (profileOpen && !clickedProfileButton && !clickedProfileModal) {
         setProfileOpen(false);
-    }
+      }
     };
 
     document.addEventListener('mousedown', closeOnOutsideClick);
@@ -127,25 +130,45 @@ export default function GovLayout() {
 
   return (
     <div className="flex h-screen bg-zinc-950 text-white overflow-hidden">
-      <aside className="w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col">
-        <div className="px-6 pb-7 pt-6">
-          <Link to="/" className="flex items-center gap-2">
-            <AlertTriangle className="w-6 h-6 text-signal-brand" />
-            <div>
-              <h1 className="font-bold text-lg"><span className="text-signal-brand">S</span>i<span className="text-signal-brand">G</span>nal</h1>
+      <aside
+        className={`relative bg-zinc-900 border-r border-zinc-800 flex flex-col transition-[width] duration-200 ease-out ${
+          sidebarExpanded ? 'w-64' : 'w-20'
+        }`}
+      >
+        <button
+          type="button"
+          onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+          className="absolute -right-3 top-6 z-20 flex h-7 w-7 items-center justify-center rounded-full border border-zinc-700 bg-zinc-900 text-zinc-400 shadow-lg transition-colors hover:bg-zinc-800 hover:text-white"
+          aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        </button>
 
-              <p className="text-xs text-zinc-500">Crisis Command</p>
-            </div>
+        <div className={`${sidebarExpanded ? 'px-6' : 'px-3'} pb-7 pt-6`}>
+          <Link to="/" className={`flex items-center ${sidebarExpanded ? 'gap-2' : 'justify-center'}`}>
+            <AlertTriangle className="w-6 h-6 text-signal-brand" />
+            {sidebarExpanded && (
+              <div>
+                <h1 className="font-bold text-lg"><span className="text-signal-brand">S</span>i<span className="text-signal-brand">G</span>nal</h1>
+
+                <p className="text-xs text-zinc-500">Crisis Command</p>
+              </div>
+            )}
           </Link>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-5">
-          <div className="space-y-7">
+        <nav className="flex-1 overflow-y-auto px-3 py-5 [scrollbar-color:#3f3f46_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700/70 [&::-webkit-scrollbar-thumb:hover]:bg-zinc-600">
+          <div className={sidebarExpanded ? 'space-y-7' : 'space-y-4'}>
             {navSections.map((section) => (
               <div key={section.title}>
-                <div className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
-                  {section.title}
-                </div>
+                {sidebarExpanded ? (
+                  <div className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
+                    {section.title}
+                  </div>
+                ) : (
+                  <div className="mx-3 mb-2 border-t border-zinc-800" aria-hidden="true" />
+                )}
                 <div className="space-y-1">
                   {section.items.map((item) => {
                     const Icon = item.icon;
@@ -154,14 +177,18 @@ export default function GovLayout() {
                       <Link
                         key={item.path}
                         to={item.path}
-                        className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all ${
+                        title={sidebarExpanded ? undefined : item.label}
+                        aria-label={item.label}
+                        className={`group relative flex items-center rounded-lg py-2.5 transition-all ${
+                          sidebarExpanded ? 'gap-3 px-3' : 'justify-center px-0'
+                        } ${
                           isActive
                             ? 'bg-zinc-800 text-white ring-1 ring-zinc-700'
                             : 'text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-200'
                         }`}
                       >
                         <Icon className={`h-5 w-5 flex-shrink-0 ${isActive ? 'text-signal-brand' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
-                        <span className="truncate text-sm font-medium">{item.label}</span>
+                        {sidebarExpanded && <span className="truncate text-sm font-medium">{item.label}</span>}
                       </Link>
                     );
                   })}
@@ -171,21 +198,28 @@ export default function GovLayout() {
           </div>
         </nav>
 
-        <div ref={profileRef} className="relative border-t border-zinc-800 p-3">
+        <div ref={profileRef} className={`relative border-t border-zinc-800 ${sidebarExpanded ? 'p-3' : 'p-2'}`}>
           <button
             type="button"
             onClick={() => setProfileOpen((open) => !open)}
-            className="flex w-full items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-3 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-800/70"
+            className={`flex w-full items-center rounded-xl border border-zinc-800 bg-zinc-950 py-3 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-800/70 ${
+              sidebarExpanded ? 'gap-3 px-3' : 'justify-center px-0'
+            }`}
             aria-label="Open profile menu"
+            title={sidebarExpanded ? undefined : profileName}
           >
             <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white">
               <UserCircle className="h-6 w-6" />
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold text-zinc-100">{profileName}</div>
-              <div className="truncate text-xs text-zinc-500">{profileSubtext}</div>
-            </div>
-            <ChevronRight className="h-4 w-4 flex-shrink-0 text-zinc-500" />
+            {sidebarExpanded && (
+              <>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold text-zinc-100">{profileName}</div>
+                  <div className="truncate text-xs text-zinc-500">{profileSubtext}</div>
+                </div>
+                <ChevronRight className="h-4 w-4 flex-shrink-0 text-zinc-500" />
+              </>
+            )}
           </button>
         </div>
       </aside>
@@ -222,7 +256,7 @@ export default function GovLayout() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-6 [scrollbar-color:#3f3f46_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700/70 [&::-webkit-scrollbar-thumb:hover]:bg-zinc-600">
           <Outlet />
         </main>
       </div>
