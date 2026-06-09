@@ -111,6 +111,14 @@ function bestRoleForProfile(profile: VolunteerProfile, opportunity: VolunteerOpp
     ?? opportunity.roleSlots[0];
 }
 
+function isSuitableForRole(profile: VolunteerProfile, opportunity: VolunteerOpportunity, role: VolunteerRoleSlot) {
+  if (profile.status !== 'verified') return false;
+  const score = scoreVolunteerForOpportunity(profile, opportunity);
+  const skillHits = role.requiredSkills.filter((skill) => profile.skills.includes(skill)).length;
+  const hasNeededSkills = role.specialRequirements ? skillHits === role.requiredSkills.length : skillHits > 0;
+  return score >= 60 && hasNeededSkills;
+}
+
 function activeAssignmentsForRole(profiles: VolunteerProfile[], opportunityId: number, roleId: string) {
   return profiles.flatMap((profile) => (
     profile.assignments
@@ -488,6 +496,7 @@ export default function GovVolunteers() {
   };
 
   const addNeed = () => {
+    const agency = currentAgency === 'All agencies' ? 'LTA' : currentAgency;
     const roleSlots: VolunteerRoleSlot[] = [
       {
         id: `role-${Date.now()}-primary`,
@@ -513,7 +522,7 @@ export default function GovVolunteers() {
     const newNeed: VolunteerOpportunity = {
       id: Date.now(),
       title: needForm.title.trim() || 'New Volunteer Need',
-      organization: currentAgency,
+      organization: agency,
       location: needForm.location.trim() || 'Singapore',
       region: needForm.region,
       urgency: needForm.urgency,
@@ -522,7 +531,7 @@ export default function GovVolunteers() {
       requiredSkills: Array.from(new Set(roleSlots.flatMap((role) => role.requiredSkills))),
       shift: needForm.shift.trim() || 'Today',
       reportingPoint: needForm.reportingPoint.trim() || 'Agency command point',
-      authorisedAgency: currentAgency,
+      authorisedAgency: agency,
       description: needForm.description.trim() || 'Agency-created volunteer need.',
       roleSlots,
     };
@@ -533,7 +542,7 @@ export default function GovVolunteers() {
     setExpandedId(newNeed.id);
     setBoardTab('open');
     setShowNeedForm(false);
-    pushActivity(`${currentAgency} added ${newNeed.title}`);
+    pushActivity(`${agency} added ${newNeed.title}`);
   };
 
   const handleAllocate = (opportunity: VolunteerOpportunity) => {
