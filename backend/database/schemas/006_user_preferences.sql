@@ -17,3 +17,20 @@ CREATE TABLE IF NOT EXISTS auth.broadcast_dismissals (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, broadcast_id)
 );
+
+CREATE TABLE IF NOT EXISTS auth.user_notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('alert', 'reply', 'agency_ping', 'volunteer')),
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  link_path TEXT NOT NULL,
+  source_type TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  read_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, source_type, source_id)
+);
+
+CREATE INDEX IF NOT EXISTS user_notifications_user_unread_idx
+  ON auth.user_notifications (user_id, read_at, created_at DESC);

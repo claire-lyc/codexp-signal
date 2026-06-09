@@ -12,6 +12,7 @@ const schemaFiles = [
   '004_event_log.sql',
   '005_ticket_chat.sql',
   '006_user_preferences.sql',
+  '007_volunteers.sql',
 ];
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));

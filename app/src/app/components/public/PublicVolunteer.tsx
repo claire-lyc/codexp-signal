@@ -1,16 +1,10 @@
 import {
-  AlertTriangle,
-  ArrowLeft,
   Calendar,
   CheckCircle,
-  ClipboardCheck,
-  Clock,
-  FileCheck,
   Loader2,
   MapPin,
   Shield,
   Upload,
-  UserCheck,
   Users,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -18,15 +12,14 @@ import { apiUrl } from '../../lib/api';
 import { authHeaders } from '../../lib/auth';
 import {
   clearVolunteerProfile,
+  demoCitizenVolunteerProfile,
   makeVolunteerId,
   opportunityCapacity,
   readVolunteerOpportunities,
   readVolunteerNotifications,
   readVolunteerProfile,
   saveVolunteerProfile,
-  scoreVolunteerBreakdown,
   scoreVolunteerForOpportunity,
-  statusLabel,
   volunteerAvailability,
   volunteerSkills,
   type VolunteerAssignment,
@@ -58,24 +51,18 @@ const emptyForm: FormState = {
   emergencyContact: '',
 };
 
-const lifecycle = [
-  { label: 'Register', icon: ClipboardCheck },
-  { label: 'Verify', icon: FileCheck },
-  { label: 'Match', icon: Users },
-  { label: 'Assign', icon: UserCheck },
-  { label: 'Serve', icon: CheckCircle },
-];
-
 export default function PublicVolunteer() {
-  const [authenticated] = useState(true);
+  const [authenticated, setAuthenticated] = useState(true);
   const [profile, setProfile] = useState<VolunteerProfile | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [showProfileForm, setShowProfileForm] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [message, setMessage] = useState('');
-  const [opportunityTab, setOpportunityTab] = useState<'available' | 'unavailable'>('available');
   const [pageTab, setPageTab] = useState<'volunteer' | 'donate'>('volunteer');
+  const [workTab, setWorkTab] = useState<'opportunities' | 'applications' | 'upcoming'>('opportunities');
+  const [slotTab, setSlotTab] = useState<'available' | 'unavailable'>('available');
   const [opportunities, setOpportunities] = useState<VolunteerOpportunity[]>(() => readVolunteerOpportunities());
   const [notifications, setNotifications] = useState<VolunteerNotification[]>(() => readVolunteerNotifications());
 
@@ -116,7 +103,14 @@ export default function PublicVolunteer() {
 
   useEffect(() => {
     const saved = readVolunteerProfile();
-    if (saved) hydrateProfile(saved);
+    if (saved) {
+      hydrateProfile(saved);
+    } else {
+      const demoProfile = { ...demoCitizenVolunteerProfile, assignments: [...demoCitizenVolunteerProfile.assignments] };
+      saveVolunteerProfile(demoProfile);
+      hydrateProfile(demoProfile);
+      setMessage('Demo returning volunteer loaded. You can apply, review pending applications, and check upcoming shifts.');
+    }
 
     fetch(apiUrl('/api/volunteers/profile'), { headers: authHeaders() })
       .then((response) => {
@@ -132,16 +126,29 @@ export default function PublicVolunteer() {
       .catch(() => {
         // Keep local fallback profile if backend is unavailable.
       });
+  }, []);
 
+  useEffect(() => {
+    const refreshProfile = () => {
+      const saved = readVolunteerProfile();
+      setProfile(saved);
+      if (saved) {
+        setForm(formFromProfile(saved));
+      }
+    };
     const refreshNeeds = () => setOpportunities(readVolunteerOpportunities());
     const refreshNotifications = () => setNotifications(readVolunteerNotifications());
+    window.addEventListener('storage', refreshProfile);
     window.addEventListener('storage', refreshNeeds);
     window.addEventListener('storage', refreshNotifications);
+    window.addEventListener('signal-volunteer-updated', refreshProfile);
     window.addEventListener('signal-volunteer-needs-updated', refreshNeeds);
     window.addEventListener('signal-volunteer-notifications-updated', refreshNotifications);
     return () => {
+      window.removeEventListener('storage', refreshProfile);
       window.removeEventListener('storage', refreshNeeds);
       window.removeEventListener('storage', refreshNotifications);
+      window.removeEventListener('signal-volunteer-updated', refreshProfile);
       window.removeEventListener('signal-volunteer-needs-updated', refreshNeeds);
       window.removeEventListener('signal-volunteer-notifications-updated', refreshNotifications);
     };
@@ -157,25 +164,20 @@ export default function PublicVolunteer() {
       .map((opportunity) => ({
         ...opportunity,
         match: scoreVolunteerForOpportunity(candidate, opportunity),
-        matchBreakdown: scoreVolunteerBreakdown(candidate, opportunity),
-        assigned: profile?.assignments.find((assignment) => assignment.opportunityId === opportunity.id),
+        assignment: profile?.assignments.find((assignment) => assignment.opportunityId === opportunity.id),
         applied: profile?.appliedOpportunityIds.includes(opportunity.id) ?? false,
         filled: opportunityCapacity(opportunity, profile),
       }))
       .sort((a, b) => b.match - a.match);
   }, [form.availability, form.region, form.skills, opportunities, profile]);
 
-  const activeAssignment = profile?.assignments.find((assignment) => assignment.status !== 'completed' && assignment.status !== 'declined') ?? null;
+  const offers = profile?.assignments.filter((assignment) => assignment.status === 'offered') ?? [];
+  const upcoming = profile?.assignments.filter((assignment) => assignment.status === 'accepted' || assignment.status === 'checked_in') ?? [];
+  const completed = profile?.assignments.filter((assignment) => assignment.status === 'completed') ?? [];
+  const pendingApplications = profile
+    ? rankedOpportunities.filter((opportunity) => opportunity.applied && !opportunity.assignment)
+    : [];
   const myNotifications = profile ? notifications.filter((notification) => notification.volunteerId === profile.id) : [];
-
-  const currentStepIndex = useMemo(() => {
-    if (!authenticated) return -1;
-    if (!profile) return 0;
-    if (profile.status === 'pending_review') return 1;
-    if (activeAssignment?.status === 'offered' || activeAssignment?.status === 'accepted') return 3;
-    if (activeAssignment?.status === 'checked_in') return 4;
-    return 2;
-  }, [activeAssignment?.status, authenticated, profile]);
 
   const toggleValue = (field: 'skills' | 'availability', value: string) => {
     setForm((current) => {
@@ -207,7 +209,7 @@ export default function PublicVolunteer() {
       availability: form.availability,
       certifications: form.certifications.trim(),
       emergencyContact: form.emergencyContact.trim(),
-      status: 'pending_review',
+      status: profile?.status === 'verified' || profile?.status === 'assigned' || profile?.status === 'checked_in' ? profile.status : 'pending_review',
       registeredAt: profile?.registeredAt ?? new Date().toISOString(),
       appliedOpportunityIds: profile?.appliedOpportunityIds ?? [],
       assignments: profile?.assignments ?? [],
@@ -215,10 +217,12 @@ export default function PublicVolunteer() {
 
     saveVolunteerRemote(nextProfile)
       .then(() => {
-        setMessage('Registration submitted. Your volunteer dashboard will update as agencies review your profile.');
+        setShowProfileForm(false);
+        setMessage(profile ? 'Volunteer details updated.' : 'Readiness profile submitted for government verification.');
       })
       .catch(() => {
-        setMessage('Registration saved on this device. Start the backend to sync it across operators.');
+        persistVolunteerProfile(nextProfile, profile ? 'Volunteer details updated on this device.' : 'Readiness profile saved on this device. Start the backend to sync it across operators.');
+        setShowProfileForm(false);
       })
       .finally(() => setSubmitting(false));
   };
@@ -274,26 +278,22 @@ export default function PublicVolunteer() {
 
     const nextProfile = {
       ...profile,
-      status: profile.status === 'pending_review' ? profile.status : 'verified' as const,
       appliedOpportunityIds: Array.from(new Set([...profile.appliedOpportunityIds, opportunityId])),
     };
-    persistVolunteerProfile(nextProfile, 'Application received. You are now on the waiting list while the coordinating agency reviews fit and availability.');
+    setWorkTab('applications');
+    persistVolunteerProfile(nextProfile, 'Application submitted. It will stay pending until the agency offers you a role.');
   };
 
-  const acceptAssignment = (assignment: VolunteerAssignment) => updateAssignment(assignment.id, 'accepted', 'Shift accepted. Reporting details are now shown in your schedule.');
-  const declineAssignment = (assignment: VolunteerAssignment) => updateAssignment(assignment.id, 'declined', 'Assignment declined. You can keep browsing other opportunities.');
-  const checkIn = (assignment: VolunteerAssignment) => updateAssignment(assignment.id, 'checked_in', 'Checked in. Your agency coordinator can see that you are on site.');
-  const completeShift = (assignment: VolunteerAssignment) => updateAssignment(assignment.id, 'completed', 'Shift completed. Thank you for supporting the response.');
-
-  const continueVolunteering = () => {
+  const updateAssignment = (assignmentId: string, status: VolunteerAssignment['status'], nextMessage: string) => {
     if (!profile) return;
+    const nextAssignments = profile.assignments.map((assignment) => assignment.id === assignmentId ? { ...assignment, status } : assignment);
+    const stillActive = nextAssignments.some((assignment) => assignment.status === 'offered' || assignment.status === 'accepted' || assignment.status === 'checked_in');
     const nextProfile: VolunteerProfile = {
       ...profile,
-      status: 'verified',
+      status: status === 'checked_in' ? 'checked_in' : stillActive ? 'assigned' : 'verified',
+      assignments: nextAssignments,
     };
-    persistVolunteerProfile(nextProfile);
-    setOpportunityTab('available');
-    setMessage('You are back in the verified pool and can apply for more opportunities.');
+    persistVolunteerProfile(nextProfile, nextMessage);
   };
 
   const saveProfileUpdates = () => {
@@ -336,30 +336,8 @@ export default function PublicVolunteer() {
     setForm(emptyForm);
     setErrors([]);
     setMessage('');
-    setOpportunityTab('available');
-  };
-
-  const goBackStep = () => {
-    if (!profile) {
-      return;
-    }
-    if (activeAssignment) {
-      setMessage('Back to matching. Your active assignment details remain available on the right.');
-      return;
-    }
-    setOpportunityTab('available');
-    setMessage('Back to matching. You can browse available opportunities.');
-  };
-
-  const updateAssignment = (assignmentId: string, status: VolunteerAssignment['status'], nextMessage: string) => {
-    if (!profile) return;
-    const nextProfile: VolunteerProfile = {
-      ...profile,
-      status: status === 'checked_in' ? 'checked_in' : status === 'completed' ? 'completed' : status === 'declined' ? 'verified' : 'assigned',
-      assignments: profile.assignments.map((assignment) => assignment.id === assignmentId ? { ...assignment, status } : assignment),
-    };
-    persistVolunteerProfile(nextProfile);
-    setMessage(nextMessage);
+    setWorkTab('opportunities');
+    setSlotTab('available');
   };
 
   return (
@@ -367,7 +345,7 @@ export default function PublicVolunteer() {
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Volunteer & Support</h1>
-          <p className="text-zinc-400">Verify your readiness once, then respond when agencies need your skills.</p>
+          <p className="text-zinc-400">Keep one verified profile, apply to multiple opportunities, and accept offers when agencies confirm you.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-900 p-1">
@@ -375,10 +353,9 @@ export default function PublicVolunteer() {
             <button onClick={() => setPageTab('donate')} className={`rounded-md px-3 py-1.5 text-sm ${pageTab === 'donate' ? 'bg-green-600 text-white' : 'text-zinc-400 hover:text-white'}`}>Donate</button>
           </div>
           {profile && (
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm">
-              <div className="text-zinc-500">Volunteer ID</div>
-              <div className="font-mono text-zinc-100">{profile.id}</div>
-            </div>
+            <button onClick={() => setShowProfileForm((value) => !value)} className="rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-800">
+              Update Details
+            </button>
           )}
         </div>
       </div>
@@ -387,109 +364,174 @@ export default function PublicVolunteer() {
 
       {pageTab === 'volunteer' && (
         <>
-      {!profile ? (
-        <>
-          <button onClick={goBackStep} className="inline-flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800">
-            <ArrowLeft className="h-4 w-4" />
-            Back
-          </button>
-
-          <div className="grid gap-3 md:grid-cols-5">
-            {lifecycle.map((item, index) => {
-              const Icon = item.icon;
-              const isActive = index <= currentStepIndex;
-              return (
-                <div key={item.label} className={`rounded-lg border p-3 ${isActive ? 'border-blue-800 bg-blue-950/30 text-blue-200' : 'border-zinc-800 bg-zinc-900 text-zinc-500'}`}>
-                  <Icon className="mb-2 h-5 w-5" />
-                  <div className="text-sm font-medium">{item.label}</div>
+          {!authenticated && (
+            <section className="rounded-xl border border-blue-900/50 bg-blue-950/20 p-6">
+              <div className="flex items-start gap-4">
+                <div className="rounded-lg bg-blue-900/50 p-3">
+                  <Shield className="h-6 w-6 text-blue-400" />
                 </div>
-              );
-            })}
-          </div>
-        </>
-      ) : null}
-
-      {authenticated && !profile && (
-        <section className="rounded-xl border border-zinc-800 bg-zinc-900">
-          <div className="border-b border-zinc-800 p-5">
-            <h2 className="flex items-center gap-2 text-lg font-semibold"><Users className="h-5 w-5 text-blue-400" />Create Readiness Profile</h2>
-            <p className="mt-1 text-sm text-zinc-500">This is for prior verification. You do not need to choose a live assignment yet.</p>
-          </div>
-          <div className="space-y-5 p-5">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Full Name" value={form.name} onChange={(value) => setForm({ ...form, name: value })} placeholder="As per NRIC" />
-              <Field label="Contact Number" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} placeholder="+65 XXXX XXXX" />
-              <Field label="Email" value={form.email} onChange={(value) => setForm({ ...form, email: value })} placeholder="Optional" />
-              <Field label="Emergency Contact" value={form.emergencyContact} onChange={(value) => setForm({ ...form, emergencyContact: value })} placeholder="+65 XXXX XXXX" />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium">Preferred Region</label>
-              <select value={form.region} onChange={(event) => setForm({ ...form, region: event.target.value })} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600">
-                <option value="">Select region...</option>
-                {['Central', 'North', 'South', 'East', 'West', 'Any Region'].map((region) => <option key={region}>{region}</option>)}
-              </select>
-            </div>
-
-            <ToggleGroup title="Skills & Qualifications" values={volunteerSkills} selected={form.skills} onToggle={(skill) => toggleValue('skills', skill)} />
-            <ToggleGroup title="Availability" values={volunteerAvailability} selected={form.availability} onToggle={(slot) => toggleValue('availability', slot)} />
-
-            <div>
-              <label className="mb-2 block text-sm font-medium">Experience & Certification Notes</label>
-              <textarea value={form.certifications} onChange={(event) => setForm({ ...form, certifications: event.target.value })} placeholder="Past volunteering, first aid, driving licence, medical registration, language capability..." rows={3} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600" />
-            </div>
-
-            <label className="block cursor-pointer rounded-lg border-2 border-dashed border-zinc-700 bg-zinc-950/40 p-4 text-center transition-colors hover:border-zinc-600">
-              <Upload className="mx-auto mb-2 h-6 w-6 text-zinc-500" />
-              <div className="text-sm text-zinc-400">Optional certificate upload placeholder</div>
-              <input type="file" accept=".pdf,.jpg,.png" multiple className="hidden" />
-            </label>
-
-            {errors.length > 0 && (
-              <div className="rounded-lg border border-red-800 bg-red-950/40 p-3 text-sm text-red-200">
-                {errors.map((error) => <div key={error}>{error}</div>)}
+                <div className="flex-1">
+                  <h2 className="mb-2 font-semibold">Singpass Sign In</h2>
+                  <p className="mb-4 text-sm text-zinc-300">For the demo, signing in lets you continue if a volunteer profile already exists. First-time volunteers can create one after this step.</p>
+                  <button onClick={() => setAuthenticated(true)} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-medium transition-colors hover:bg-blue-700">
+                    <Shield className="h-4 w-4" />
+                    Login with Singpass
+                  </button>
+                </div>
               </div>
-            )}
+            </section>
+          )}
 
-            <div className="rounded-lg border border-yellow-800 bg-yellow-950/30 p-4 text-sm text-zinc-300">
-              <div className="flex gap-3">
-                <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-yellow-500" />
-                <div><strong className="text-yellow-400">Verification first:</strong> Agencies review your experience before deployment. Once verified, you can view live opportunities and agencies can call you for matching needs.</div>
-              </div>
-            </div>
+          {authenticated && !profile && !showProfileForm && (
+            <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+              <h2 className="mb-2 text-lg font-semibold">Volunteer Readiness Profile</h2>
+              <p className="mb-4 text-sm text-zinc-400">First-time volunteers submit skills and availability once. Returning verified volunteers would be let into the opportunities page immediately.</p>
+              <button onClick={() => setShowProfileForm(true)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-700">
+                Sign Up with Singpass
+              </button>
+            </section>
+          )}
 
-            <button onClick={submitRegistration} disabled={submitting} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 font-medium transition-colors hover:bg-blue-700 disabled:opacity-60">
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-              Submit for Verification
-            </button>
-          </div>
-        </section>
-      )}
-
-      {profile && (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-          <section className="space-y-4">
-            <StatusPanel profile={profile} activeAssignment={activeAssignment} onVerify={quickVerify} onContinue={continueVolunteering} onReset={resetDemoProfile} />
-            <ProfileEditor
+          {authenticated && showProfileForm && (
+            <ProfileForm
               form={form}
-              setForm={setForm}
               errors={errors}
-              saving={savingProfile}
+              submitting={submitting}
+              isUpdate={Boolean(profile)}
+              onSubmit={submitRegistration}
+              onCancel={() => setShowProfileForm(false)}
+              onChange={setForm}
               onToggle={toggleValue}
-              onSave={saveProfileUpdates}
             />
-            <NotificationPanel notifications={myNotifications} opportunities={opportunities} />
-            {message && <div className="rounded-lg border border-green-800 bg-green-950/40 p-3 text-sm text-green-300">{message}</div>}
-            <OpportunityList profile={profile} opportunities={rankedOpportunities} tab={opportunityTab} setTab={setOpportunityTab} onApply={applyForOpportunity} />
-          </section>
-          <aside className="space-y-4">
-            <ScheduleCard profile={profile} assignment={activeAssignment} onAccept={acceptAssignment} onDecline={declineAssignment} onCheckIn={checkIn} onComplete={completeShift} />
-          </aside>
-        </div>
-      )}
+          )}
+
+          {profile && (
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <section className="space-y-4">
+                <DashboardSummary pending={pendingApplications.length} offers={offers.length} upcoming={upcoming.length} completed={completed.length} onReset={resetDemoProfile} />
+                <NotificationPanel notifications={myNotifications} opportunities={opportunities} />
+                {message && <div className="rounded-lg border border-green-800 bg-green-950/40 p-3 text-sm text-green-300">{message}</div>}
+                <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-1">
+                  <button onClick={() => setWorkTab('opportunities')} className={`rounded-md px-3 py-1.5 text-sm ${workTab === 'opportunities' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'}`}>Opportunities</button>
+                  <button onClick={() => setWorkTab('applications')} className={`rounded-md px-3 py-1.5 text-sm ${workTab === 'applications' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'}`}>Applications ({pendingApplications.length + offers.length})</button>
+                  <button onClick={() => setWorkTab('upcoming')} className={`rounded-md px-3 py-1.5 text-sm ${workTab === 'upcoming' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'}`}>Upcoming ({upcoming.length})</button>
+                </div>
+                {workTab === 'opportunities' && (
+                  <OpportunityList profile={profile} opportunities={rankedOpportunities} tab={slotTab} setTab={setSlotTab} onApply={applyForOpportunity} />
+                )}
+                {workTab === 'applications' && (
+                  <ApplicationsList
+                    pending={pendingApplications}
+                    offers={offers}
+                    opportunities={opportunities}
+                    onAccept={(assignment) => updateAssignment(assignment.id, 'accepted', 'Offer accepted. It is now in Upcoming Volunteering.')}
+                    onDecline={(assignment) => updateAssignment(assignment.id, 'declined', 'Offer rejected. You can keep applying for other opportunities.')}
+                  />
+                )}
+                {workTab === 'upcoming' && (
+                  <UpcomingList
+                    assignments={upcoming}
+                    opportunities={opportunities}
+                    onCheckIn={(assignment) => updateAssignment(assignment.id, 'checked_in', 'Checked in. Your agency coordinator can see that you are on site.')}
+                    onComplete={(assignment) => updateAssignment(assignment.id, 'completed', 'Shift completed. Thank you for supporting the response.')}
+                  />
+                )}
+              </section>
+              <aside className="space-y-4">
+                <ProfileSummary profile={profile} />
+                <UpcomingMini assignments={upcoming} offers={offers} opportunities={opportunities} />
+              </aside>
+            </div>
+          )}
         </>
       )}
     </div>
+  );
+}
+
+function formFromProfile(profile: VolunteerProfile): FormState {
+  return {
+    name: profile.name,
+    phone: profile.phone,
+    email: profile.email,
+    region: profile.region,
+    skills: profile.skills,
+    availability: profile.availability,
+    certifications: profile.certifications,
+    emergencyContact: profile.emergencyContact,
+  };
+}
+
+function ProfileForm({
+  form,
+  errors,
+  submitting,
+  isUpdate,
+  onSubmit,
+  onCancel,
+  onChange,
+  onToggle,
+}: {
+  form: FormState;
+  errors: string[];
+  submitting: boolean;
+  isUpdate: boolean;
+  onSubmit: () => void;
+  onCancel: () => void;
+  onChange: (form: FormState) => void;
+  onToggle: (field: 'skills' | 'availability', value: string) => void;
+}) {
+  return (
+    <section className="rounded-xl border border-zinc-800 bg-zinc-900">
+      <div className="border-b border-zinc-800 p-5">
+        <h2 className="flex items-center gap-2 text-lg font-semibold"><Users className="h-5 w-5 text-blue-400" />{isUpdate ? 'Update Volunteer Details' : 'Create Volunteer Profile'}</h2>
+        <p className="mt-1 text-sm text-zinc-500">Skills are collected here only, not during every application.</p>
+      </div>
+      <div className="space-y-5 p-5">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Full Name" value={form.name} onChange={(value) => onChange({ ...form, name: value })} placeholder="As per NRIC" />
+          <Field label="Contact Number" value={form.phone} onChange={(value) => onChange({ ...form, phone: value })} placeholder="+65 XXXX XXXX" />
+          <Field label="Email" value={form.email} onChange={(value) => onChange({ ...form, email: value })} placeholder="Optional" />
+          <Field label="Emergency Contact" value={form.emergencyContact} onChange={(value) => onChange({ ...form, emergencyContact: value })} placeholder="+65 XXXX XXXX" />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium">Preferred Region</label>
+          <select value={form.region} onChange={(event) => onChange({ ...form, region: event.target.value })} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600">
+            <option value="">Select region...</option>
+            {['Central', 'North', 'South', 'East', 'West', 'Any Region'].map((region) => <option key={region}>{region}</option>)}
+          </select>
+        </div>
+
+        <ToggleGroup title="Skills & Qualifications" values={volunteerSkills} selected={form.skills} onToggle={(skill) => onToggle('skills', skill)} />
+        <ToggleGroup title="Availability" values={volunteerAvailability} selected={form.availability} onToggle={(slot) => onToggle('availability', slot)} />
+
+        <div>
+          <label className="mb-2 block text-sm font-medium">Experience & Certification Notes</label>
+          <textarea value={form.certifications} onChange={(event) => onChange({ ...form, certifications: event.target.value })} placeholder="Past volunteering, first aid, driving licence, medical registration, language capability..." rows={3} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600" />
+        </div>
+
+        <label className="block cursor-pointer rounded-lg border-2 border-dashed border-zinc-700 bg-zinc-950/40 p-4 text-center transition-colors hover:border-zinc-600">
+          <Upload className="mx-auto mb-2 h-6 w-6 text-zinc-500" />
+          <div className="text-sm text-zinc-400">Optional certificate upload placeholder</div>
+          <input type="file" accept=".pdf,.jpg,.png" multiple className="hidden" />
+        </label>
+
+        {errors.length > 0 && (
+          <div className="rounded-lg border border-red-800 bg-red-950/40 p-3 text-sm text-red-200">
+            {errors.map((error) => <div key={error}>{error}</div>)}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button onClick={onSubmit} disabled={submitting} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 font-medium transition-colors hover:bg-blue-700 disabled:opacity-60">
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+            {isUpdate ? 'Save Details' : 'Submit for Verification'}
+          </button>
+          <button onClick={onCancel} className="rounded-lg bg-zinc-800 px-4 py-3 text-sm font-medium text-zinc-300 hover:bg-zinc-700">Cancel</button>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -517,107 +559,44 @@ function ToggleGroup({ title, values, selected, onToggle }: { title: string; val
   );
 }
 
-function ProfileEditor({
-  form,
-  setForm,
-  errors,
-  saving,
-  onToggle,
-  onSave,
-}: {
-  form: FormState;
-  setForm: React.Dispatch<React.SetStateAction<FormState>>;
-  errors: string[];
-  saving: boolean;
-  onToggle: (field: 'skills' | 'availability', value: string) => void;
-  onSave: () => void;
-}) {
-  return (
-    <section className="rounded-xl border border-zinc-800 bg-zinc-900">
-      <div className="border-b border-zinc-800 p-5">
-        <h2 className="text-lg font-semibold">Update Skills & Availability</h2>
-        <p className="mt-1 text-sm text-zinc-500">Keep your volunteer profile current so matching stays accurate.</p>
-      </div>
-      <div className="space-y-5 p-5">
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Full Name" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} placeholder="As per NRIC" />
-          <Field label="Contact Number" value={form.phone} onChange={(value) => setForm((current) => ({ ...current, phone: value }))} placeholder="+65 XXXX XXXX" />
-          <Field label="Email" value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} placeholder="Optional" />
-          <Field label="Emergency Contact" value={form.emergencyContact} onChange={(value) => setForm((current) => ({ ...current, emergencyContact: value }))} placeholder="+65 XXXX XXXX" />
-        </div>
-
-        <div>
-          <label className="mb-2 block text-sm font-medium">Preferred Region</label>
-          <select value={form.region} onChange={(event) => setForm((current) => ({ ...current, region: event.target.value }))} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600">
-            {['Central', 'North', 'South', 'East', 'West', 'Any Region'].map((region) => <option key={region}>{region}</option>)}
-          </select>
-        </div>
-
-        <ToggleGroup title="Skills & Qualifications" values={volunteerSkills} selected={form.skills} onToggle={(skill) => onToggle('skills', skill)} />
-        <ToggleGroup title="Availability" values={volunteerAvailability} selected={form.availability} onToggle={(slot) => onToggle('availability', slot)} />
-
-        <div>
-          <label className="mb-2 block text-sm font-medium">Experience & Certification Notes</label>
-          <textarea value={form.certifications} onChange={(event) => setForm((current) => ({ ...current, certifications: event.target.value }))} rows={3} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600" />
-        </div>
-
-        {errors.length > 0 && (
-          <div className="rounded-lg border border-red-800 bg-red-950/40 p-3 text-sm text-red-200">
-            {errors.map((error) => <div key={error}>{error}</div>)}
-          </div>
-        )}
-
-        <button onClick={onSave} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-700 disabled:opacity-60">
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-          Save profile updates
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function StatusPanel({
-  profile,
-  activeAssignment,
-  onVerify,
-  onContinue,
+function DashboardSummary({
+  pending,
+  offers,
+  upcoming,
+  completed,
   onReset,
 }: {
-  profile: VolunteerProfile;
-  activeAssignment: VolunteerAssignment | null;
-  onVerify: () => void;
-  onContinue: () => void;
+  pending: number;
+  offers: number;
+  upcoming: number;
+  completed: number;
   onReset: () => void;
 }) {
-  const pending = profile.status === 'pending_review';
-  const completedCount = profile.assignments.filter((assignment) => assignment.status === 'completed').length;
   return (
-    <div className={`rounded-xl border p-5 ${pending ? 'border-yellow-800 bg-yellow-950/20' : 'border-green-800 bg-green-950/20'}`}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          {pending ? <Clock className="mt-0.5 h-6 w-6 text-yellow-400" /> : <CheckCircle className="mt-0.5 h-6 w-6 text-green-400" />}
-          <div>
-            <h2 className="font-semibold">{activeAssignment ? statusLabel(profile.status) : pending ? 'Pending review' : 'Verified readiness profile'}</h2>
-            <p className="text-sm text-zinc-300">
-              {pending
-                ? 'Your readiness profile is queued for agency review. Once approved, you can be matched directly to suitable roles.'
-                : activeAssignment
-                ? 'You have an active agency offer or assignment. You can still browse other opportunities below.'
-                : completedCount
-                ? `You completed ${completedCount} assignment${completedCount > 1 ? 's' : ''}. You can keep browsing for more roles.`
-                : 'You are verified. You can access live opportunities and agencies can match you to future calls.'}
-            </p>
-          </div>
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Volunteer Dashboard</h2>
+          <p className="text-sm text-zinc-400">Browse new opportunities, track applications, and manage accepted shifts from one page.</p>
         </div>
-        {profile.assignments.some((assignment) => assignment.status === 'declined') && (
-          <div className="rounded-lg border border-red-900/70 bg-red-950/30 px-3 py-2 text-sm text-red-200">
-            One recent application was not selected. You can still browse and apply for other roles.
-          </div>
-        )}
-        <div className="flex flex-wrap gap-2">
-          {pending && <button onClick={onVerify} className="rounded-lg bg-yellow-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-yellow-700">Refresh status</button>}
-          {!pending && !activeAssignment && completedCount > 0 && <button onClick={onContinue} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-700">Continue volunteering</button>}
-          <button onClick={onReset} className="rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-700">Start over</button>
+        <button onClick={onReset} className="rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-700">Reset Demo</button>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-4">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+          <div className="text-xs text-zinc-500">Details</div>
+          <div className="mt-1 font-medium text-green-300">Verified</div>
+        </div>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+          <div className="text-xs text-zinc-500">Pending</div>
+          <div className="mt-1 text-xl font-bold">{pending}</div>
+        </div>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+          <div className="text-xs text-zinc-500">Offers</div>
+          <div className="mt-1 text-xl font-bold">{offers}</div>
+        </div>
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+          <div className="text-xs text-zinc-500">Assigned / Completed</div>
+          <div className="mt-1 text-xl font-bold">{upcoming} / {completed}</div>
         </div>
       </div>
     </div>
@@ -629,14 +608,14 @@ function NotificationPanel({ notifications, opportunities }: { notifications: Vo
 
   return (
     <div className="rounded-xl border border-blue-800 bg-blue-950/20 p-5">
-      <h2 className="mb-3 font-semibold">Agency Call-Back Requests</h2>
+      <h2 className="mb-3 font-semibold">Agency Notifications</h2>
       <div className="space-y-2">
         {notifications.map((notification) => {
           const opportunity = opportunities.find((item) => item.id === notification.opportunityId);
           return (
             <div key={notification.id} className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-3">
               <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                <div className="text-sm font-medium">{notification.agency} requested your help</div>
+                <div className="text-sm font-medium">{notification.agency} offered a volunteer role</div>
                 <span className="rounded bg-blue-900 px-2 py-0.5 text-xs text-blue-200">{notification.status}</span>
               </div>
               <div className="text-sm text-zinc-300">{notification.message}</div>
@@ -659,8 +638,7 @@ function OpportunityList({
   profile: VolunteerProfile;
   opportunities: Array<VolunteerOpportunity & {
     match: number;
-    matchBreakdown: { skills: number; region: number; availability: number; total: number };
-    assigned?: VolunteerAssignment;
+    assignment?: VolunteerAssignment;
     applied: boolean;
     filled: number;
   }>;
@@ -676,8 +654,8 @@ function OpportunityList({
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Matched Opportunities</h2>
-          <p className="text-xs text-zinc-500">Match = skills 50 pts, region 30 pts, availability 20 pts.</p>
+          <h2 className="text-lg font-semibold">Volunteer Opportunities</h2>
+          <p className="text-xs text-zinc-500">Apply to any open role. Existing applications stay pending while you continue browsing.</p>
         </div>
         <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-1">
           <button onClick={() => setTab('available')} className={`rounded-md px-3 py-1.5 text-sm ${tab === 'available' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'}`}>Available ({available.length})</button>
@@ -686,14 +664,14 @@ function OpportunityList({
       </div>
       <div className="space-y-4">
         {visible.map((opportunity) => {
-          const canApply = profile.status !== 'pending_review' && !opportunity.applied && !opportunity.assigned && opportunity.filled < opportunity.needed;
+          const canApply = profile.status !== 'pending_review' && !opportunity.applied && !opportunity.assignment && opportunity.filled < opportunity.needed;
           return (
             <div key={opportunity.id} className={`rounded-lg border p-5 ${opportunity.urgency === 'high' ? 'border-red-800 bg-red-950/20' : opportunity.urgency === 'medium' ? 'border-yellow-800 bg-yellow-950/20' : 'border-green-800 bg-green-950/20'}`}>
               <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
                   <div className="mb-1 flex flex-wrap items-center gap-2">
                     <h3 className="text-lg font-semibold">{opportunity.title}</h3>
-                    <span className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">{opportunity.match}% match</span>
+                    <span className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">{opportunity.match}% fit</span>
                   </div>
                   <div className="flex flex-wrap gap-4 text-sm text-zinc-400">
                     <span>{opportunity.organization}</span>
@@ -704,11 +682,6 @@ function OpportunityList({
                 <span className={`rounded px-2 py-1 text-xs ${opportunity.urgency === 'high' ? 'bg-red-900 text-red-300' : opportunity.urgency === 'medium' ? 'bg-yellow-900 text-yellow-300' : 'bg-green-900 text-green-300'}`}>{opportunity.urgency.toUpperCase()}</span>
               </div>
               <p className="mb-3 text-sm text-zinc-300">{opportunity.description}</p>
-              <div className="mb-3 grid gap-2 text-xs text-zinc-400 sm:grid-cols-3">
-                <div className="rounded bg-zinc-900/70 px-2 py-1">Skills: {opportunity.matchBreakdown.skills}/50</div>
-                <div className="rounded bg-zinc-900/70 px-2 py-1">Region: {opportunity.matchBreakdown.region}/30</div>
-                <div className="rounded bg-zinc-900/70 px-2 py-1">Availability: {opportunity.matchBreakdown.availability}/20</div>
-              </div>
               <div className="mb-3 flex flex-wrap gap-2">
                 {opportunity.requiredSkills.map((skill) => <span key={skill} className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">{skill}</span>)}
               </div>
@@ -728,15 +701,15 @@ function OpportunityList({
               </div>
               <div className="flex flex-col gap-3 border-t border-zinc-800 pt-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm text-zinc-400">{opportunity.filled}/{opportunity.needed} volunteers assigned</div>
-                {opportunity.assigned ? (
-                  <span className={`rounded-lg px-3 py-2 text-sm ${opportunity.assigned.status === 'declined' ? 'bg-red-950 text-red-300' : 'bg-green-950 text-green-300'}`}>
-                    {opportunity.assigned.status === 'declined' ? 'Not selected for this role' : `Assignment ${opportunity.assigned.status}`}
+                {opportunity.assignment ? (
+                  <span className={`rounded-lg px-3 py-2 text-sm ${opportunity.assignment.status === 'declined' ? 'bg-red-950 text-red-300' : 'bg-green-950 text-green-300'}`}>
+                    {opportunity.assignment.status === 'declined' ? 'Not selected' : `Offer ${opportunity.assignment.status}`}
                   </span>
                 ) : opportunity.applied ? (
-                  <span className="rounded-lg bg-blue-950 px-3 py-2 text-sm text-blue-300">On waiting list for agency review</span>
+                  <span className="rounded-lg bg-blue-950 px-3 py-2 text-sm text-blue-300">Pending application</span>
                 ) : (
                   <button onClick={() => onApply(opportunity.id)} disabled={!canApply} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-500">
-                    {profile.status === 'pending_review' ? 'Verification required' : opportunity.filled >= opportunity.needed ? 'Fully staffed' : 'Apply for Assignment'}
+                    {profile.status === 'pending_review' ? 'Verification required' : opportunity.filled >= opportunity.needed ? 'Fully staffed' : 'Apply'}
                   </button>
                 )}
               </div>
@@ -753,46 +726,133 @@ function OpportunityList({
   );
 }
 
-function ScheduleCard({
-  profile,
-  assignment,
+function ApplicationsList({
+  pending,
+  offers,
+  opportunities,
   onAccept,
   onDecline,
+}: {
+  pending: Array<VolunteerOpportunity & { match: number; filled: number }>;
+  offers: VolunteerAssignment[];
+  opportunities: VolunteerOpportunity[];
+  onAccept: (assignment: VolunteerAssignment) => void;
+  onDecline: (assignment: VolunteerAssignment) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+      <h2 className="mb-4 text-lg font-semibold">My Applications</h2>
+      <div className="space-y-3">
+        {offers.map((assignment) => {
+          const opportunity = opportunities.find((item) => item.id === assignment.opportunityId);
+          if (!opportunity) return null;
+          return (
+            <div key={assignment.id} className="rounded-lg border border-blue-800 bg-blue-950/20 p-4">
+              <div className="mb-1 font-medium">{opportunity.title}</div>
+              <div className="text-sm text-blue-200">{assignment.roleTitle ?? 'Volunteer role'} offered by {opportunity.authorisedAgency}</div>
+              <div className="mt-2 text-sm text-zinc-300">{opportunity.shift} - {opportunity.reportingPoint}</div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <button onClick={() => onAccept(assignment)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-700">Final Accept</button>
+                <button onClick={() => onDecline(assignment)} className="rounded-lg bg-zinc-700 px-4 py-2 text-sm font-medium hover:bg-zinc-600">Reject Offer</button>
+              </div>
+            </div>
+          );
+        })}
+        {pending.map((opportunity) => (
+          <div key={opportunity.id} className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
+            <div className="mb-1 font-medium">{opportunity.title}</div>
+            <div className="text-sm text-zinc-400">{opportunity.authorisedAgency} - {opportunity.location} - {opportunity.shift}</div>
+            <div className="mt-2 inline-flex rounded bg-blue-950 px-2 py-1 text-xs text-blue-300">Pending agency review</div>
+          </div>
+        ))}
+        {!offers.length && !pending.length && <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-5 text-sm text-zinc-500">No applications yet. Apply from the opportunities tab.</div>}
+      </div>
+    </div>
+  );
+}
+
+function UpcomingList({
+  assignments,
+  opportunities,
   onCheckIn,
   onComplete,
 }: {
-  profile: VolunteerProfile;
-  assignment: VolunteerAssignment | null;
-  onAccept: (assignment: VolunteerAssignment) => void;
-  onDecline: (assignment: VolunteerAssignment) => void;
+  assignments: VolunteerAssignment[];
+  opportunities: VolunteerOpportunity[];
   onCheckIn: (assignment: VolunteerAssignment) => void;
   onComplete: (assignment: VolunteerAssignment) => void;
 }) {
-  const opportunity = assignment ? readVolunteerOpportunities().find((item) => item.id === assignment.opportunityId) : null;
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-      <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold"><Calendar className="h-5 w-5 text-purple-400" />Assignment Details</h2>
-      {!assignment || !opportunity ? (
-        <p className="text-sm text-zinc-400">{profile.status === 'pending_review' ? 'Get verified first. Assignment details appear here after approval.' : 'No confirmed assignment yet. If you do not meet the immediate match criteria, your application stays on the waiting list for agency review.'}</p>
-      ) : (
-        <div className="space-y-4">
-          <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
-            <div className="mb-1 font-semibold">{opportunity.title}</div>
-            {assignment.roleTitle && <div className="mb-1 text-sm text-blue-300">{assignment.roleTitle}</div>}
-            <div className="text-sm text-zinc-400">{opportunity.shift}</div>
-            <div className="mt-2 text-sm text-zinc-300">{opportunity.reportingPoint}</div>
-            <div className="mt-3 rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">Status: {assignment.status}</div>
-          </div>
-          {assignment.status === 'offered' && (
-            <div className="grid gap-2 sm:grid-cols-2">
-              <button onClick={() => onAccept(assignment)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-700">Accept Assignment</button>
-              <button onClick={() => onDecline(assignment)} className="rounded-lg bg-zinc-700 px-4 py-2 text-sm font-medium hover:bg-zinc-600">Reject</button>
+      <h2 className="mb-4 text-lg font-semibold">Upcoming Volunteering</h2>
+      <div className="space-y-3">
+        {assignments.map((assignment) => {
+          const opportunity = opportunities.find((item) => item.id === assignment.opportunityId);
+          if (!opportunity) return null;
+          return (
+            <div key={assignment.id} className="rounded-lg border border-green-800 bg-green-950/20 p-4">
+              <div className="mb-1 font-medium">{opportunity.title}</div>
+              <div className="text-sm text-green-200">{assignment.roleTitle ?? 'Volunteer role'}</div>
+              <div className="mt-2 text-sm text-zinc-300">{opportunity.shift}</div>
+              <div className="text-sm text-zinc-300">{opportunity.reportingPoint}</div>
+              <div className="mt-3 rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">Status: {assignment.status}</div>
+              {assignment.status === 'accepted' && <button onClick={() => onCheckIn(assignment)} className="mt-3 w-full rounded-lg bg-green-600 px-4 py-2 text-sm font-medium hover:bg-green-700">Check In On Site</button>}
+              {assignment.status === 'checked_in' && <button onClick={() => onComplete(assignment)} className="mt-3 w-full rounded-lg bg-zinc-700 px-4 py-2 text-sm font-medium hover:bg-zinc-600">Mark Shift Complete</button>}
             </div>
-          )}
-          {assignment.status === 'accepted' && <button onClick={() => onCheckIn(assignment)} className="w-full rounded-lg bg-green-600 px-4 py-2 text-sm font-medium hover:bg-green-700">Check In On Site</button>}
-          {assignment.status === 'checked_in' && <button onClick={() => onComplete(assignment)} className="w-full rounded-lg bg-zinc-700 px-4 py-2 text-sm font-medium hover:bg-zinc-600">Mark Shift Complete</button>}
+          );
+        })}
+        {!assignments.length && <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-5 text-sm text-zinc-500">Accepted assignments will appear here.</div>}
+      </div>
+    </div>
+  );
+}
+
+function ProfileSummary({ profile }: { profile: VolunteerProfile }) {
+  const readiness = profile.status === 'pending_review' ? 'Pending verification' : 'Verified';
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+      <h2 className="mb-4 text-lg font-semibold">Volunteer Profile</h2>
+      <div className="space-y-3 text-sm">
+        <div>
+          <div className="text-zinc-500">Volunteer ID</div>
+          <div className="font-mono text-zinc-100">{profile.id}</div>
         </div>
-      )}
+        <div>
+          <div className="text-zinc-500">Readiness</div>
+          <div>{readiness}</div>
+        </div>
+        <div>
+          <div className="text-zinc-500">Region</div>
+          <div>{profile.region}</div>
+        </div>
+        <div>
+          <div className="text-zinc-500">Skills</div>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {profile.skills.map((skill) => <span key={skill} className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">{skill}</span>)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UpcomingMini({ assignments, offers, opportunities }: { assignments: VolunteerAssignment[]; offers: VolunteerAssignment[]; opportunities: VolunteerOpportunity[] }) {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+      <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><Calendar className="h-5 w-5 text-purple-400" />Quick View</h2>
+      <div className="space-y-2 text-sm">
+        {offers.length > 0 && <div className="rounded-lg bg-blue-950/40 px-3 py-2 text-blue-200">{offers.length} offer{offers.length === 1 ? '' : 's'} waiting for final accept</div>}
+        {assignments.slice(0, 3).map((assignment) => {
+          const opportunity = opportunities.find((item) => item.id === assignment.opportunityId);
+          return (
+            <div key={assignment.id} className="rounded-lg bg-zinc-950/60 px-3 py-2">
+              <div className="font-medium">{opportunity?.title ?? 'Volunteer shift'}</div>
+              <div className="text-xs text-zinc-500">{assignment.roleTitle} - {assignment.status}</div>
+            </div>
+          );
+        })}
+        {!offers.length && !assignments.length && <p className="text-zinc-500">No confirmed shifts yet.</p>}
+      </div>
     </div>
   );
 }
