@@ -64,6 +64,7 @@ type AuthUser = {
   agencyCode: string | null;
 };
 type SortMode = 'priority' | 'newest' | 'oldest' | 'ticket-number';
+type QueueView = 'active' | 'archive';
 
 const agencies = ['All Agencies', 'MOH', 'PUB', 'LTA', 'Enterprise SG', 'SPF', 'SCDF', 'NEA', 'CSA', 'GOV-OPS'];
 const pingableAgencies = ['MOH', 'PUB', 'LTA', 'Enterprise SG', 'SPF', 'SCDF', 'NEA', 'MSF'];
@@ -86,6 +87,18 @@ const urgencyRank: Record<TicketUrgency, number> = {
   high: 1,
   medium: 2,
   low: 3,
+};
+const urgencyLabels: Record<TicketUrgency, string> = {
+  critical: 'Critical priority',
+  high: 'High priority',
+  medium: 'Medium priority',
+  low: 'Low priority',
+};
+const statusLabels: Record<TicketStatus, string> = {
+  open: 'Open',
+  'in-progress': 'In progress',
+  grouped: 'Grouped',
+  resolved: 'Resolved',
 };
 
 const seedTickets: Ticket[] = [
@@ -183,10 +196,10 @@ const seedTickets: Ticket[] = [
 ];
 
 const urgencyColors: Record<TicketUrgency, string> = {
-  critical: 'bg-red-900 text-red-400 border-red-800',
-  high: 'bg-orange-900 text-orange-400 border-orange-800',
-  medium: 'bg-yellow-900 text-yellow-400 border-yellow-800',
-  low: 'bg-blue-900 text-blue-400 border-blue-800',
+  critical: 'bg-red-500/20 text-red-100 border-red-500',
+  high: 'bg-orange-500/20 text-orange-100 border-orange-500',
+  medium: 'bg-yellow-500/20 text-yellow-100 border-yellow-500',
+  low: 'bg-sky-500/20 text-sky-100 border-sky-500',
 };
 
 const statusColors: Record<TicketStatus, string> = {
@@ -205,6 +218,7 @@ export default function GovFormHandling() {
   const [filterCrisis, setFilterCrisis] = useState('All');
   const [filterAgency, setFilterAgency] = useState('All Agencies');
   const [sortMode, setSortMode] = useState<SortMode>('priority');
+  const [queueView, setQueueView] = useState<QueueView>('active');
   const [comment, setComment] = useState('');
   const [commentType, setCommentType] = useState<'public' | 'internal'>('public');
   const [pingOpen, setPingOpen] = useState(false);
@@ -275,6 +289,7 @@ export default function GovFormHandling() {
     const normalizedQuery = query.trim().toLowerCase();
     return tickets
       .filter((ticket) => {
+        const archiveMatch = queueView === 'archive' ? isResolved(ticket) : !isResolved(ticket);
         const statusMatch = filterStatus === 'All' || ticket.status === filterStatus;
         const crisisMatch = filterCrisis === 'All' || ticket.crisisType === filterCrisis;
         const agencyMatch = filterAgency === 'All Agencies' || ticket.assignedAgency === filterAgency;
@@ -284,13 +299,15 @@ export default function GovFormHandling() {
           ticket.message.toLowerCase().includes(normalizedQuery) ||
           ticket.location.toLowerCase().includes(normalizedQuery) ||
           ticket.reporter.toLowerCase().includes(normalizedQuery);
-        return statusMatch && crisisMatch && agencyMatch && queryMatch;
+        return archiveMatch && statusMatch && crisisMatch && agencyMatch && queryMatch;
       })
       .sort((a, b) => sortTickets(a, b, sortMode));
-  }, [filterAgency, filterCrisis, filterStatus, query, sortMode, tickets]);
+  }, [filterAgency, filterCrisis, filterStatus, query, queueView, sortMode, tickets]);
 
-  const selectedTicket = tickets.find((ticket) => ticket.id === selectedTicketId) ?? filtered[0] ?? tickets[0];
+  const selectedTicket = filtered.find((ticket) => ticket.id === selectedTicketId) ?? filtered[0] ?? null;
   const selectedTicketResolved = selectedTicket ? isResolved(selectedTicket) : false;
+  const visibleStatusOptions: Array<'All' | TicketStatus> =
+    queueView === 'archive' ? ['All', 'resolved'] : statusOptions.filter((status) => status !== 'resolved');
 
   const syncTicket = (updated: Ticket) => {
     setTickets((current) => current.map((ticket) => (ticket.id === updated.id ? updated : ticket)));
@@ -314,9 +331,11 @@ export default function GovFormHandling() {
   };
 
   const updateStatus = async (ticket: Ticket, status: TicketStatus) => {
+    let updatedTicket: Ticket | null = null;
     try {
       const data = await requestJson<{ item: Ticket }>(`/api/tickets/${ticket.id}/status`, 'PATCH', { status });
       syncTicket(data.item);
+      updatedTicket = data.item;
       setUsingBackend(true);
     } catch {
       setUsingBackend(false);
@@ -329,6 +348,14 @@ export default function GovFormHandling() {
           ),
         setTickets,
       );
+      updatedTicket = { ...ticket, status };
+    }
+    if (updatedTicket && isResolved(updatedTicket) && queueView === 'active') {
+      setSelectedTicketId((current) => {
+        if (current !== updatedTicket.id) return current;
+        const nextActive = filtered.find((item) => item.id !== updatedTicket.id && !isResolved(item));
+        return nextActive?.id ?? '';
+      });
     }
     setNotice(`${ticket.id} marked ${status}.`);
   };
@@ -442,6 +469,9 @@ export default function GovFormHandling() {
           <span className="px-2.5 py-1 bg-blue-900/50 border border-blue-800 text-blue-400 rounded-lg">
             {tickets.filter((ticket) => ticket.status === 'in-progress').length} In Progress
           </span>
+          <span className="px-2.5 py-1 bg-green-900/40 border border-green-800 text-green-400 rounded-lg">
+            {tickets.filter((ticket) => isResolved(ticket)).length} Archived
+          </span>
         </div>
       </div>
 
@@ -475,8 +505,25 @@ export default function GovFormHandling() {
                 <span className="max-w-12 truncate">{sortIconLabels[sortMode]}</span>
               </button>
             </div>
+            <div className="grid grid-cols-2 gap-1 rounded-lg border border-zinc-800 bg-zinc-950 p-1">
+              {(['active', 'archive'] as QueueView[]).map((view) => (
+                <button
+                  key={view}
+                  type="button"
+                  onClick={() => {
+                    setQueueView(view);
+                    setFilterStatus('All');
+                  }}
+                  className={`rounded-md px-2 py-1.5 text-xs transition-colors ${
+                    queueView === view ? 'bg-red-600 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                  }`}
+                >
+                  {view === 'active' ? 'Active queue' : 'Archive'}
+                </button>
+              ))}
+            </div>
             <div className="flex gap-1 flex-wrap">
-              {statusOptions.map((status) => (
+              {visibleStatusOptions.map((status) => (
                 <button
                   key={status}
                   onClick={() => setFilterStatus(status)}
@@ -694,16 +741,21 @@ function TicketListItem({
       onClick={onSelect}
       className={`w-full text-left p-3 border-b border-zinc-800 hover:bg-zinc-800/60 transition-colors ${selected ? 'bg-zinc-800' : ''}`}
     >
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-mono text-zinc-500">{ticket.id}</span>
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-xs font-mono text-zinc-500">{ticket.id}</div>
+          <div className="mt-1 text-sm font-medium line-clamp-2">{ticket.message}</div>
+        </div>
         <StatusBadge status={ticket.status} />
       </div>
-      <div className="text-sm font-medium mb-1 line-clamp-2">{ticket.message}</div>
-      <div className="flex items-center justify-between text-xs text-zinc-500">
-        <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{ticket.location.split(',')[0]}</span>
+      <div className="mb-2 flex">
         <UrgencyBadge urgency={ticket.urgency} />
       </div>
-      <div className="mt-1 text-xs text-zinc-600">{ticket.crisisType} - {ticket.assignedAgency}</div>
+      <div className="grid grid-cols-[1fr_auto] items-center gap-2 text-xs text-zinc-500">
+        <span className="flex min-w-0 items-center gap-1 truncate"><MapPin className="h-3 w-3 shrink-0" />{ticket.location.split(',')[0]}</span>
+        <span className="rounded bg-zinc-950 px-1.5 py-0.5 text-zinc-400">{ticket.assignedAgency}</span>
+      </div>
+      <div className="mt-1 text-xs text-zinc-600">{ticket.crisisType}</div>
     </button>
   );
 }
@@ -762,11 +814,11 @@ function TicketDetailHeader({
 }
 
 function StatusBadge({ status }: { status: TicketStatus }) {
-  return <span className={`text-xs px-2 py-0.5 rounded ${statusColors[status]}`}>{status}</span>;
+  return <span className={`shrink-0 text-xs px-2 py-0.5 rounded ${statusColors[status]}`}>{statusLabels[status]}</span>;
 }
 
 function UrgencyBadge({ urgency }: { urgency: TicketUrgency }) {
-  return <span className={`px-1.5 py-0.5 text-xs rounded border ${urgencyColors[urgency]}`}>{urgency.toUpperCase()}</span>;
+  return <span className={`px-2 py-1 text-xs font-medium rounded border ${urgencyColors[urgency]}`}>{urgencyLabels[urgency]}</span>;
 }
 
 function DeleteTicketDialog({
