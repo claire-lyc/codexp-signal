@@ -77,6 +77,7 @@ export default function GovOverview() {
   const [selectedAlertId, setSelectedAlertId] = useState<string | number | null>(null);
   const mapSectionRef = useRef<HTMLDivElement | null>(null);
   const filtersRef = useRef<HTMLDivElement | null>(null);
+  const alertsListRef = useRef<HTMLDivElement | null>(null);
   const apiCrisisCards = data?.overview?.crisisCards ?? [];
   const crisisCards: CrisisCard[] = apiCrisisCards.length > 0 ? apiCrisisCards : fallbackCrisisCards;
   const apiAlerts = data?.alerts ?? [];
@@ -85,15 +86,19 @@ export default function GovOverview() {
   const riskSummary = data?.overview?.riskSummary;
 
   useEffect(() => {
-    const closeFilters = (event: MouseEvent) => {
+    const handleDocumentClick = (event: MouseEvent) => {
+      const target = event.target as Node;
       if (filtersRef.current && !filtersRef.current.contains(event.target as Node)) {
         setFiltersOpen(false);
       }
+      if (selectedAlertId && alertsListRef.current && !alertsListRef.current.contains(target)) {
+        setSelectedAlertId(null);
+      }
     };
 
-    document.addEventListener('mousedown', closeFilters);
-    return () => document.removeEventListener('mousedown', closeFilters);
-  }, []);
+    document.addEventListener('mousedown', handleDocumentClick);
+    return () => document.removeEventListener('mousedown', handleDocumentClick);
+  }, [selectedAlertId]);
 
   const filteredAlerts = alerts.filter((a) => {
     const typeMatch = filterType === 'All' || a.type === filterType;
@@ -101,6 +106,12 @@ export default function GovOverview() {
     const regMatch = filterRegion === 'All' || a.region.includes(filterRegion);
     return typeMatch && sevMatch && regMatch;
   });
+
+  useEffect(() => {
+    if (selectedAlertId && !filteredAlerts.some((alert) => alert.id === selectedAlertId)) {
+      setSelectedAlertId(null);
+    }
+  }, [filteredAlerts, selectedAlertId]);
 
   const mapMarkers = useMemo<MapMarker[]>(() => {
     const baseAlerts = selectedAlertId ? filteredAlerts.filter((alert) => alert.id === selectedAlertId) : filteredAlerts;
@@ -150,7 +161,7 @@ export default function GovOverview() {
               <Link
                 key={card.id}
                 to={card.path}
-                className="group relative flex-shrink-0 w-80 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:border-zinc-700 hover:bg-zinc-800/80"
+                className="group relative min-h-[184px] w-80 flex-shrink-0 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 p-4 pr-[156px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:border-zinc-700 hover:bg-zinc-800/80"
               >
                 <div className="absolute inset-x-0 bottom-0 h-px bg-zinc-700/60" />
                 <div className="mb-4 flex items-center justify-between gap-3">
@@ -164,25 +175,38 @@ export default function GovOverview() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-[0.9fr_1.1fr] items-center gap-4">
-                  <div className="min-w-0">
-                    <div className="mb-3 truncate text-sm font-semibold text-zinc-100">{card.label}</div>
-                    <div className="text-3xl font-bold tracking-tight text-zinc-50">{primaryStat?.value ?? '--'}</div>
-                    <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500">
-                      <span className="truncate">{primaryStat?.label ?? 'Current metric'}</span>
-                      {primaryStat?.delta && <span className="text-zinc-400">{primaryStat.delta}</span>}
-                    </div>
-                    {secondaryStat && (
-                      <div className="mt-3 flex items-center gap-2 text-xs text-zinc-500">
-                        <span className="truncate">{secondaryStat.label}</span>
-                        <span className="font-semibold text-zinc-200">{secondaryStat.value}</span>
-                        {secondaryStat.delta && <span>{secondaryStat.delta}</span>}
-                      </div>
+                <div className="flex min-h-[118px] min-w-0 flex-col justify-center">
+                  <div className="mb-3 truncate text-sm font-semibold text-zinc-100">
+                    {card.label}
+                  </div>
+
+                  <div className="text-3xl font-bold tracking-tight text-zinc-50">
+                    {primaryStat?.value ?? '--'}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-snug text-zinc-500">
+                    <span>{primaryStat?.label ?? 'Current metric'}</span>
+                    {primaryStat?.delta && (
+                      <span className="text-zinc-400">{primaryStat.delta}</span>
                     )}
                   </div>
-                  <div className="flex min-w-0 items-center rounded-lg bg-zinc-950/35 px-2 py-1">
-                    <MiniTrend color={severitySpark[card.severity] ?? '#34d399'} seed={String(card.id)} />
-                  </div>
+
+                  {secondaryStat && (
+                    <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-snug text-zinc-500">
+                      <span>{secondaryStat.label}</span>
+                      <span className="font-semibold text-zinc-200">
+                        {secondaryStat.value}
+                      </span>
+                      {secondaryStat.delta && <span>{secondaryStat.delta}</span>}
+                    </div>
+                  )}
+                </div>
+
+                <div className="absolute right-4 top-1/2 flex h-[94px] w-[124px] -translate-y-1/2 items-center justify-center rounded-lg bg-zinc-950/35 px-2 py-2">
+                  <MiniTrend
+                    color={severitySpark[card.severity] ?? '#34d399'}
+                    seed={String(card.id)}
+                  />
                 </div>
               </Link>
             );
@@ -296,7 +320,7 @@ export default function GovOverview() {
             ))}
           </div>
 
-          <div className="space-y-2 flex-1 overflow-y-auto">
+          <div ref={alertsListRef} className="space-y-2 flex-1 overflow-y-auto">
             {filteredAlerts.length === 0 && (
               <div className="text-center py-8 text-zinc-600 text-sm">No alerts match filters</div>
             )}
@@ -388,14 +412,14 @@ function MiniTrend({ color, seed }: { color: string; seed: string }) {
   const gradientId = `trend-${seed.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 
   return (
-    <svg viewBox="0 0 150 54" className="h-16 w-full overflow-visible" role="img" aria-label="Illustrative crisis trend">
+    <svg viewBox="0 0 150 46" className="h-14 w-full overflow-visible" role="img" aria-label="Illustrative crisis trend">
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity="0.3" />
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>
-      <polygon points={`${points} 150,54 0,54`} fill={`url(#${gradientId})`} />
+      <polygon points={`${points} 150,46 0,46`} fill={`url(#${gradientId})`} />
       <polyline points={points} fill="none" stroke={color} strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" opacity="1" />
     </svg>
   );
@@ -417,7 +441,7 @@ function buildSparkline(seed: string) {
   return values
     .map((value, index) => {
       const x = (index / (values.length - 1)) * 150;
-      const y = 48 - ((value - min) / spread) * 38;
+      const y = 41 - ((value - min) / spread) * 32;
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(' ');
