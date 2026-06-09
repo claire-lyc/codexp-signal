@@ -1,4 +1,5 @@
 import { RouterProvider } from 'react-router';
+import { useEffect } from 'react';
 import { router } from './routes';
 
 const routeFallback = (
@@ -8,6 +9,13 @@ const routeFallback = (
 );
 
 export default function App() {
+  useEffect(() => {
+    localStorage.removeItem('signal-theme');
+    document.documentElement.removeAttribute('data-theme');
+    document.documentElement.classList.remove('light');
+    document.documentElement.classList.remove('dark');
+  }, []);
+
   return (
     <div className="dark">
       <RouterProvider router={router} fallbackElement={routeFallback} />

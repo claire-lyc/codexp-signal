@@ -196,14 +196,14 @@ const seedTickets: Ticket[] = [
 ];
 
 const urgencyColors: Record<TicketUrgency, string> = {
-  critical: 'bg-red-500/20 text-red-100 border-red-500',
-  high: 'bg-orange-500/20 text-orange-100 border-orange-500',
-  medium: 'bg-yellow-500/20 text-yellow-100 border-yellow-500',
-  low: 'bg-sky-500/20 text-sky-100 border-sky-500',
+  critical: 'bg-red-500/15 text-red-100 border-red-500/80',
+  high: 'bg-orange-500/15 text-orange-100 border-orange-500/80',
+  medium: 'bg-yellow-500/15 text-yellow-100 border-yellow-500/80',
+  low: 'bg-sky-500/15 text-sky-100 border-sky-500/80',
 };
 
 const statusColors: Record<TicketStatus, string> = {
-  open: 'bg-red-900/40 text-red-400',
+  open: 'bg-zinc-800 text-zinc-200 border-zinc-700',
   'in-progress': 'bg-blue-900/40 text-blue-400',
   grouped: 'bg-purple-900/40 text-purple-400',
   resolved: 'bg-green-900/40 text-green-400',
@@ -463,7 +463,7 @@ export default function GovFormHandling() {
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm">
-          <span className="px-2.5 py-1 bg-red-900/50 border border-red-800 text-red-400 rounded-lg">
+          <span className="px-2.5 py-1 bg-zinc-900/80 border border-zinc-700 text-zinc-200 rounded-lg">
             {tickets.filter((ticket) => ticket.status === 'open').length} Open
           </span>
           <span className="px-2.5 py-1 bg-blue-900/50 border border-blue-800 text-blue-400 rounded-lg">
@@ -492,14 +492,14 @@ export default function GovFormHandling() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search tickets..."
-                className="w-full pl-8 pr-24 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-red-600"
+                className="w-full pl-8 pr-24 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-600"
               />
               <button
                 type="button"
                 onClick={() => setSortMode(nextSortMode(sortMode))}
                 title={`Sort: ${sortOptions.find((option) => option.value === sortMode)?.label ?? 'Priority'}`}
                 aria-label={`Sort: ${sortOptions.find((option) => option.value === sortMode)?.label ?? 'Priority'}`}
-                className="absolute right-1.5 top-1.5 flex h-7 min-w-7 items-center justify-center gap-1 rounded-md border border-zinc-700 bg-zinc-900 px-1.5 text-xs text-zinc-400 transition-colors hover:border-red-700 hover:text-red-300"
+                className="absolute right-1.5 top-1.5 flex h-7 min-w-7 items-center justify-center gap-1 rounded-md border border-zinc-700 bg-zinc-900 px-1.5 text-xs text-zinc-400 transition-colors hover:border-blue-700 hover:text-blue-300"
               >
                 <ArrowDownUp className="h-3.5 w-3.5" />
                 <span className="max-w-12 truncate">{sortIconLabels[sortMode]}</span>
@@ -515,7 +515,7 @@ export default function GovFormHandling() {
                     setFilterStatus('All');
                   }}
                   className={`rounded-md px-2 py-1.5 text-xs transition-colors ${
-                    queueView === view ? 'bg-red-600 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                    queueView === view ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
                   }`}
                 >
                   {view === 'active' ? 'Active queue' : 'Archive'}
@@ -528,17 +528,17 @@ export default function GovFormHandling() {
                   key={status}
                   onClick={() => setFilterStatus(status)}
                   className={`px-2 py-0.5 rounded text-xs transition-colors ${
-                    filterStatus === status ? 'bg-red-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                    filterStatus === status ? 'bg-zinc-700 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
                   }`}
                 >
                   {status}
                 </button>
               ))}
             </div>
-            <select value={filterCrisis} onChange={(event) => setFilterCrisis(event.target.value)} className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-red-600">
+            <select value={filterCrisis} onChange={(event) => setFilterCrisis(event.target.value)} className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-600">
               {crisisTypes.map((crisis) => <option key={crisis}>{crisis}</option>)}
             </select>
-            <select value={filterAgency} onChange={(event) => setFilterAgency(event.target.value)} className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-red-600">
+            <select value={filterAgency} onChange={(event) => setFilterAgency(event.target.value)} className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-600">
               {agencies.map((agency) => <option key={agency}>{agency}</option>)}
             </select>
           </div>
@@ -597,7 +597,7 @@ export default function GovFormHandling() {
                 )}
                 <div className="pt-2 border-t border-zinc-800">
                   <div className="text-xs text-zinc-500 mb-2">Route to Broadcast</div>
-                  <button className="w-full flex items-center justify-center gap-1.5 text-xs px-2 py-1.5 bg-red-950 border border-red-800 text-red-400 rounded-lg hover:bg-red-900 transition-colors">
+                  <button className="w-full flex items-center justify-center gap-1.5 text-xs px-2 py-1.5 bg-zinc-950 border border-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-800 transition-colors">
                     <Radio className="w-3 h-3" />
                     Send to Broadcast
                   </button>
@@ -643,7 +643,7 @@ export default function GovFormHandling() {
                   {selectedTicket.comments.length === 0 && <div className="text-sm text-zinc-600">No comments yet.</div>}
                   {groupComments(selectedTicket.comments).map((group) => (
                     <div key={group.id} className="flex items-start gap-3">
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${group.visibility === 'public' ? 'bg-blue-900' : 'bg-red-900'}`}>G</div>
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${group.visibility === 'public' ? 'bg-blue-900' : 'bg-zinc-700'}`}>G</div>
                       <div className="flex-1 bg-zinc-800 rounded-lg p-3">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-medium">{group.author}</span>
@@ -679,9 +679,9 @@ export default function GovFormHandling() {
                       disabled={selectedTicketResolved}
                       placeholder={selectedTicketResolved ? 'Discussion closed after resolution' : commentType === 'public' ? 'Reply to citizen...' : 'Add internal note (not visible to citizen)...'}
                       rows={2}
-                      className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-red-600 resize-none disabled:opacity-60"
+                      className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-600 resize-none disabled:opacity-60"
                     />
-                    <button disabled={selectedTicketResolved} onClick={addComment} className="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors flex items-center gap-1 text-sm self-end disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-500">
+                    <button disabled={selectedTicketResolved} onClick={addComment} className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-1 text-sm self-end disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-500">
                       <Send className="w-4 h-4" />
                     </button>
                   </div>
@@ -741,21 +741,19 @@ function TicketListItem({
       onClick={onSelect}
       className={`w-full text-left p-3 border-b border-zinc-800 hover:bg-zinc-800/60 transition-colors ${selected ? 'bg-zinc-800' : ''}`}
     >
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-xs font-mono text-zinc-500">{ticket.id}</div>
-          <div className="mt-1 text-sm font-medium line-clamp-2">{ticket.message}</div>
-        </div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <UrgencyBadge urgency={ticket.urgency} compact />
         <StatusBadge status={ticket.status} />
       </div>
-      <div className="mb-2 flex">
-        <UrgencyBadge urgency={ticket.urgency} />
-      </div>
-      <div className="grid grid-cols-[1fr_auto] items-center gap-2 text-xs text-zinc-500">
+      <div className="text-xs font-mono text-zinc-500">{ticket.id}</div>
+      <div className="mt-1 text-sm font-medium line-clamp-2">{ticket.message}</div>
+      <div className="mt-2 flex min-w-0 items-center gap-1.5 text-xs text-zinc-500">
+        <span className="shrink-0 rounded bg-zinc-950 px-1.5 py-0.5 text-zinc-300">{ticket.assignedAgency}</span>
+        <span className="text-zinc-700">·</span>
+        <span className="shrink-0">{ticket.crisisType}</span>
+        <span className="text-zinc-700">·</span>
         <span className="flex min-w-0 items-center gap-1 truncate"><MapPin className="h-3 w-3 shrink-0" />{ticket.location.split(',')[0]}</span>
-        <span className="rounded bg-zinc-950 px-1.5 py-0.5 text-zinc-400">{ticket.assignedAgency}</span>
       </div>
-      <div className="mt-1 text-xs text-zinc-600">{ticket.crisisType}</div>
     </button>
   );
 }
@@ -814,11 +812,15 @@ function TicketDetailHeader({
 }
 
 function StatusBadge({ status }: { status: TicketStatus }) {
-  return <span className={`shrink-0 text-xs px-2 py-0.5 rounded ${statusColors[status]}`}>{statusLabels[status]}</span>;
+  return <span className={`inline-flex h-6 shrink-0 items-center rounded-md border px-2 text-xs font-medium ${statusColors[status]}`}>{statusLabels[status]}</span>;
 }
 
-function UrgencyBadge({ urgency }: { urgency: TicketUrgency }) {
-  return <span className={`px-2 py-1 text-xs font-medium rounded border ${urgencyColors[urgency]}`}>{urgencyLabels[urgency]}</span>;
+function UrgencyBadge({ urgency, compact = false }: { urgency: TicketUrgency; compact?: boolean }) {
+  return (
+    <span className={`inline-flex h-6 shrink-0 items-center rounded-md border px-2 text-xs font-medium ${urgencyColors[urgency]}`}>
+      {compact ? urgencyLabels[urgency].replace(' priority', '') : urgencyLabels[urgency]}
+    </span>
+  );
 }
 
 function DeleteTicketDialog({

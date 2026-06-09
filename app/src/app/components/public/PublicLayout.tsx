@@ -1,12 +1,14 @@
 import { Outlet, Link, useLocation } from 'react-router';
-import { Home, Bell, AlertTriangle, Users, MessageSquare, Shield, Menu, X, UserCircle, Megaphone } from 'lucide-react';
+import { Home, Bell, AlertTriangle, Users, MessageSquare, Ticket, Shield, Menu, X, UserCircle, Megaphone } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
+import EmergencySnapshot from '../shared/EmergencySnapshot';
 
 const navItems = [
   { path: '/public', label: 'Home', icon: Home },
   { path: '/public/alerts', label: 'Alerts', icon: Bell },
   { path: '/public/report', label: 'Report', icon: AlertTriangle },
+  { path: '/public/tickets', label: 'Tickets', icon: Ticket },
   { path: '/public/volunteer', label: 'Volunteer', icon: Users },
   { path: '/public/forum', label: 'Forum', icon: MessageSquare },
 ];
@@ -15,6 +17,7 @@ export default function PublicLayout() {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
@@ -22,9 +25,9 @@ export default function PublicLayout() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <Link to="/" className="flex items-center gap-2">
-              <Shield className="w-6 h-6 text-red-600" />
+              <Shield className="w-6 h-6 text-signal-brand" />
               <div>
-                <h1 className="font-bold text-lg"><span className="text-red-600">S</span>i<span className="text-red-600">G</span>nal</h1>
+                <h1 className="font-bold text-lg"><span className="text-signal-brand">S</span>i<span className="text-signal-brand">G</span>nal</h1>
                 <p className="text-xs text-zinc-500">Public Portal</p>
               </div>
             </Link>
@@ -39,8 +42,8 @@ export default function PublicLayout() {
                     to={item.path}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
                       isActive
-                        ? 'bg-red-600 text-white'
-                        : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                        ? 'bg-zinc-800 text-white ring-1 ring-zinc-700'
+                        : 'text-zinc-400 hover:bg-zinc-800/70 hover:text-white'
                     }`}
                   >
                     <Icon className="w-5 h-5" />
@@ -59,13 +62,35 @@ export default function PublicLayout() {
                 {notificationsOpen && (
                   <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-lg border border-zinc-800 bg-zinc-900 p-2 shadow-2xl">
                     <NotificationLink to="/public/alerts#broadcasts" icon={Megaphone} title="Government broadcast" text="Flash flood warning still active" onClick={() => setNotificationsOpen(false)} />
-                    <NotificationLink to="/public/report" icon={AlertTriangle} title="Report updates" text="View replies from the handling team" onClick={() => setNotificationsOpen(false)} />
+                    <NotificationLink to="/public/tickets" icon={Ticket} title="Ticket replies" text="View updates from the handling team" onClick={() => setNotificationsOpen(false)} />
                   </div>
                 )}
               </div>
-              <Link to="/public/profile" className="hidden rounded-lg p-2 text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white md:inline-flex">
-                <UserCircle className="h-5 w-5" />
-              </Link>
+              <div className="relative hidden md:block">
+                <button
+                  type="button"
+                  onClick={() => setProfileOpen((open) => !open)}
+                  className="inline-flex rounded-lg p-2 text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
+                  aria-label="Open profile menu"
+                >
+                  <UserCircle className="h-5 w-5" />
+                </button>
+                {profileOpen && (
+                  <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-lg border border-zinc-800 bg-zinc-900 p-3 shadow-2xl">
+                    <Link
+                      to="/public/profile"
+                      onClick={() => setProfileOpen(false)}
+                      className="mb-3 flex items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-zinc-800"
+                    >
+                      <UserCircle className="h-5 w-5 text-blue-400" />
+                      <span>
+                        <span className="block text-sm font-semibold text-zinc-100">Profile</span>
+                        <span className="block text-xs text-zinc-500">Profile and notifications</span>
+                      </span>
+                    </Link>
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="md:hidden p-2 hover:bg-zinc-800 rounded-lg transition-colors"
@@ -89,8 +114,8 @@ export default function PublicLayout() {
                     onClick={() => setMobileMenuOpen(false)}
                     className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
                       isActive
-                        ? 'bg-red-600 text-white'
-                        : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                        ? 'bg-zinc-800 text-white ring-1 ring-zinc-700'
+                        : 'text-zinc-400 hover:bg-zinc-800/70 hover:text-white'
                     }`}
                   >
                     <Icon className="w-5 h-5" />
@@ -103,12 +128,18 @@ export default function PublicLayout() {
         )}
       </header>
 
+      <EmergencySnapshot portal="public" />
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Outlet />
       </main>
 
       <footer className="bg-zinc-900 border-t border-zinc-800 mt-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <Link to="/public/profile" className="mx-auto mb-6 flex max-w-xs items-center justify-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-300 transition-colors hover:border-blue-800 hover:text-white">
+            <UserCircle className="h-5 w-5 text-blue-400" />
+            Profile and notifications
+          </Link>
           <div className="text-center text-sm text-zinc-500">
             <p className="mb-2">Singapore's National Adaptive Logistics & Alert Network</p>
             <p>A trusted platform for crisis information and coordination</p>

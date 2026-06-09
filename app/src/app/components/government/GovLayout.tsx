@@ -18,8 +18,11 @@ import {
   Ticket,
   UserCircle,
   LogOut,
+  Settings,
+  ChevronRight,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import EmergencySnapshot from '../shared/EmergencySnapshot';
 import { apiUrl } from '../../lib/api';
 import { authHeaders, clearAuthTokens } from '../../lib/auth';
 
@@ -31,19 +34,39 @@ type ProfileUser = {
   agencyCode?: string | null;
 };
 
-const navItems = [
-  { path: '/gov', label: 'Overview', icon: LayoutDashboard },
-  { path: '/gov/pandemic', label: 'Health & Diseases', icon: Activity },
-  { path: '/gov/weather', label: 'Weather & Climate', icon: Cloud },
-  { path: '/gov/supply-chain', label: 'Supply Chain', icon: Package },
-  { path: '/gov/infrastructure', label: 'Infrastructure', icon: Zap },
-  { path: '/gov/cybersecurity', label: 'Cybersecurity', icon: Shield },
-  { path: '/gov/public-sentiment', label: 'Public Sentiment', icon: MessageSquare },
-  { path: '/gov/form-handling', label: 'Form Handling', icon: Ticket },
-  { path: '/gov/volunteers', label: 'Volunteers & Resources', icon: Users },
-  { path: '/gov/ai-recommendations', label: 'Data Projections', icon: Brain },
-  { path: '/gov/historical', label: 'Historical Analysis', icon: History },
-  { path: '/gov/broadcast', label: 'Broadcast Centre', icon: Radio },
+const navSections = [
+  {
+    title: 'Command',
+    items: [
+      { path: '/gov', label: 'Overview', icon: LayoutDashboard },
+      { path: '/gov/form-handling', label: 'Form Handling', icon: Ticket },
+      { path: '/gov/broadcast', label: 'Broadcast Centre', icon: Radio },
+    ],
+  },
+  {
+    title: 'Risk Monitoring',
+    items: [
+      { path: '/gov/pandemic', label: 'Health & Diseases', icon: Activity },
+      { path: '/gov/weather', label: 'Weather & Climate', icon: Cloud },
+      { path: '/gov/supply-chain', label: 'Supply Chain', icon: Package },
+      { path: '/gov/infrastructure', label: 'Infrastructure', icon: Zap },
+      { path: '/gov/cybersecurity', label: 'Cybersecurity', icon: Shield },
+    ],
+  },
+  {
+    title: 'Public Coordination',
+    items: [
+      { path: '/gov/public-sentiment', label: 'Public Sentiment', icon: MessageSquare },
+      { path: '/gov/volunteers', label: 'Volunteers & Resources', icon: Users },
+    ],
+  },
+  {
+    title: 'Intelligence',
+    items: [
+      { path: '/gov/ai-recommendations', label: 'Data Projections', icon: Brain },
+      { path: '/gov/historical', label: 'Historical Analysis', icon: History },
+    ],
+  },
 ];
 
 export default function GovLayout() {
@@ -74,7 +97,7 @@ export default function GovLayout() {
   const logout = () => {
     clearAuthTokens();
     setProfileOpen(false);
-    navigate('/login?portal=gov&redirect=%2Fgov');
+    navigate('/login');
   };
 
   return (
@@ -82,7 +105,7 @@ export default function GovLayout() {
       <aside className="w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col">
         <div className="p-6 border-b border-zinc-800">
           <Link to="/" className="flex items-center gap-2">
-            <AlertTriangle className="w-6 h-6 text-red-600" />
+            <AlertTriangle className="w-6 h-6 text-signal-brand" />
             <div>
               <h1 className="font-bold text-lg">SiGnal</h1>
               <p className="text-xs text-zinc-500">Crisis Command</p>
@@ -90,28 +113,75 @@ export default function GovLayout() {
           </Link>
         </div>
 
-        <nav className="flex-1 overflow-y-auto p-4">
-          <div className="space-y-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
-                    isActive
-                      ? 'bg-red-600 text-white'
-                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span className="text-sm">{item.label}</span>
-                </Link>
-              );
-            })}
+        <nav className="flex-1 overflow-y-auto px-3 py-5">
+          <div className="space-y-7">
+            {navSections.map((section) => (
+              <div key={section.title}>
+                <div className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
+                  {section.title}
+                </div>
+                <div className="space-y-1">
+                  {section.items.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = location.pathname === item.path;
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all ${
+                          isActive
+                            ? 'bg-zinc-800 text-white ring-1 ring-zinc-700'
+                            : 'text-zinc-500 hover:bg-zinc-800/70 hover:text-zinc-200'
+                        }`}
+                      >
+                        <Icon className={`h-5 w-5 flex-shrink-0 ${isActive ? 'text-signal-brand' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                        <span className="truncate text-sm font-medium">{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </nav>
+
+        <div className="relative border-t border-zinc-800 p-3">
+          <button
+            type="button"
+            onClick={() => setProfileOpen((open) => !open)}
+            className="flex w-full items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-3 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-800/70"
+            aria-label="Open profile menu"
+          >
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white">
+              <UserCircle className="h-6 w-6" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold text-zinc-100">{profileName}</div>
+              <div className="truncate text-xs text-zinc-500">{profileSubtext}</div>
+            </div>
+            <ChevronRight className="h-4 w-4 flex-shrink-0 text-zinc-500" />
+          </button>
+          {profileOpen && (
+            <div className="absolute bottom-3 left-[calc(100%+0.5rem)] z-50 w-56 rounded-xl border border-zinc-800 bg-zinc-900 p-2 shadow-2xl">
+              <Link
+                to="/gov-profile"
+                onClick={() => setProfileOpen(false)}
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+              >
+                <Settings className="h-4 w-4" />
+                Settings
+              </Link>
+              <button
+                type="button"
+                onClick={logout}
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-red-300"
+              >
+                <LogOut className="h-4 w-4" />
+                Sign Out
+              </button>
+            </div>
+          )}
+        </div>
       </aside>
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -145,42 +215,14 @@ export default function GovLayout() {
                 <div className="w-2 h-2 rounded-full bg-green-500"></div>
                 <span className="text-xs text-green-400">All Systems Active</span>
               </div>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setProfileOpen((open) => !open)}
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-zinc-700 bg-zinc-800 text-zinc-300 transition-colors hover:bg-zinc-700"
-                  aria-label="Open profile menu"
-                >
-                  <UserCircle className="h-5 w-5" />
-                </button>
-                {profileOpen && (
-                  <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-lg border border-zinc-800 bg-zinc-900 p-3 shadow-2xl">
-                    <div className="mb-3 flex items-center gap-3 border-b border-zinc-800 pb-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-zinc-300">
-                        <UserCircle className="h-6 w-6" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium text-zinc-100">{profileName}</div>
-                        <div className="truncate text-xs text-zinc-500">{profileSubtext}</div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={logout}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-300 transition-colors hover:bg-red-950/40"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      Log out
-                    </button>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         </header>
 
         <main className="flex-1 overflow-y-auto p-6">
+          <div className="-mx-6 -mt-6 mb-6">
+            <EmergencySnapshot portal="gov" />
+          </div>
           <Outlet />
         </main>
       </div>

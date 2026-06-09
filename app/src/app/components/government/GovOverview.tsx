@@ -9,34 +9,95 @@ import SingaporeRegionMap, { type MapMarker } from '../SingaporeRegionMap';
 import { useApi } from '../../lib/api';
 
 const iconMap = { Activity, Cloud, Package, Shield };
+type CrisisCard = {
+  id: string;
+  label: string;
+  type: string;
+  severity: string;
+  path: string;
+  stats: Array<{ label: string; value: string; delta?: string }>;
+  icon: string;
+};
 type OverviewData = {
   crises: unknown[];
   alerts: typeof alerts;
   overview: {
-    crisisCards: Array<{
-      id: string;
-      label: string;
-      type: string;
-      severity: string;
-      path: string;
-      stats: Array<{ label: string; value: string; delta: string }>;
-      icon: string;
-    }>;
+    crisisCards: CrisisCard[];
     incidentTrend: Array<{ date: string; incidents: number }>;
     riskSummary: { body: string; confidence: number; sources: string };
   };
 };
 
-const severityBorder: Record<string, string> = {
-  high: 'border-red-700',
-  medium: 'border-yellow-700',
-  low: 'border-blue-700',
-};
 const severityBadge: Record<string, string> = {
-  high: 'bg-red-900 text-red-400',
-  medium: 'bg-yellow-900 text-yellow-400',
-  low: 'bg-blue-900 text-blue-400',
+  high: 'bg-red-500/15 text-red-300 border-red-500/40',
+  medium: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
+  low: 'bg-blue-500/15 text-blue-300 border-blue-500/40',
 };
+const severitySpark: Record<string, string> = {
+  high: '#fb7185',
+  medium: '#fbbf24',
+  low: '#38bdf8',
+};
+
+const fallbackCrisisCards: CrisisCard[] = [
+  {
+    id: 'covid',
+    label: 'Covid-19',
+    type: 'Health',
+    severity: 'medium',
+    path: '/gov/pandemic',
+    stats: [
+      { label: 'Active cases today', value: '378', delta: '+12%' },
+      { label: 'ICU occupancy', value: '25', delta: '+5' },
+    ],
+    icon: 'Activity',
+  },
+  {
+    id: 'dengue',
+    label: 'Dengue',
+    type: 'Health',
+    severity: 'high',
+    path: '/gov/pandemic',
+    stats: [
+      { label: 'Red zone clusters', value: '14', delta: '+3' },
+      { label: 'Cases this week', value: '212', delta: '+8%' },
+    ],
+    icon: 'Activity',
+  },
+  {
+    id: 'flood',
+    label: 'Flash Flood Risk',
+    type: 'Weather',
+    severity: 'high',
+    path: '/gov/weather',
+    stats: [
+      { label: 'High-risk zones', value: '6', delta: '' },
+      { label: 'Peak rainfall (1h)', value: '45mm', delta: 'Alert' },
+    ],
+    icon: 'Cloud',
+  },
+  {
+    id: 'panadol',
+    label: 'Panadol Shortage',
+    type: 'Supply Chain',
+    severity: 'medium',
+    path: '/gov/supply-chain',
+    stats: [
+      { label: 'Affected outlets', value: '87', delta: '' },
+      { label: 'Est. restock', value: '4 days', delta: '' },
+    ],
+    icon: 'Package',
+  },
+  {
+    id: 'cyber',
+    label: 'Cyber Incident',
+    type: 'Cybersecurity',
+    severity: 'low',
+    path: '/gov/cybersecurity',
+    stats: [{ label: 'Active threats', value: '3', delta: '-1' }],
+    icon: 'Shield',
+  },
+];
 
 const alerts: Array<{ id: number | string; type: string; severity: string; message: string; region: string; time?: string }> = [];
 const trendData: Array<{ date: string; incidents: number }> = [];
@@ -60,7 +121,8 @@ export default function GovOverview() {
   const [filterRegion, setFilterRegion] = useState('All');
   const [selectedAlertId, setSelectedAlertId] = useState<string | number | null>(null);
   const mapSectionRef = useRef<HTMLDivElement | null>(null);
-  const crisisCards = data?.overview?.crisisCards ?? [];
+  const apiCrisisCards = data?.overview?.crisisCards ?? [];
+  const crisisCards: CrisisCard[] = apiCrisisCards.length > 0 ? apiCrisisCards : fallbackCrisisCards;
   const alerts = data?.alerts ?? [];
   const trendData = data?.overview?.incidentTrend ?? [];
   const riskSummary = data?.overview?.riskSummary;
@@ -111,40 +173,53 @@ export default function GovOverview() {
           <span className="text-xs text-zinc-600">Scroll to see all →</span>
         </div>
         <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
+          {crisisCards.length === 0 && (
+            <div className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
+              No active crisis situations available.
+            </div>
+          )}
           {crisisCards.map((card) => {
             const Icon = iconMap[card.icon as keyof typeof iconMap] ?? AlertCircle;
+            const stats = Array.isArray(card.stats) ? card.stats : [];
+            const primaryStat = stats[0];
+            const secondaryStat = stats[1];
             return (
               <Link
                 key={card.id}
                 to={card.path}
-                className={`flex-shrink-0 w-64 bg-zinc-900 border ${severityBorder[card.severity]} rounded-xl p-5 hover:bg-zinc-800 transition-colors group`}
+                className="group relative flex-shrink-0 w-80 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:border-zinc-700 hover:bg-zinc-800/80"
               >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-zinc-800 rounded-lg">
-                      <Icon className="w-4 h-4 text-zinc-300" />
-                    </div>
-                    <span className="text-xs text-zinc-500">{card.type}</span>
-                  </div>
-                  <span className={`text-xs px-2 py-0.5 rounded ${severityBadge[card.severity]}`}>
-                    {card.severity.toUpperCase()}
+                <div className="absolute inset-x-0 bottom-0 h-px bg-zinc-700/60" />
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <span className="flex min-w-0 items-center gap-2 text-xs text-zinc-500">
+                    <Icon className="h-4 w-4 flex-shrink-0 text-zinc-500" />
+                    <span className="truncate">{card.type}</span>
+                    <ChevronRight className="h-3 w-3 text-zinc-600 transition-transform group-hover:translate-x-0.5" />
+                  </span>
+                  <span className={`rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${severityBadge[card.severity]}`}>
+                    {card.severity}
                   </span>
                 </div>
-                <div className="font-semibold mb-3">{card.label}</div>
-                <div className="space-y-1.5">
-                  {card.stats.map((s, i) => (
-                    <div key={i} className="flex items-center justify-between">
-                      <span className="text-xs text-zinc-500">{s.label}</span>
-                      <div className="flex items-center gap-1">
-                        <span className="text-sm font-bold">{s.value}</span>
-                        {s.delta && <span className="text-xs text-zinc-500">{s.delta}</span>}
-                      </div>
+
+                <div className="grid grid-cols-[0.9fr_1.1fr] items-center gap-4">
+                  <div className="min-w-0">
+                    <div className="mb-3 truncate text-sm font-semibold text-zinc-100">{card.label}</div>
+                    <div className="text-3xl font-bold tracking-tight text-zinc-50">{primaryStat?.value ?? '--'}</div>
+                    <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500">
+                      <span className="truncate">{primaryStat?.label ?? 'Current metric'}</span>
+                      {primaryStat?.delta && <span className="text-zinc-400">{primaryStat.delta}</span>}
                     </div>
-                  ))}
-                </div>
-                <div className="flex items-center gap-1 mt-3 text-xs text-red-500 group-hover:text-red-400 transition-colors">
-                  <span>View details</span>
-                  <ChevronRight className="w-3 h-3" />
+                    {secondaryStat && (
+                      <div className="mt-3 flex items-center gap-2 text-xs text-zinc-500">
+                        <span className="truncate">{secondaryStat.label}</span>
+                        <span className="font-semibold text-zinc-200">{secondaryStat.value}</span>
+                        {secondaryStat.delta && <span>{secondaryStat.delta}</span>}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex min-w-0 items-center rounded-lg bg-zinc-950/35 px-2 py-1">
+                    <MiniTrend color={severitySpark[card.severity] ?? '#34d399'} seed={String(card.id)} />
+                  </div>
                 </div>
               </Link>
             );
@@ -297,4 +372,42 @@ export default function GovOverview() {
       </div>
     </div>
   );
+}
+
+function MiniTrend({ color, seed }: { color: string; seed: string }) {
+  const points = useMemo(() => buildSparkline(seed), [seed]);
+  const gradientId = `trend-${seed.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+
+  return (
+    <svg viewBox="0 0 150 54" className="h-16 w-full overflow-visible" role="img" aria-label="Illustrative crisis trend">
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon points={`${points} 150,54 0,54`} fill={`url(#${gradientId})`} />
+      <polyline points={points} fill="none" stroke={color} strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" opacity="1" />
+    </svg>
+  );
+}
+
+function buildSparkline(seed: string) {
+  const values = Array.from({ length: 28 }, (_, index) => {
+    const code = seed.charCodeAt(index % seed.length) || 42;
+    const wave = Math.sin(index * 0.82 + code) * 9;
+    const jitter = ((code + index * 13) % 11) - 5;
+    return 28 + wave + jitter;
+  });
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const spread = Math.max(max - min, 1);
+
+  return values
+    .map((value, index) => {
+      const x = (index / (values.length - 1)) * 150;
+      const y = 48 - ((value - min) / spread) * 38;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
 }
