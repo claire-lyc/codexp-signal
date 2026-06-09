@@ -42,8 +42,8 @@ const severitySpark: Record<string, string> = {
 };
 
 const fallbackCrisisCards: CrisisCard[] = [
-  { id: 'covid', label: 'Covid-19', type: 'Health', severity: 'medium', path: '/gov/pandemic', stats: [{ label: 'Active cases today', value: '378', delta: '+12%' }, { label: 'ICU occupancy', value: '25', delta: '+5' }], icon: 'Activity' },
-  { id: 'dengue', label: 'Dengue', type: 'Health', severity: 'high', path: '/gov/pandemic', stats: [{ label: 'Red zone clusters', value: '14', delta: '+3' }, { label: 'Cases this week', value: '212', delta: '+8%' }], icon: 'Activity' },
+  { id: 'covid', label: 'Covid-19', type: 'Health', severity: 'medium', path: '/gov/pandemic?disease=covid', stats: [{ label: 'Archived cluster map', value: '2020', delta: 'MOH' }, { label: 'Current status', value: 'Archive', delta: '' }], icon: 'Activity' },
+  { id: 'dengue', label: 'Dengue', type: 'Health', severity: 'high', path: '/gov/pandemic?disease=dengue', stats: [{ label: 'Red zone clusters', value: '14', delta: '+3' }, { label: 'Cases this week', value: '212', delta: '+8%' }], icon: 'Activity' },
   { id: 'flood', label: 'Flash Flood Risk', type: 'Weather', severity: 'high', path: '/gov/weather', stats: [{ label: 'High-risk zones', value: '6', delta: '' }, { label: 'Peak rainfall (1h)', value: '45mm', delta: 'Alert' }], icon: 'Cloud' },
   { id: 'panadol', label: 'Panadol Shortage', type: 'Supply Chain', severity: 'medium', path: '/gov/supply-chain', stats: [{ label: 'Affected outlets', value: '87', delta: '' }, { label: 'Est. restock', value: '4 days', delta: '' }], icon: 'Package' },
   { id: 'cyber', label: 'Cyber Incident', type: 'Cybersecurity', severity: 'low', path: '/gov/cybersecurity', stats: [{ label: 'Active threats', value: '3', delta: '-1' }], icon: 'Shield' },
@@ -77,6 +77,7 @@ export default function GovOverview() {
   const alerts = apiAlerts.length > 0 ? apiAlerts : fallbackAlerts;
   const trendData = data?.overview?.incidentTrend ?? [];
   const riskSummary = data?.overview?.riskSummary;
+  const hasIncidentProblem = trendData.some((point) => Number(point.incidents) > 0);
 
   useEffect(() => {
     const handleDocumentClick = (event: MouseEvent) => {
@@ -148,10 +149,15 @@ export default function GovOverview() {
             const stats = Array.isArray(card.stats) ? card.stats : [];
             const primaryStat = stats[0];
             const secondaryStat = stats[1];
+            const cardPath = card.id === 'covid'
+              ? '/gov/pandemic?disease=covid'
+              : card.id === 'dengue'
+                ? '/gov/pandemic?disease=dengue'
+                : card.path;
             return (
               <Link
                 key={card.id}
-                to={card.path}
+                to={cardPath}
                 className="group relative min-h-[184px] w-[21rem] flex-shrink-0 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:border-zinc-700 hover:bg-zinc-800/80"
               >
                 <div className="absolute inset-x-0 bottom-0 h-px bg-zinc-700/60" />
@@ -219,7 +225,18 @@ export default function GovOverview() {
 
           {/* Trend chart */}
           <div className="mt-6">
-            <h3 className="text-sm font-medium text-zinc-400 mb-3">Active Incident Trend (7 days)</h3>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="text-sm font-medium text-zinc-400">Active Incident Trend (7 days)</h3>
+              {hasIncidentProblem ? (
+                <button
+                  type="button"
+                  onClick={() => mapSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  className="text-xs font-medium text-red-300 transition-colors hover:text-red-200"
+                >
+                  View problem on main map
+                </button>
+              ) : null}
+            </div>
             <ResponsiveContainer width="100%" height={140}>
               <AreaChart data={trendData}>
                 <defs>

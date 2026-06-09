@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { AlertTriangle, Cloud, Database, Droplets, Layers, ThermometerSun, Wind } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertTriangle, Cloud, Database, Droplets, Layers, Pause, Play, ThermometerSun, Wind } from 'lucide-react';
 import {
   Area,
   AreaChart,
@@ -11,7 +11,12 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import SingaporeRegionMap, { type HeatmapPalette, type MapHeatmapLayer, type MapMarker } from '../SingaporeRegionMap';
+import SingaporeRegionMap, {
+  type HeatmapPalette,
+  type MapHeatmapLayer,
+  type MapMarker,
+  type WeatherOverlayLayer,
+} from '../SingaporeRegionMap';
 import { useApi } from '../../lib/api';
 
 type LayerKey = 'Rainfall' | 'Temperature' | 'Wind' | 'PSI';
@@ -22,11 +27,26 @@ type WeatherLayerRow = {
   latitude: number;
   longitude: number;
   value: number;
+  direction?: number | null;
 };
 
 type WeatherTrendPoint = {
   time: string;
   value: number;
+};
+
+type RainRadarData = {
+  frames: Array<{ url: string; label: string; timestamp: string }>;
+  basemapUrl: string;
+  legendUrl: string;
+  sourceUrl: string;
+};
+
+type HazeLayerData = {
+  satelliteUrl: string;
+  windUrl: string | null;
+  basemapUrl: string;
+  sourceUrl: string;
 };
 
 const layers: LayerKey[] = ['Rainfall', 'Temperature', 'Wind', 'PSI'];
@@ -89,6 +109,24 @@ function heatmapScale(layer: LayerKey) {
   return { min: 0, max: 200, radius: 105 };
 }
 
+function agencyMapTitle(layer: LayerKey) {
+  if (layer === 'Rainfall') return 'Rain Radar & Cloud Cells';
+  if (layer === 'Temperature') return 'Surface Temperature Field';
+  if (layer === 'Wind') return 'PSI & Wind Direction';
+  return 'Regional Haze & PSI';
+}
+
+function agencyMapNote(layer: LayerKey, maxValue: number) {
+  if (layer === 'Rainfall') {
+    return maxValue >= 0.1
+      ? 'Measured rainfall intensity is interpolated between official reporting stations.'
+      : 'No measurable rainfall is currently reported; the surface remains near the low end of the scale.';
+  }
+  if (layer === 'Temperature') return 'Pulsing rings highlight warmer reporting stations over the interpolated temperature surface.';
+  if (layer === 'Wind') return 'PSI conditions form the background surface while arrows show measured wind speed and direction at reporting stations.';
+  return 'Soft haze bands follow the five regional PSI readings and intensify as air quality worsens.';
+}
+
 function layerData(weather: any, layer: LayerKey): { unit: string; timestamp: string; rows: WeatherLayerRow[] } {
   if (layer === 'PSI') {
     return {
@@ -114,6 +152,7 @@ function layerData(weather: any, layer: LayerKey): { unit: string; timestamp: st
         latitude: station.location.latitude,
         longitude: station.location.longitude,
         value: toKmPerHour(station.value),
+        direction: station.direction,
       })),
     };
   }
@@ -175,9 +214,116 @@ function psiTrendData(weather: any, fallbackAverage: number): WeatherTrendPoint[
   return [{ time: timeLabel(weather.psi.timestamp), value: Math.round(fallbackAverage) }];
 }
 
+function RainRadarMap({ data }: { data: RainRadarData }) {
+  const [frameIndex, setFrameIndex] = useState(Math.max(data.frames.length - 1, 0));
+  const [playing, setPlaying] = useState(false);
+  const frame = data.frames[frameIndex];
+
+  useEffect(() => {
+    setFrameIndex(Math.max(data.frames.length - 1, 0));
+  }, [data.frames.length]);
+
+  useEffect(() => {
+    if (!playing || data.frames.length < 2) return;
+    const timer = window.setInterval(() => {
+      setFrameIndex((current) => (current + 1) % data.frames.length);
+    }, 900);
+    return () => window.clearInterval(timer);
+  }, [data.frames.length, playing]);
+
+  if (!frame) {
+    return <div className="grid h-full place-items-center rounded-lg bg-zinc-950 text-sm text-zinc-500">No NEA radar frames available</div>;
+  }
+
+  return (
+    <div className="flex h-full flex-col gap-3">
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-zinc-700 bg-[#f4f4f5]">
+        <img src={data.basemapUrl} alt="NEA 240 km regional rain radar basemap" className="absolute inset-0 h-full w-full object-contain" />
+        <img
+          key={frame.url}
+          src={frame.url}
+          alt={`NEA rain radar frame ${frame.label}`}
+          className="absolute inset-0 h-full w-full object-contain"
+        />
+        <div className="absolute left-3 top-3 rounded-md border border-zinc-300 bg-white/90 px-3 py-2 text-xs text-zinc-800 shadow-sm backdrop-blur">
+          <div className="font-semibold">NEA Singapore rain radar</div>
+          <div className="mt-0.5 text-zinc-600">{frame.label}</div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setPlaying((current) => !current)}
+          className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 px-3 text-xs font-medium text-zinc-200 hover:bg-zinc-800"
+        >
+          {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+          {playing ? 'Pause radar' : 'Play radar'}
+        </button>
+        <input
+          type="range"
+          min="0"
+          max={Math.max(data.frames.length - 1, 0)}
+          value={frameIndex}
+          onChange={(event) => {
+            setPlaying(false);
+            setFrameIndex(Number(event.target.value));
+          }}
+          className="min-w-48 flex-1 accent-cyan-500"
+          aria-label="Rain radar frame"
+        />
+        <span className="min-w-28 text-right text-xs text-zinc-400">{frame.label}</span>
+      </div>
+
+      <img src={data.legendUrl} alt="NEA rain intensity legend" className="h-8 max-w-full object-contain object-left" />
+    </div>
+  );
+}
+
+function HazeSatelliteMap({ data }: { data: HazeLayerData }) {
+  const [showWind, setShowWind] = useState(true);
+
+  return (
+    <div className="flex h-full flex-col gap-3">
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-zinc-700 bg-[#a8c8db]">
+        <img src={data.basemapUrl} alt="NEA regional haze basemap" className="absolute inset-0 h-full w-full object-contain" />
+        <img src={data.satelliteUrl} alt="NEA regional haze satellite cloud layer" className="absolute inset-0 h-full w-full object-contain opacity-80 mix-blend-screen" />
+        {showWind && data.windUrl ? (
+          <img src={data.windUrl} alt="NEA regional haze wind layer" className="absolute inset-0 h-full w-full object-contain" />
+        ) : null}
+        <div className="absolute left-3 top-3 rounded-md border border-zinc-300 bg-white/90 px-3 py-2 text-xs text-zinc-800 shadow-sm backdrop-blur">
+          <div className="font-semibold">NEA regional haze satellite</div>
+          <div className="mt-0.5 text-zinc-600">Cloud cover and regional transport context</div>
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <label className="inline-flex items-center gap-2 text-xs text-zinc-300">
+          <input
+            type="checkbox"
+            checked={showWind}
+            onChange={(event) => setShowWind(event.target.checked)}
+            className="h-4 w-4 accent-cyan-500"
+          />
+          NEA regional wind overlay
+        </label>
+        <a href={data.sourceUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:text-blue-300">
+          Open NEA source
+        </a>
+      </div>
+    </div>
+  );
+}
+
 export default function GovWeather() {
   const { data: dashboardData, loading, error } = useApi<any>('/api/dashboard/cached-external');
+  const { data: rainRadarData } = useApi<RainRadarData>('/api/gov/weather/rain-radar', 5 * 60 * 1000);
+  const { data: hazeLayerData } = useApi<HazeLayerData>('/api/gov/weather/haze-layers', 30 * 60 * 1000);
   const [activeLayer, setActiveLayer] = useState<LayerKey>('Rainfall');
+  const [mapView, setMapView] = useState<'agency' | 'interactive'>('agency');
+
+  useEffect(() => {
+    setMapView(activeLayer === 'Rainfall' || activeLayer === 'PSI' ? 'agency' : 'interactive');
+  }, [activeLayer]);
 
   if (loading) return <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">Loading weather dashboard data...</div>;
   if (error || !dashboardData?.weather) return <div className="rounded-lg border border-red-800 bg-red-950/40 p-4 text-sm text-red-300">Weather dashboard API unavailable: {error ?? 'missing weather data'}</div>;
@@ -208,13 +354,15 @@ export default function GovWeather() {
     detail: `Official ${activeLayer.toLowerCase()} reading`,
     severity: severity(activeLayer, row.value),
   }));
-  const scale = heatmapScale(activeLayer);
+  const mapSurface = activeLayer === 'Wind' ? psi : current;
+  const mapSurfaceLayer: LayerKey = activeLayer === 'Wind' ? 'PSI' : activeLayer;
+  const scale = heatmapScale(mapSurfaceLayer);
   const heatmapLayer: MapHeatmapLayer = {
-    label: activeLayer,
-    unit: displayUnit(activeLayer),
-    palette: heatmapPalette(activeLayer),
-    points: current.rows.map((row) => ({
-      id: `${activeLayer}-${row.id}`,
+    label: activeLayer === 'Wind' ? 'PSI with wind' : activeLayer,
+    unit: displayUnit(mapSurfaceLayer),
+    palette: heatmapPalette(mapSurfaceLayer),
+    points: mapSurface.rows.map((row) => ({
+      id: `${mapSurfaceLayer}-${row.id}`,
       name: row.name,
       latitude: row.latitude,
       longitude: row.longitude,
@@ -224,9 +372,20 @@ export default function GovWeather() {
     max: scale.max,
     radius: scale.radius,
     opacity: activeLayer === 'Rainfall' ? 0.98 : 0.94,
-    cellSize: 7,
-    legendLabel: 'Low to high intensity',
-    currentValue: average,
+    cellSize: activeLayer === 'Temperature' ? 3 : 7,
+    legendLabel: activeLayer === 'Wind' ? 'Low to high PSI' : 'Low to high intensity',
+    currentValue: mapSurface.rows.reduce((sum, row) => sum + row.value, 0) / mapSurface.rows.length,
+  };
+  const weatherOverlay: WeatherOverlayLayer | undefined = activeLayer === 'Rainfall' ? undefined : {
+    kind: activeLayer.toLowerCase() as WeatherOverlayLayer['kind'],
+    points: current.rows.map((row) => ({
+      id: `${activeLayer}-${row.id}`,
+      name: row.name,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      value: row.value,
+      direction: row.direction,
+    })),
   };
 
   const summaryCards: Array<{
@@ -319,7 +478,7 @@ export default function GovWeather() {
       <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="flex items-center gap-2 text-lg font-semibold"><Layers className="h-5 w-5 text-blue-500" />Singapore Weather Heatmap</h2>
+            <h2 className="flex items-center gap-2 text-lg font-semibold"><Layers className="h-5 w-5 text-blue-500" />{agencyMapTitle(activeLayer)}</h2>
             <div className="mt-1 text-xs text-zinc-500">Reading time: {new Date(current.timestamp).toLocaleString()}</div>
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -334,15 +493,64 @@ export default function GovWeather() {
             ))}
           </div>
         </div>
-        <div className="h-[500px]">
-          <SingaporeRegionMap
-            markers={markers}
-            heatmapLayer={heatmapLayer}
-            showMarkers={false}
-            emptyTitle={`Average ${activeLayer}`}
-            emptyDetail={displayValue(activeLayer, average)}
-            problemLabel={`${activeLayer.toLowerCase()} monitoring points`}
-          />
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          {activeLayer === 'Rainfall' || activeLayer === 'PSI' ? (
+            <div className="inline-flex rounded-md border border-zinc-700 bg-zinc-950 p-1" aria-label={`${activeLayer} map view`}>
+              <button
+                type="button"
+                onClick={() => setMapView('agency')}
+                className={`rounded px-3 py-1.5 text-xs font-medium ${
+                  mapView === 'agency' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                {activeLayer === 'Rainfall' ? 'NEA radar' : 'NEA satellite'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setMapView('interactive')}
+                className={`rounded px-3 py-1.5 text-xs font-medium ${
+                  mapView === 'interactive' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                Interactive map
+              </button>
+            </div>
+          ) : (
+            <span className="text-xs text-zinc-500">
+              {activeLayer === 'Wind' ? 'Combined air-quality and wind view' : 'Live station interpolation'}
+            </span>
+          )}
+        </div>
+        <div className="h-[560px]">
+          {activeLayer === 'Rainfall' && mapView === 'agency' && rainRadarData ? (
+            <RainRadarMap data={rainRadarData} />
+          ) : activeLayer === 'PSI' && mapView === 'agency' && hazeLayerData ? (
+            <HazeSatelliteMap data={hazeLayerData} />
+          ) : (
+            <SingaporeRegionMap
+              markers={markers}
+              heatmapLayer={heatmapLayer}
+              weatherOverlay={weatherOverlay}
+              showMarkers={false}
+              emptyTitle={`Average ${activeLayer}`}
+              emptyDetail={displayValue(activeLayer, average)}
+              problemLabel={`${activeLayer.toLowerCase()} monitoring points`}
+            />
+          )}
+        </div>
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-xs text-zinc-400">
+          <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${
+            activeLayer === 'Rainfall' ? 'bg-sky-400' : activeLayer === 'Temperature' ? 'bg-rose-400' : activeLayer === 'Wind' ? 'bg-cyan-300' : 'bg-orange-300'
+          }`} />
+          {activeLayer === 'Rainfall' && mapView === 'agency' && rainRadarData
+            ? 'Official NEA Singapore rain radar imagery. Use Play radar or the timeline to inspect recent five-minute frames.'
+            : activeLayer === 'PSI' && mapView === 'agency' && hazeLayerData
+              ? 'Official NEA infrared satellite imagery with an optional regional wind overlay. PSI readings remain available in the charts below.'
+              : activeLayer === 'Rainfall'
+                ? 'Interactive Singapore map with measured rainfall intensity interpolated between official stations.'
+                : activeLayer === 'PSI'
+                  ? 'Interactive Singapore PSI surface using the five official regional readings and animated haze bands.'
+                  : agencyMapNote(activeLayer, sorted[0]?.value ?? 0)}
         </div>
       </div>
 

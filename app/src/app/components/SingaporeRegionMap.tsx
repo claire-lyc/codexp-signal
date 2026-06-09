@@ -13,6 +13,7 @@ export type MapHeatPoint = {
   latitude: number;
   longitude: number;
   value: number;
+  direction?: number | null;
 };
 
 export type MapHeatmapLayer = {
@@ -27,6 +28,11 @@ export type MapHeatmapLayer = {
   cellSize?: number;
   legendLabel?: string;
   currentValue?: number;
+};
+
+export type WeatherOverlayLayer = {
+  kind: 'rainfall' | 'temperature' | 'wind' | 'psi';
+  points: MapHeatPoint[];
 };
 
 export type MapMarker = {
@@ -46,6 +52,7 @@ type SingaporeRegionMapProps = {
   emptyDetail?: string;
   problemLabel?: string;
   heatmapLayer?: MapHeatmapLayer;
+  weatherOverlay?: WeatherOverlayLayer;
   showMarkers?: boolean;
 };
 
@@ -227,6 +234,7 @@ export default function SingaporeRegionMap({
   emptyDetail = 'Hover or focus any outlined area',
   problemLabel = 'reported readings',
   heatmapLayer,
+  weatherOverlay,
   showMarkers = true,
 }: SingaporeRegionMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -256,6 +264,7 @@ export default function SingaporeRegionMap({
     [markers],
   );
   const activeArea = planningAreas.find((area) => area.id === activeAreaId);
+  const isTemperatureHeatmap = heatmapLayer?.palette === 'temperature';
   const activeStatus = activeArea ? areaStatuses.get(activeArea.id) : null;
   const activeMarker = markers.find((marker) => marker.id === activeMarkerId);
   const projectedHeatPoints = useMemo(() => {
@@ -266,6 +275,51 @@ export default function SingaporeRegionMap({
       coordinates: projectCoordinates(point.latitude, point.longitude),
     }));
   }, [heatmapLayer]);
+  const projectedWeatherPoints = useMemo(() => {
+    if (!weatherOverlay) return [];
+
+    return weatherOverlay.points
+      .map((point) => ({
+        ...point,
+        coordinates: projectCoordinates(point.latitude, point.longitude),
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [weatherOverlay]);
+  const windFieldPoints = useMemo(() => {
+    if (weatherOverlay?.kind !== 'wind' || projectedWeatherPoints.length === 0) return [];
+
+    const points: Array<(typeof projectedWeatherPoints)[number] & { fieldId: string }> = [];
+    const spacingX = 96;
+    const spacingY = 76;
+
+    for (let y = 42; y < mapData.height - 30; y += spacingY) {
+      for (let x = 42; x < mapData.width - 30; x += spacingX) {
+        const coordinates: Point = [x + ((Math.floor(y / spacingY) % 2) * spacingX) / 2, y];
+        const onLand = planningAreas.some((area) => pointInArea(coordinates, area.polygons));
+        if (!onLand) continue;
+
+        const nearest = projectedWeatherPoints.reduce((closest, point) => {
+          const closestDistance = Math.hypot(
+            closest.coordinates[0] - coordinates[0],
+            closest.coordinates[1] - coordinates[1],
+          );
+          const pointDistance = Math.hypot(
+            point.coordinates[0] - coordinates[0],
+            point.coordinates[1] - coordinates[1],
+          );
+          return pointDistance < closestDistance ? point : closest;
+        });
+
+        points.push({
+          ...nearest,
+          fieldId: `${x}-${y}`,
+          coordinates,
+        });
+      }
+    }
+
+    return points;
+  }, [projectedWeatherPoints, weatherOverlay?.kind]);
   const heatBounds = useMemo(() => {
     if (!heatmapLayer || projectedHeatPoints.length === 0) return null;
     const values = projectedHeatPoints.map((point) => point.value);
@@ -457,11 +511,17 @@ export default function SingaporeRegionMap({
             ))}
           </clipPath>
           <filter id="singapore-map-surface-blur" x="-8%" y="-8%" width="116%" height="116%">
-            <feGaussianBlur stdDeviation="2.4" />
+            <feGaussianBlur stdDeviation={isTemperatureHeatmap ? 0.8 : 2.4} />
           </filter>
           <filter id="singapore-map-heat-blur" x="-35%" y="-35%" width="170%" height="170%">
             <feGaussianBlur stdDeviation="13" />
           </filter>
+          <filter id="singapore-weather-haze-blur" x="-30%" y="-80%" width="160%" height="260%">
+            <feGaussianBlur stdDeviation="9" />
+          </filter>
+          <marker id="singapore-wind-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+            <path d="M0,0 L7,3.5 L0,7 L1.8,3.5 Z" fill="#ffffff" stroke="#164e63" strokeWidth="0.8" />
+          </marker>
         </defs>
 
         {heatmapLayer && heatBounds && (
@@ -487,6 +547,87 @@ export default function SingaporeRegionMap({
                 return <circle key={`${point.id}-glow`} cx={x} cy={y} r={radius} fill={color} />;
               })}
             </g>
+          </g>
+        )}
+
+        {weatherOverlay && (
+          <g clipPath="url(#singapore-map-land-clip)" className="pointer-events-none">
+            {weatherOverlay.kind === 'wind' &&
+              windFieldPoints.map((point) => {
+                const [x, y] = point.coordinates;
+                const length = clamp(10 + point.value * 0.42, 12, 23);
+                const direction = Number.isFinite(point.direction) ? Number(point.direction) : 90;
+
+                return (
+                  <g
+                    key={`wind-${point.fieldId}`}
+                    opacity={clamp(0.82 + point.value / 90, 0.82, 1)}
+                    transform={`rotate(${direction} ${x} ${y})`}
+                  >
+                    <line
+                      x1={x}
+                      y1={y + length / 2}
+                      x2={x}
+                      y2={y - length / 2}
+                      stroke="#083344"
+                      strokeWidth="4"
+                      strokeLinecap="round"
+                      opacity="0.9"
+                    />
+                    <line
+                      x1={x}
+                      y1={y + length / 2}
+                      x2={x}
+                      y2={y - length / 2}
+                      fill="none"
+                      stroke="#f8fafc"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      markerEnd="url(#singapore-wind-arrow)"
+                    />
+                  </g>
+                );
+              })}
+
+            {weatherOverlay.kind === 'temperature' &&
+              projectedWeatherPoints.slice(0, 14).map((point, index) => {
+                const [x, y] = point.coordinates;
+                const radius = clamp(5 + (point.value - 24) * 1.4, 5, 21);
+
+                return (
+                  <circle
+                    key={`heat-pulse-${point.id}`}
+                    cx={x}
+                    cy={y}
+                    r={radius}
+                    fill="none"
+                    stroke={point.value >= 32 ? '#fb7185' : '#fde047'}
+                    strokeWidth="1.5"
+                    opacity="0.6"
+                  >
+                    <animate attributeName="r" values={`${radius * 0.6};${radius};${radius * 0.6}`} dur={`${3 + (index % 3)}s`} repeatCount="indefinite" />
+                    <animate attributeName="opacity" values="0.2;0.7;0.2" dur={`${3 + (index % 3)}s`} repeatCount="indefinite" />
+                  </circle>
+                );
+              })}
+
+            {weatherOverlay.kind === 'psi' && (
+              <g filter="url(#singapore-weather-haze-blur)" opacity="0.3">
+                {projectedWeatherPoints.map((point, index) => {
+                  const [x, y] = point.coordinates;
+                  return (
+                    <path
+                      key={`haze-${point.id}`}
+                      d={`M${x - 55},${y - 10 + index * 2} C${x - 20},${y - 22} ${x + 18},${y + 8} ${x + 58},${y - 5}`}
+                      fill="none"
+                      stroke={point.value > 100 ? '#fb923c' : '#e2e8f0'}
+                      strokeWidth={clamp(8 + point.value / 18, 9, 20)}
+                      strokeLinecap="round"
+                    />
+                  );
+                })}
+              </g>
+            )}
           </g>
         )}
 

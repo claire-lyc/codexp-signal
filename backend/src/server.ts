@@ -10,8 +10,15 @@ import {
   createForumReply,
   likeForumPost,
   listForumPosts,
+  moderateForumPost,
   reportForumPost,
 } from './forumRepository.js';
+import {
+  getVolunteerProfile,
+  listVolunteerProfiles,
+  patchVolunteerProfile,
+  upsertVolunteerProfile,
+} from './volunteerRepository.js';
 import {
   addTicketComment,
   createReportSubjectTag,
@@ -35,7 +42,12 @@ import {
   listAlerts,
   listCrises,
 } from './dashboardRepository.js';
-import { startExternalDashboardRefresh } from './externalDashboardRefresh.js';
+import {
+  fetchLiveTrafficCameraSnapshot,
+  fetchNeaHazeLayers,
+  fetchNeaRainRadarFrames,
+  startExternalDashboardRefresh,
+} from './externalDashboardRefresh.js';
 import {
   createBroadcast,
   addBroadcastUpdate,
@@ -860,6 +872,35 @@ app.get('/api/dashboard/cached-external', ...requireGovUser, async (_request, re
   }
 });
 
+app.get('/api/gov/infrastructure/cameras/live', ...requireGovUser, async (_request, response, next) => {
+  try {
+    response.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    response.setHeader('Pragma', 'no-cache');
+    response.setHeader('Expires', '0');
+    response.json({ infrastructure: await fetchLiveTrafficCameraSnapshot() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/gov/weather/rain-radar', ...requireGovUser, async (_request, response, next) => {
+  try {
+    response.setHeader('Cache-Control', 'no-store');
+    response.json(await fetchNeaRainRadarFrames());
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/gov/weather/haze-layers', ...requireGovUser, async (_request, response, next) => {
+  try {
+    response.setHeader('Cache-Control', 'no-store');
+    response.json(await fetchNeaHazeLayers());
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get(['/api/gov/recommendations', '/api/recommendations'], ...requireGovUser, async (request, response, next) => {
   try {
     const payload = await getLatestSnapshot<{ items: Record<string, unknown>[] }>('dashboard_recommendations');
@@ -976,8 +1017,10 @@ async function getSnapshotResponse(snapshotKey: string) {
   return payload ?? { items: [] };
 }
 
-function asObject(value: unknown) {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 function forumCooldownKey(request: express.Request, author?: string) {

@@ -4,6 +4,7 @@ const sources = {
   rainfall: 'https://api-open.data.gov.sg/v2/real-time/api/rainfall',
   temperature: 'https://api-open.data.gov.sg/v2/real-time/api/air-temperature',
   wind: 'https://api-open.data.gov.sg/v2/real-time/api/wind-speed',
+  windDirection: 'https://api-open.data.gov.sg/v2/real-time/api/wind-direction',
   psi: 'https://api-open.data.gov.sg/v2/real-time/api/psi',
   trafficImages: 'https://api.data.gov.sg/v1/transport/traffic-images',
   dengueClusters: 'd_dbfabf16158d1b0e1c420627c0819168',
@@ -56,14 +57,58 @@ export function startExternalDashboardRefresh() {
   }, refreshMs);
 }
 
+export async function fetchLiveTrafficCameraSnapshot() {
+  const trafficImages = await getJson<any>(sources.trafficImages, 0, true);
+  return trafficCameraSnapshot(trafficImages);
+}
+
+export async function fetchNeaRainRadarFrames() {
+  const timestamp = Math.floor(Date.now() / 300_000) * 300;
+  const frames = await getJson<Array<{ Url: string; DateTime: string; SortingTime: string }>>(
+    `https://www.nea.gov.sg/api/RainArea/GetRecentData/${timestamp}`,
+  );
+
+  return {
+    frames: frames.map((frame) => ({
+      url: new URL(frame.Url, 'https://www.nea.gov.sg').toString(),
+      label: frame.DateTime,
+      timestamp: frame.SortingTime,
+    })),
+    basemapUrl: 'https://www.nea.gov.sg/assets/images/map/base-853.png',
+    legendUrl: 'https://www.nea.gov.sg/assets/images/temp/rain-legend.jpg',
+    sourceUrl: 'https://www.nea.gov.sg/weather/rain-areas',
+  };
+}
+
+export async function fetchNeaHazeLayers() {
+  const pageUrl = 'https://www.nea.gov.sg/corporate-functions/weather/regional-haze-situation';
+  const response = await fetch(pageUrl, {
+    headers: { Accept: 'text/html', 'User-Agent': 'codexp-signal-data-refresh/1.0' },
+  });
+  if (!response.ok) throw new Error(`${pageUrl} returned ${response.status}`);
+  const html = await response.text();
+  const satellitePath = html.match(/\/docs\/default-source\/mtsat_ir_haze\/[^"'?]+\.png/i)?.[0];
+  const windPath = html.match(/\/docs\/default-source\/haze_wind\/[^"'?]+\.png/i)?.[0];
+
+  if (!satellitePath) throw new Error('NEA haze satellite image was not found');
+
+  return {
+    satelliteUrl: new URL(satellitePath, 'https://www.nea.gov.sg').toString(),
+    windUrl: windPath ? new URL(windPath, 'https://www.nea.gov.sg').toString() : null,
+    basemapUrl: 'https://www.nea.gov.sg/assets/images/canvas.png',
+    sourceUrl: pageUrl,
+  };
+}
+
 async function buildExternalDashboardSnapshot() {
   const sgtDate = singaporeDate();
-  const [rainfall, rainfallDay, temperature, wind, psi, psiDay, trafficImages, denguePoll, diseaseTable, importPrices, retailSales] =
+  const [rainfall, rainfallDay, temperature, wind, windDirection, psi, psiDay, trafficImages, denguePoll, diseaseTable, importPrices, retailSales] =
     await Promise.all([
       getJson<any>(sources.rainfall),
       getJson<any>(`${sources.rainfall}?date=${sgtDate}`),
       getJson<any>(sources.temperature),
       getJson<any>(sources.wind),
+      getJson<any>(sources.windDirection),
       getJson<any>(sources.psi),
       getJson<any>(`${sources.psi}?date=${sgtDate}`),
       getJson<any>(sources.trafficImages),
@@ -89,8 +134,6 @@ async function buildExternalDashboardSnapshot() {
     .map((record: any) => ({ period: record.epi_week, cases: Number(record['no._of_cases']) }));
 
   const psiItem = psi.data.items.at(-1);
-  const trafficItem = trafficImages.items.at(-1);
-
   return {
     generatedAt: new Date().toISOString(),
     health: {
@@ -111,7 +154,7 @@ async function buildExternalDashboardSnapshot() {
         trend: rainfallTrend(rainfallDay),
       },
       temperature: latestReading(temperature),
-      wind: latestReading(wind),
+      wind: latestWindReading(wind, windDirection),
       psi: {
         timestamp: psiItem.timestamp,
         unit: 'PSI',
@@ -127,23 +170,7 @@ async function buildExternalDashboardSnapshot() {
         url: 'https://data.gov.sg/collections/1459/view',
       },
     },
-    infrastructure: {
-      timestamp: trafficItem.timestamp,
-      cameras: trafficItem.cameras.map((camera: any) => ({
-        id: String(camera.camera_id),
-        timestamp: camera.timestamp,
-        latitude: camera.location.latitude,
-        longitude: camera.location.longitude,
-        image: camera.image,
-        width: camera.image_metadata.width,
-        height: camera.image_metadata.height,
-      })),
-      source: {
-        agency: 'Land Transport Authority',
-        label: 'data.gov.sg Traffic Images',
-        url: sources.trafficImages,
-      },
-    },
+    infrastructure: trafficCameraSnapshot(trafficImages),
     supply: {
       updatedAt: importPrices.Data.dataLastUpdated,
       importPrices: selectSeries(importPrices, ['1.0', '1.3', '1.5']),
@@ -164,23 +191,69 @@ async function buildExternalDashboardSnapshot() {
   };
 }
 
-async function getJson<T>(url: string, attempt = 0): Promise<T> {
+function latestWindReading(speedPayload: any, directionPayload: any) {
+  const speed = latestReading(speedPayload);
+  const directionReading = directionPayload.data.readings.at(-1);
+  const directions = new Map(
+    directionReading.data.map((item: any) => [item.stationId, Number(item.value)]),
+  );
+
+  return {
+    ...speed,
+    stations: speed.stations.map((station: any) => ({
+      ...station,
+      direction: directions.get(station.id) ?? null,
+    })),
+  };
+}
+
+function trafficCameraSnapshot(payload: any) {
+  const item = payload.items?.at(-1);
+  if (!item || !Array.isArray(item.cameras)) {
+    throw new Error('Traffic camera feed returned no camera snapshots');
+  }
+
+  return {
+    timestamp: item.timestamp,
+    cameras: item.cameras.map((camera: any) => ({
+      id: String(camera.camera_id),
+      timestamp: camera.timestamp,
+      latitude: camera.location.latitude,
+      longitude: camera.location.longitude,
+      image: camera.image,
+      width: camera.image_metadata.width,
+      height: camera.image_metadata.height,
+    })),
+    source: {
+      agency: 'Land Transport Authority',
+      label: 'data.gov.sg Traffic Images',
+      url: sources.trafficImages,
+    },
+  };
+}
+
+async function getJson<T>(url: string, attempt = 0, bypassCache = false): Promise<T> {
   let response: Response;
   try {
     response = await fetch(url, {
-      headers: { Accept: 'application/json', 'User-Agent': 'codexp-signal-data-refresh/1.0' },
+      cache: bypassCache ? 'no-store' : 'default',
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'codexp-signal-data-refresh/1.0',
+        ...(bypassCache ? { 'Cache-Control': 'no-cache', Pragma: 'no-cache' } : {}),
+      },
     });
   } catch (error) {
     if (attempt < 4) {
       await delay(1500 * 2 ** attempt);
-      return getJson<T>(url, attempt + 1);
+      return getJson<T>(url, attempt + 1, bypassCache);
     }
     throw new Error(`${url} failed after retries`, { cause: error });
   }
 
   if (response.status === 429 && attempt < 4) {
     await delay(1500 * 2 ** attempt);
-    return getJson<T>(url, attempt + 1);
+    return getJson<T>(url, attempt + 1, bypassCache);
   }
   if (!response.ok) throw new Error(`${url} returned ${response.status}`);
   return response.json() as Promise<T>;

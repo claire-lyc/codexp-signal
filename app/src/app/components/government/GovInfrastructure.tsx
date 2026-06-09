@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   AlertTriangle,
   Camera,
@@ -8,10 +8,12 @@ import {
   Database,
   MapPin,
   Radio,
+  RefreshCw,
   Wifi,
   Zap,
 } from 'lucide-react';
-import { useApi } from '../../lib/api';
+import { apiUrl, useApi } from '../../lib/api';
+import { authHeaders } from '../../lib/auth';
 import SingaporeRegionMap, { type MapMarker } from '../SingaporeRegionMap';
 
 type CameraSnapshot = {
@@ -59,6 +61,11 @@ function ageMinutes(snapshotTime: number, timestamp: string) {
   return Math.max(0, Math.round((snapshotTime - new Date(timestamp).getTime()) / 60_000));
 }
 
+function liveImageUrl(camera: CameraSnapshot) {
+  const separator = camera.image.includes('?') ? '&' : '?';
+  return `${camera.image}${separator}frame=${encodeURIComponent(camera.timestamp)}`;
+}
+
 function freshnessSeverity(minutes: number): MapMarker['severity'] {
   if (minutes > 20) return 'high';
   if (minutes > 10) return 'medium';
@@ -67,7 +74,51 @@ function freshnessSeverity(minutes: number): MapMarker['severity'] {
 
 function TrafficView() {
   const { data: dashboardData, loading, error } = useApi<CachedDashboardData>('/api/dashboard/cached-external');
-  const infrastructure = dashboardData?.infrastructure;
+  const [liveInfrastructure, setLiveInfrastructure] = useState<InfrastructureSnapshot | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const [lastCheckedAt, setLastCheckedAt] = useState<Date | null>(null);
+  const [cameraPage, setCameraPage] = useState(0);
+  const [clock, setClock] = useState(() => Date.now());
+  const infrastructure = liveInfrastructure ?? dashboardData?.infrastructure;
+
+  const refreshCameras = useCallback(async (quiet = false) => {
+    if (!quiet) setRefreshing(true);
+
+    try {
+      const response = await fetch(apiUrl('/api/gov/infrastructure/cameras/live'), {
+        headers: authHeaders(),
+        cache: 'no-store',
+      });
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+      const payload = await response.json() as { infrastructure: InfrastructureSnapshot };
+      setLiveInfrastructure(payload.infrastructure);
+      setLiveError(null);
+      setLastCheckedAt(new Date());
+    } catch (caught) {
+      setLiveError(caught instanceof Error ? caught.message : 'Live camera refresh failed');
+    } finally {
+      if (!quiet) setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshCameras(true);
+    const timer = window.setInterval(() => void refreshCameras(true), 20_000);
+    return () => window.clearInterval(timer);
+  }, [refreshCameras]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 15_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCameraPage((current) => current + 1);
+    }, 8_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   if (loading) {
     return <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">Loading infrastructure dashboard...</div>;
@@ -77,10 +128,9 @@ function TrafficView() {
     return <div className="rounded-lg border border-red-800 bg-red-950/40 p-4 text-sm text-red-300">Infrastructure dashboard API unavailable: {error ?? 'missing infrastructure data'}</div>;
   }
 
-  const snapshotTime = new Date(infrastructure.timestamp).getTime();
   const cameras = infrastructure.cameras.map((camera) => ({
     ...camera,
-    ageMinutes: ageMinutes(snapshotTime, camera.timestamp),
+    ageMinutes: ageMinutes(clock, camera.timestamp),
   }));
   const markers: MapMarker[] = cameras.map((camera) => ({
     id: `camera-${camera.id}`,
@@ -94,7 +144,10 @@ function TrafficView() {
   const currentCameras = cameras.filter((camera) => camera.ageMinutes <= 10);
   const delayedCameras = cameras.filter((camera) => camera.ageMinutes > 10);
   const oldestAge = Math.max(...cameras.map((camera) => camera.ageMinutes), 0);
-  const previewCameras = [...cameras].sort((a, b) => a.ageMinutes - b.ageMinutes).slice(0, 6);
+  const sortedCameras = [...cameras].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+  const pageCount = Math.max(1, Math.ceil(sortedCameras.length / 6));
+  const visiblePage = cameraPage % pageCount;
+  const previewCameras = sortedCameras.slice(visiblePage * 6, visiblePage * 6 + 6);
 
   return (
     <>
@@ -103,8 +156,8 @@ function TrafficView() {
         <div>
           <div className="font-medium text-blue-300">Official infrastructure snapshot</div>
           <p className="mt-1 text-zinc-400">
-            Dot colours measure camera-feed freshness at the snapshot time. They do not estimate congestion
-            or road speed from the images.
+            Near-live still images update directly from the LTA traffic-camera feed every 20 seconds. Dot colours measure
+            feed freshness and do not estimate congestion or road speed.
           </p>
           <a className="mt-2 inline-block text-xs text-blue-400 hover:text-blue-300" href={infrastructure.source.url} target="_blank" rel="noreferrer">
             {infrastructure.source.label}
@@ -153,14 +206,43 @@ function TrafficView() {
       </div>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold">Latest Camera Images</h2>
-          <p className="mt-1 text-xs text-zinc-500">Most recent images in the cached data.gov.sg snapshot</p>
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Latest Camera Images</h2>
+            <p className="mt-1 text-xs text-zinc-500">
+              Auto-refreshes every 20 seconds and rotates through all {cameras.length} cameras
+              {liveError ? ` - using last available snapshot (${liveError})` : ''}
+            </p>
+            <div className="mt-2 flex items-center gap-2 text-xs text-green-400">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-60" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
+              </span>
+              {liveError
+                ? 'Live refresh interrupted'
+                : `Live feed checked ${lastCheckedAt ? lastCheckedAt.toLocaleTimeString() : 'on load'}`}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void refreshCameras(false)}
+            disabled={refreshing}
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-700 bg-zinc-950 px-3 text-xs font-medium text-zinc-200 transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh now
+          </button>
         </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {previewCameras.map((camera) => (
             <article key={camera.id} className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/40">
-              <img src={camera.image} alt={`LTA traffic camera ${camera.id}`} className="aspect-video w-full bg-zinc-950 object-cover" loading="lazy" />
+              <img
+                key={`${camera.id}-${camera.timestamp}`}
+                src={liveImageUrl(camera)}
+                alt={`LTA traffic camera ${camera.id}`}
+                className="aspect-video w-full bg-zinc-950 object-cover"
+                loading="eager"
+              />
               <div className="flex items-center justify-between gap-3 p-3 text-sm">
                 <span className="font-medium">Camera {camera.id}</span>
                 <span className="text-xs text-zinc-500">{camera.ageMinutes === 0 ? 'Current' : `${camera.ageMinutes} min old`}</span>
@@ -168,6 +250,21 @@ function TrafficView() {
             </article>
           ))}
         </div>
+        {pageCount > 1 ? (
+          <div className="mt-4 flex items-center justify-center gap-2">
+            {Array.from({ length: pageCount }, (_, index) => (
+              <button
+                key={index}
+                type="button"
+                onClick={() => setCameraPage(index)}
+                className={`h-2 rounded-full transition-all ${
+                  index === visiblePage ? 'w-6 bg-blue-500' : 'w-2 bg-zinc-700 hover:bg-zinc-500'
+                }`}
+                aria-label={`Show camera group ${index + 1}`}
+              />
+            ))}
+          </div>
+        ) : null}
       </div>
     </>
   );
