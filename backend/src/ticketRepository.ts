@@ -538,11 +538,17 @@ async function hydrateTickets(reports: ReportRow[]) {
       `,
       [reportIds],
     ),
-    query<{ grouped_report_id: string; public_report_id: string }>(
+    query<{ id: string; grouped_report_id: string | null; public_report_id: string }>(
       `
-        SELECT grouped_report_id, public_report_id
+        SELECT id, grouped_report_id, public_report_id
         FROM citizen.reports
         WHERE grouped_report_id = ANY($1::uuid[])
+           OR id = ANY(
+             SELECT grouped_report_id
+             FROM citizen.reports
+             WHERE id = ANY($1::uuid[])
+               AND grouped_report_id IS NOT NULL
+           )
       `,
       [reportIds],
     ),
@@ -553,7 +559,8 @@ async function hydrateTickets(reports: ReportRow[]) {
     const relatedTickets = [
       ...(report.grouped_public_report_id ? [report.grouped_public_report_id] : []),
       ...childGroups.filter((item) => item.grouped_report_id === report.id).map((item) => item.public_report_id),
-    ];
+      ...childGroups.filter((item) => item.id === report.grouped_report_id).map((item) => item.public_report_id),
+    ].filter((ticketId, index, all) => ticketId !== report.public_report_id && all.indexOf(ticketId) === index);
 
     return {
       id: report.public_report_id,

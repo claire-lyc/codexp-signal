@@ -217,6 +217,7 @@ export default function GovFormHandling() {
   useEffect(() => {
     let active = true;
     const requestedTicket = searchParams.get('ticket');
+    let requestedTicketDetailsLoaded = false;
 
     fetch(apiUrl('/api/auth/me'), { headers: authHeaders() })
       .then((response) => {
@@ -245,7 +246,10 @@ export default function GovFormHandling() {
           setTickets(data.items);
           setSelectedTicketId((current) => {
             const next = requestedTicket || current || data.items[0]?.id || '';
-            if (next) void fetchTicketDetails(next);
+            if (requestedTicket && !requestedTicketDetailsLoaded) {
+              requestedTicketDetailsLoaded = true;
+              void fetchTicketDetails(requestedTicket);
+            }
             return next;
           });
         })
@@ -494,66 +498,25 @@ export default function GovFormHandling() {
 
           <div className="flex-1 overflow-y-auto">
             {filtered.map((ticket) => (
-              <button
+              <TicketListItem
                 key={ticket.id}
-                onClick={() => selectTicket(ticket.id)}
-                className={`w-full text-left p-3 border-b border-zinc-800 hover:bg-zinc-800/60 transition-colors ${
-                  selectedTicket?.id === ticket.id ? 'bg-zinc-800' : ''
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-mono text-zinc-500">{ticket.id}</span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${statusColors[ticket.status]}`}>{ticket.status}</span>
-                </div>
-                <div className="text-sm font-medium mb-1 line-clamp-2">{ticket.message}</div>
-                <div className="flex items-center justify-between text-xs text-zinc-500">
-                  <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{ticket.location.split(',')[0]}</span>
-                  <span className={`px-1.5 py-0.5 rounded border ${urgencyColors[ticket.urgency]}`}>{ticket.urgency.toUpperCase()}</span>
-                </div>
-                <div className="mt-1 text-xs text-zinc-600">{ticket.crisisType} - {ticket.assignedAgency}</div>
-              </button>
+                ticket={ticket}
+                selected={selectedTicket?.id === ticket.id}
+                onSelect={() => selectTicket(ticket.id)}
+              />
             ))}
           </div>
         </div>
 
         {selectedTicket ? (
           <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col overflow-hidden">
-            <div className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/80">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-xs font-mono text-zinc-400">{selectedTicket.id}</span>
-                <span className={`text-xs px-2 py-0.5 rounded ${statusColors[selectedTicket.status]}`}>{selectedTicket.status}</span>
-                <span className={`text-xs px-2 py-0.5 rounded border ${urgencyColors[selectedTicket.urgency]}`}>{selectedTicket.urgency.toUpperCase()}</span>
-                <span className="text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded">{selectedTicket.crisisType}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {selectedTicket.relatedTickets.length > 0 && (
-                  <span className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-purple-950 border border-purple-800 text-purple-400 rounded-lg">
-                    <Layers className="w-3 h-3" />
-                    Grouped ({selectedTicket.relatedTickets.length})
-                  </span>
-                )}
-                <button onClick={() => setPingOpen(true)} className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-blue-950 border border-blue-800 text-blue-400 rounded-lg hover:bg-blue-900 transition-colors">
-                  <Bell className="w-3 h-3" />
-                  Ping Agencies
-                </button>
-                <button onClick={() => updateStatus(selectedTicket, 'in-progress')} className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-blue-950 border border-blue-800 text-blue-400 rounded-lg hover:bg-blue-900 transition-colors">
-                  Start Work
-                </button>
-                <button onClick={() => updateStatus(selectedTicket, 'resolved')} className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-green-950 border border-green-800 text-green-400 rounded-lg hover:bg-green-900 transition-colors">
-                  <CheckCircle className="w-3 h-3" />
-                  Resolve
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleteConfirmOpen(true)}
-                  className="p-1.5 hover:bg-red-950 rounded transition-colors"
-                  title="Delete ticket"
-                  aria-label="Delete ticket"
-                >
-                  <Trash2 className="w-4 h-4 text-red-400" />
-                </button>
-              </div>
-            </div>
+            <TicketDetailHeader
+              ticket={selectedTicket}
+              onPing={() => setPingOpen(true)}
+              onStart={() => updateStatus(selectedTicket, 'in-progress')}
+              onResolve={() => updateStatus(selectedTicket, 'resolved')}
+              onDelete={() => setDeleteConfirmOpen(true)}
+            />
 
             <div className="flex flex-1 overflow-hidden">
               <div className="w-56 flex-shrink-0 border-r border-zinc-800 p-4 space-y-4 overflow-y-auto">
@@ -685,57 +648,24 @@ export default function GovFormHandling() {
       </div>
 
       {deleteConfirmOpen && selectedTicket && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border border-red-900/70 rounded-xl p-6 w-96 shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold flex items-center gap-2 text-red-300"><Trash2 className="w-5 h-5" />Delete Ticket</h3>
-              <button disabled={deletingTicket} onClick={() => setDeleteConfirmOpen(false)} className="p-1 hover:bg-zinc-800 rounded transition-colors disabled:opacity-50"><X className="w-4 h-4 text-zinc-400" /></button>
-            </div>
-            <p className="text-sm text-zinc-300">
-              Delete <span className="font-mono text-red-300">{selectedTicket.id}</span>? This removes the ticket and its comments, images, pings, and chat history from the database.
-            </p>
-            <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-500">
-              This action cannot be undone.
-            </div>
-            <div className="mt-5 flex gap-2">
-              <button disabled={deletingTicket} onClick={() => setDeleteConfirmOpen(false)} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm transition-colors disabled:opacity-50">Cancel</button>
-              <button disabled={deletingTicket} onClick={deleteSelectedTicket} className="flex-1 py-2 bg-red-600 hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400 rounded-lg text-sm transition-colors flex items-center justify-center gap-2">
-                <Trash2 className="w-4 h-4" />
-                {deletingTicket ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <DeleteTicketDialog
+          ticketId={selectedTicket.id}
+          deleting={deletingTicket}
+          onCancel={() => setDeleteConfirmOpen(false)}
+          onConfirm={deleteSelectedTicket}
+        />
       )}
 
       {pingOpen && selectedTicket && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-96 shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold flex items-center gap-2"><Bell className="w-5 h-5 text-blue-400" />Ping Related Agencies</h3>
-              <button onClick={() => setPingOpen(false)} className="p-1 hover:bg-zinc-800 rounded transition-colors"><X className="w-4 h-4 text-zinc-400" /></button>
-            </div>
-            <p className="text-sm text-zinc-400 mb-4">Selected agencies will receive this ticket ({selectedTicket.id}) in their queue and be notified.</p>
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              {pingableAgencies.map((agency) => (
-                <button
-                  key={agency}
-                  onClick={() => setPinnedAgencies((previous) => previous.includes(agency) ? previous.filter((item) => item !== agency) : [...previous, agency])}
-                  className={`px-3 py-2 rounded-lg text-sm border transition-colors ${pinnedAgencies.includes(agency) ? 'bg-blue-900 border-blue-700 text-blue-300' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700'}`}
-                >
-                  {agency}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => setPingOpen(false)} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm transition-colors">Cancel</button>
-              <button onClick={pingAgencies} disabled={pinnedAgencies.length === 0} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm transition-colors flex items-center justify-center gap-2">
-                <Send className="w-4 h-4" />
-                Ping {pinnedAgencies.length > 0 ? `(${pinnedAgencies.length})` : ''}
-              </button>
-            </div>
-          </div>
-        </div>
+        <PingAgenciesDialog
+          ticketId={selectedTicket.id}
+          pinnedAgencies={pinnedAgencies}
+          onToggleAgency={(agency) =>
+            setPinnedAgencies((previous) => previous.includes(agency) ? previous.filter((item) => item !== agency) : [...previous, agency])
+          }
+          onCancel={() => setPingOpen(false)}
+          onConfirm={pingAgencies}
+        />
       )}
     </div>
   );
@@ -746,6 +676,175 @@ function Property({ icon: Icon, label, value }: { icon: LucideIcon; label: strin
     <div>
       <div className="text-xs text-zinc-500 mb-1">{label}</div>
       <div className="flex items-center gap-1.5 text-sm text-zinc-300"><Icon className="w-3.5 h-3.5 text-zinc-400" />{value}</div>
+    </div>
+  );
+}
+
+function TicketListItem({
+  ticket,
+  selected,
+  onSelect,
+}: {
+  ticket: Ticket;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      onClick={onSelect}
+      className={`w-full text-left p-3 border-b border-zinc-800 hover:bg-zinc-800/60 transition-colors ${selected ? 'bg-zinc-800' : ''}`}
+    >
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs font-mono text-zinc-500">{ticket.id}</span>
+        <StatusBadge status={ticket.status} />
+      </div>
+      <div className="text-sm font-medium mb-1 line-clamp-2">{ticket.message}</div>
+      <div className="flex items-center justify-between text-xs text-zinc-500">
+        <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{ticket.location.split(',')[0]}</span>
+        <UrgencyBadge urgency={ticket.urgency} />
+      </div>
+      <div className="mt-1 text-xs text-zinc-600">{ticket.crisisType} - {ticket.assignedAgency}</div>
+    </button>
+  );
+}
+
+function TicketDetailHeader({
+  ticket,
+  onPing,
+  onStart,
+  onResolve,
+  onDelete,
+}: {
+  ticket: Ticket;
+  onPing: () => void;
+  onStart: () => void;
+  onResolve: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/80">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-xs font-mono text-zinc-400">{ticket.id}</span>
+        <StatusBadge status={ticket.status} />
+        <UrgencyBadge urgency={ticket.urgency} />
+        <span className="text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded">{ticket.crisisType}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        {ticket.relatedTickets.length > 0 && (
+          <span className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-purple-950 border border-purple-800 text-purple-400 rounded-lg">
+            <Layers className="w-3 h-3" />
+            Grouped ({ticket.relatedTickets.length})
+          </span>
+        )}
+        <button onClick={onPing} className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-blue-950 border border-blue-800 text-blue-400 rounded-lg hover:bg-blue-900 transition-colors">
+          <Bell className="w-3 h-3" />
+          Ping Agencies
+        </button>
+        <button onClick={onStart} className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-blue-950 border border-blue-800 text-blue-400 rounded-lg hover:bg-blue-900 transition-colors">
+          Start Work
+        </button>
+        <button onClick={onResolve} className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-green-950 border border-green-800 text-green-400 rounded-lg hover:bg-green-900 transition-colors">
+          <CheckCircle className="w-3 h-3" />
+          Resolve
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="p-1.5 hover:bg-red-950 rounded transition-colors"
+          title="Delete ticket"
+          aria-label="Delete ticket"
+        >
+          <Trash2 className="w-4 h-4 text-red-400" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: TicketStatus }) {
+  return <span className={`text-xs px-2 py-0.5 rounded ${statusColors[status]}`}>{status}</span>;
+}
+
+function UrgencyBadge({ urgency }: { urgency: TicketUrgency }) {
+  return <span className={`px-1.5 py-0.5 text-xs rounded border ${urgencyColors[urgency]}`}>{urgency.toUpperCase()}</span>;
+}
+
+function DeleteTicketDialog({
+  ticketId,
+  deleting,
+  onCancel,
+  onConfirm,
+}: {
+  ticketId: string;
+  deleting: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+      <div className="bg-zinc-900 border border-red-900/70 rounded-xl p-6 w-96 shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold flex items-center gap-2 text-red-300"><Trash2 className="w-5 h-5" />Delete Ticket</h3>
+          <button disabled={deleting} onClick={onCancel} className="p-1 hover:bg-zinc-800 rounded transition-colors disabled:opacity-50"><X className="w-4 h-4 text-zinc-400" /></button>
+        </div>
+        <p className="text-sm text-zinc-300">
+          Delete <span className="font-mono text-red-300">{ticketId}</span>? This removes the ticket and its comments, images, pings, and chat history from the database.
+        </p>
+        <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-500">
+          This action cannot be undone.
+        </div>
+        <div className="mt-5 flex gap-2">
+          <button disabled={deleting} onClick={onCancel} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm transition-colors disabled:opacity-50">Cancel</button>
+          <button disabled={deleting} onClick={onConfirm} className="flex-1 py-2 bg-red-600 hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400 rounded-lg text-sm transition-colors flex items-center justify-center gap-2">
+            <Trash2 className="w-4 h-4" />
+            {deleting ? 'Deleting...' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PingAgenciesDialog({
+  ticketId,
+  pinnedAgencies,
+  onToggleAgency,
+  onCancel,
+  onConfirm,
+}: {
+  ticketId: string;
+  pinnedAgencies: string[];
+  onToggleAgency: (agency: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-96 shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold flex items-center gap-2"><Bell className="w-5 h-5 text-blue-400" />Ping Related Agencies</h3>
+          <button onClick={onCancel} className="p-1 hover:bg-zinc-800 rounded transition-colors"><X className="w-4 h-4 text-zinc-400" /></button>
+        </div>
+        <p className="text-sm text-zinc-400 mb-4">Selected agencies will receive this ticket ({ticketId}) in their queue and be notified.</p>
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          {pingableAgencies.map((agency) => (
+            <button
+              key={agency}
+              onClick={() => onToggleAgency(agency)}
+              className={`px-3 py-2 rounded-lg text-sm border transition-colors ${pinnedAgencies.includes(agency) ? 'bg-blue-900 border-blue-700 text-blue-300' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700'}`}
+            >
+              {agency}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onCancel} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm transition-colors">Cancel</button>
+          <button onClick={onConfirm} disabled={pinnedAgencies.length === 0} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm transition-colors flex items-center justify-center gap-2">
+            <Send className="w-4 h-4" />
+            Ping {pinnedAgencies.length > 0 ? `(${pinnedAgencies.length})` : ''}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
