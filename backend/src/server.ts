@@ -18,14 +18,19 @@ import {
 } from './forumRepository.js';
 import {
   addTicketComment,
+  createReportSubjectTag,
   createCitizenTicket,
   deleteTicket,
   getTicketByPublicId,
   listTicketsForReporter,
   listTickets,
+  listReportSubjectTags,
   pingTicketAgencies,
+  setTicketSubjectTag,
+  startTicketWork,
   TicketChatClosedError,
   updateTicketStatus,
+  type Ticket,
   type TicketStatus,
 } from './ticketRepository.js';
 import {
@@ -424,6 +429,46 @@ app.patch('/api/gov/volunteers/profiles/:userId', ...requireGovUser, async (requ
   }
 });
 
+app.get('/api/report-subject-tags', authenticateJwt as express.RequestHandler, async (_request, response, next) => {
+  try {
+    response.json({ items: await listReportSubjectTags() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/report-subject-tags', ...requireGovUser, async (request: AuthenticatedRequest, response, next) => {
+  const label = stringBody(request.body?.label);
+  if (!label) {
+    response.status(400).json({ error: 'Subject tag label is required' });
+    return;
+  }
+
+  const categories = Array.isArray(request.body?.categories)
+    ? request.body.categories.filter((item: unknown): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+  if (!categories.length) {
+    response.status(400).json({ error: 'At least one subject category is required' });
+    return;
+  }
+
+  try {
+    const item = await createReportSubjectTag({
+      label,
+      description: stringBody(request.body?.description),
+      categories,
+      createdByUserId: request.user?.id,
+    });
+    if (!item) {
+      response.status(500).json({ error: 'Unable to create subject tag' });
+      return;
+    }
+    response.status(201).json({ item });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get('/api/tickets', ...requireGovUser, async (request, response, next) => {
   try {
     response.json({
@@ -458,7 +503,8 @@ app.get('/api/citizen/reports', authenticateJwt as express.RequestHandler, async
       response.status(401).json({ error: 'Bearer token is required' });
       return;
     }
-    response.json({ items: await listTicketsForReporter(request.user.id) });
+    const items = await listTicketsForReporter(request.user.id);
+    response.json({ items: items.map(redactInternalTicket) });
   } catch (error) {
     next(error);
   }
@@ -491,6 +537,7 @@ app.post(
         crisisType,
         urgency,
         reportType: stringBody(request.body?.reportType),
+        subjectTagId: stringBody(request.body?.subjectTagId) ?? null,
         images: [
           ...files.map((file) => ({
             originalFilename: file.originalname,
@@ -514,7 +561,7 @@ app.post(
         status: ticket.status,
         assignedAgency: ticket.assignedAgency,
         createdAt: new Date().toISOString(),
-        item: ticket,
+        item: redactInternalTicket(ticket),
       });
     } catch (error) {
       next(error);
@@ -538,7 +585,7 @@ app.get('/api/citizen/reports/:publicReportId', authenticateJwt as express.Reque
         [...ticket.comments].reverse().find((comment) => comment.visibility === 'public')?.body ??
         'Your report is in the government ticket queue.',
       updatedAt: ticket.comments.at(-1)?.createdAt ?? new Date().toISOString(),
-      item: ticket,
+      item: redactInternalTicket(ticket),
     });
   } catch (error) {
     next(error);
@@ -569,7 +616,7 @@ app.post('/api/citizen/reports/:publicReportId/comments', authenticateJwt as exp
     } else {
       await enqueueCitizenReplyNotifications(request.params.publicReportId, body);
     }
-    response.status(201).json({ item: ticket });
+    response.status(201).json({ item: redactInternalTicket(ticket) });
   } catch (error) {
     if (error instanceof TicketChatClosedError) {
       response.status(409).json({ error: error.message });
@@ -611,6 +658,41 @@ app.delete('/api/tickets/:id', ...requireGovUser, async (request, response, next
     }
     response.status(204).send();
   } catch (error) {
+    next(error);
+  }
+});
+
+app.patch('/api/tickets/:id/subject-tag', ...requireGovUser, async (request: AuthenticatedRequest, response, next) => {
+  try {
+    const subjectTagId = stringBody(request.body?.subjectTagId) ?? null;
+    const ticket = await setTicketSubjectTag(request.params.id, subjectTagId, request.user?.id);
+    if (!ticket) {
+      response.status(404).json({ error: 'Ticket not found' });
+      return;
+    }
+    response.json({ item: ticket });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/tickets/:id/start-work', ...requireGovUser, async (request: AuthenticatedRequest, response, next) => {
+  try {
+    const ticket = await startTicketWork(
+      request.params.id,
+      request.user?.id,
+      request.user?.display_name ?? request.user?.username ?? request.user?.email ?? 'Government handler',
+    );
+    if (!ticket) {
+      response.status(404).json({ error: 'Ticket not found' });
+      return;
+    }
+    response.json({ item: ticket });
+  } catch (error) {
+    if (error instanceof TicketChatClosedError) {
+      response.status(409).json({ error: error.message });
+      return;
+    }
     next(error);
   }
 });
@@ -949,6 +1031,13 @@ function isTicketStatus(value: unknown): value is TicketStatus {
 
 function isBroadcastSeverity(value: unknown): value is BroadcastSeverity {
   return value === 'critical' || value === 'high' || value === 'medium' || value === 'low';
+}
+
+function redactInternalTicket(ticket: Ticket): Ticket {
+  return {
+    ...ticket,
+    comments: ticket.comments.filter((comment) => comment.visibility === 'public'),
+  };
 }
 
 async function getSnapshotResponse(snapshotKey: string) {
