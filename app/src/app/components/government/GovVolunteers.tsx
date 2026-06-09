@@ -1,4 +1,4 @@
-// Future endpoints:
+﻿// Future endpoints:
 // GET /api/volunteers/opportunities
 // GET /api/volunteers/applications
 // PATCH /api/volunteers/applications/{id}/verify
@@ -41,12 +41,15 @@ type NeedForm = {
   shift: string;
   reportingPoint: string;
   description: string;
-  primaryRole: string;
-  primaryNeeded: number;
-  primarySkills: string[];
-  specialRole: string;
-  specialNeeded: number;
-  specialSkills: string[];
+  roles: NeedRoleForm[];
+};
+
+type NeedRoleForm = {
+  id: string;
+  title: string;
+  needed: number;
+  skills: string[];
+  isSpecial: boolean;
   specialRequirements: string;
 };
 
@@ -60,13 +63,16 @@ const emptyNeedForm: NeedForm = {
   shift: 'Today, 16:00-20:00',
   reportingPoint: 'Bugis MRT Exit B command point',
   description: 'Support ground officers with wayfinding, queue control, and public updates around disrupted transport routes.',
-  primaryRole: 'Crowd guide',
-  primaryNeeded: 8,
-  primarySkills: ['Community Outreach'],
-  specialRole: 'Mandarin-speaking guide',
-  specialNeeded: 2,
-  specialSkills: ['Translation', 'Language Support'],
-  specialRequirements: 'Must be comfortable giving public directions in Mandarin.',
+  roles: [
+    {
+      id: 'draft-role-1',
+      title: 'Crowd guide',
+      needed: 8,
+      skills: ['Community Outreach'],
+      isSpecial: false,
+      specialRequirements: '',
+    },
+  ],
 };
 
 const urgencyColors: Record<string, string> = {
@@ -370,28 +376,49 @@ export default function GovVolunteers() {
     setDemoProfiles((current) => current.map((item) => item.id === profile.id ? nextProfile : item));
   };
 
+  const updateNeedRole = (roleId: string, patch: Partial<NeedRoleForm>) => {
+    setNeedForm((current) => ({
+      ...current,
+      roles: current.roles.map((role) => role.id === roleId ? { ...role, ...patch } : role),
+    }));
+  };
+
+  const addNeedRole = () => {
+    setNeedForm((current) => ({
+      ...current,
+      roles: [
+        ...current.roles,
+        {
+          id: `draft-role-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          title: '',
+          needed: 1,
+          skills: [],
+          isSpecial: false,
+          specialRequirements: '',
+        },
+      ],
+    }));
+  };
+
+  const removeNeedRole = (roleId: string) => {
+    setNeedForm((current) => ({
+      ...current,
+      roles: current.roles.length <= 1 ? current.roles : current.roles.filter((role) => role.id !== roleId),
+    }));
+  };
+
   const addNeed = () => {
     const agency = currentAgency === 'All agencies' ? 'LTA' : currentAgency;
-    const roleSlots: VolunteerRoleSlot[] = [
-      {
-        id: `role-${Date.now()}-primary`,
-        title: needForm.primaryRole.trim() || 'General volunteer',
-        needed: Math.max(1, needForm.primaryNeeded),
-        assigned: 0,
-        requiredSkills: needForm.primarySkills.length ? needForm.primarySkills : ['Community Outreach'],
-      },
-    ];
-
-    if (needForm.specialRole.trim()) {
-      roleSlots.push({
-        id: `role-${Date.now()}-special`,
-        title: needForm.specialRole.trim(),
-        needed: Math.max(1, needForm.specialNeeded),
-        assigned: 0,
-        requiredSkills: needForm.specialSkills.length ? needForm.specialSkills : ['Translation'],
-        specialRequirements: needForm.specialRequirements.trim() || undefined,
-      });
-    }
+    const createdAt = Date.now();
+    const roleSlots: VolunteerRoleSlot[] = needForm.roles.map((role, index) => ({
+      id: `role-${createdAt}-${index}`,
+      title: role.title.trim() || `Volunteer role ${index + 1}`,
+      needed: Math.max(1, role.needed || 1),
+      assigned: 0,
+      requiredSkills: role.skills.length ? role.skills : ['Community Outreach'],
+      isSpecial: role.isSpecial,
+      specialRequirements: role.isSpecial ? role.specialRequirements.trim() || undefined : undefined,
+    }));
 
     const needed = roleSlots.reduce((total, role) => total + role.needed, 0);
     const newNeed: VolunteerOpportunity = {
@@ -519,11 +546,27 @@ export default function GovVolunteers() {
               <label className="mb-2 block text-sm font-medium">Description</label>
               <textarea value={needForm.description} onChange={(event) => setNeedForm({ ...needForm, description: event.target.value })} rows={3} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" />
             </div>
-            <RoleBuilder title="Main role" role={needForm.primaryRole} needed={needForm.primaryNeeded} skills={needForm.primarySkills} onRole={(value) => setNeedForm({ ...needForm, primaryRole: value })} onNeeded={(value) => setNeedForm({ ...needForm, primaryNeeded: value })} onSkills={(skills) => setNeedForm({ ...needForm, primarySkills: skills })} />
-            <div className="rounded-lg border border-yellow-800/70 bg-yellow-950/20 p-4">
-              <RoleBuilder title="Special role" role={needForm.specialRole} needed={needForm.specialNeeded} skills={needForm.specialSkills} onRole={(value) => setNeedForm({ ...needForm, specialRole: value })} onNeeded={(value) => setNeedForm({ ...needForm, specialNeeded: value })} onSkills={(skills) => setNeedForm({ ...needForm, specialSkills: skills })} />
-              <label className="mt-3 block text-sm font-medium">Special requirements</label>
-              <input value={needForm.specialRequirements} onChange={(event) => setNeedForm({ ...needForm, specialRequirements: event.target.value })} className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" />
+            <div className="lg:col-span-2 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="font-medium">Roles</div>
+                  <div className="text-xs text-zinc-500">Add the roles this agency needs. Mark only specialised roles when extra checks or requirements apply.</div>
+                </div>
+                <button type="button" onClick={addNeedRole} className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700">
+                  <Plus className="h-4 w-4" />
+                  Add role
+                </button>
+              </div>
+              {needForm.roles.map((role, index) => (
+                <RoleBuilder
+                  key={role.id}
+                  title={`Role ${index + 1}`}
+                  role={role}
+                  canRemove={needForm.roles.length > 1}
+                  onRole={(patch) => updateNeedRole(role.id, patch)}
+                  onRemove={() => removeNeedRole(role.id)}
+                />
+              ))}
             </div>
             <div className="lg:col-span-2">
               <button onClick={addNeed} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-700">
@@ -580,7 +623,10 @@ export default function GovVolunteers() {
                       onClick={() => { setExpandedId(opportunity.id); setSelectedRoleId(role.id); }}
                       className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-colors ${isSelected ? 'border-blue-500 bg-zinc-900 text-white' : 'border-zinc-800 bg-zinc-950/50 text-zinc-300 hover:border-zinc-700'}`}
                     >
-                      <span className="font-medium">{role.title}</span>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate font-medium">{role.title}</span>
+                        {role.isSpecial && <span className="rounded bg-yellow-950 px-1.5 py-0.5 text-[10px] text-yellow-300">Special</span>}
+                      </span>
                       <span className="text-xs text-zinc-500">{filled}/{role.needed}</span>
                     </button>
                   );
@@ -948,41 +994,66 @@ function SelectField({ label, value, values, onChange }: { label: string; value:
 function RoleBuilder({
   title,
   role,
-  needed,
-  skills,
   onRole,
-  onNeeded,
-  onSkills,
+  onRemove,
+  canRemove,
 }: {
   title: string;
-  role: string;
-  needed: number;
-  skills: string[];
-  onRole: (value: string) => void;
-  onNeeded: (value: number) => void;
-  onSkills: (skills: string[]) => void;
+  role: NeedRoleForm;
+  onRole: (patch: Partial<NeedRoleForm>) => void;
+  onRemove: () => void;
+  canRemove: boolean;
 }) {
   const toggleSkill = (skill: string) => {
-    onSkills(skills.includes(skill) ? skills.filter((item) => item !== skill) : [...skills, skill]);
+    onRole({ skills: role.skills.includes(skill) ? role.skills.filter((item) => item !== skill) : [...role.skills, skill] });
   };
 
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-950/30 p-4">
-      <div className="mb-3 font-medium">{title}</div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="font-medium">{title}</div>
+        <div className="flex items-center gap-2">
+          <label className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300">
+            <input
+              type="checkbox"
+              checked={role.isSpecial}
+              onChange={(event) => onRole({ isSpecial: event.target.checked })}
+              className="h-3.5 w-3.5 rounded border-zinc-600 bg-zinc-800"
+            />
+            Special role
+          </label>
+          {canRemove && (
+            <button type="button" onClick={onRemove} className="rounded-lg px-2.5 py-1.5 text-xs text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200">
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_120px]">
-        <Field label="Role title" value={role} onChange={onRole} />
+        <Field label="Role title" value={role.title} onChange={(value) => onRole({ title: value })} />
         <label className="block">
           <div className="mb-2 text-sm font-medium">Needed</div>
-          <input type="number" min={1} value={needed} onChange={(event) => onNeeded(Number(event.target.value))} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" />
+          <input type="number" min={1} value={role.needed} onChange={(event) => onRole({ needed: Number(event.target.value) })} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600" />
         </label>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {volunteerSkills.map((skill) => (
-          <button key={skill} type="button" onClick={() => toggleSkill(skill)} className={`rounded-full border px-2.5 py-1 text-xs ${skills.includes(skill) ? 'border-blue-500 bg-blue-600/20 text-blue-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-zinc-600'}`}>
+          <button key={skill} type="button" onClick={() => toggleSkill(skill)} className={`rounded-full border px-2.5 py-1 text-xs ${role.skills.includes(skill) ? 'border-blue-500 bg-blue-600/20 text-blue-200' : 'border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-zinc-600'}`}>
             {skill}
           </button>
         ))}
       </div>
+      {role.isSpecial && (
+        <label className="mt-3 block">
+          <div className="mb-2 text-sm font-medium">Special requirements</div>
+          <input
+            value={role.specialRequirements}
+            onChange={(event) => onRole({ specialRequirements: event.target.value })}
+            placeholder="Example: Class 3 licence, valid first aid cert, language requirement"
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+          />
+        </label>
+      )}
     </div>
   );
 }
@@ -1104,7 +1175,10 @@ function RoleAssignmentPanel({
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold">{role.title}</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-semibold">{role.title}</h3>
+            {role.isSpecial && <span className="rounded bg-yellow-950 px-2 py-0.5 text-xs text-yellow-300">Special role</span>}
+          </div>
           <div className="mt-1 text-xs text-zinc-500">{filledSlots}/{role.needed} filled · {relevantCandidates.length} visible volunteers</div>
         </div>
         <div className="rounded border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-right text-xs text-zinc-400">

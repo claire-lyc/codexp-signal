@@ -48,6 +48,7 @@ export type VolunteerRoleSlot = {
   needed: number;
   assigned: number;
   requiredSkills: string[];
+  isSpecial?: boolean;
   specialRequirements?: string;
 };
 
