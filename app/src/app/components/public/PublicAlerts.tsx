@@ -26,76 +26,7 @@ type BroadcastAlert = {
   time: string;
 };
 
-const incidents: Incident[] = [
-  {
-    id: 'INC-0041',
-    title: 'Flash Flood Warning — Orchard Road & East Coast',
-    severity: 'critical',
-    type: 'Weather',
-    region: 'Central, East',
-    status: 'active',
-    verified: true,
-    updates: [
-      { time: 'Jun 5, 14:30 SGT', text: 'Update — Water levels rising at Orchard Road underpass. Avoid the area. Alternative routes advised.' },
-      { time: 'Jun 5, 14:10 SGT', text: 'Monitoring — Flash flood risk elevated. PUB drainage teams deployed.' },
-      { time: 'Jun 5, 13:55 SGT', text: 'Investigating — Heavy rainfall reported in multiple zones. Assessing flood risk.' },
-    ],
-  },
-  {
-    id: 'INC-0040',
-    title: 'Dengue Red Zone — Bedok North Ave 1',
-    severity: 'high',
-    type: 'Health',
-    region: 'East',
-    status: 'active',
-    verified: true,
-    updates: [
-      { time: 'Jun 5, 13:00 SGT', text: 'Update — 23 confirmed cases in cluster. NEA fogging operations underway.' },
-      { time: 'Jun 5, 10:30 SGT', text: 'Identified — New dengue red zone declared at Bedok North Ave 1.' },
-    ],
-  },
-  {
-    id: 'INC-0039',
-    title: 'Panadol Menstrual Shortage — Islandwide',
-    severity: 'medium',
-    type: 'Supply',
-    region: 'Nationwide',
-    status: 'monitoring',
-    verified: true,
-    updates: [
-      { time: 'Jun 5, 09:45 SGT', text: 'Update — Alternate suppliers contacted. Estimated restock within 4 days. Pharmacists advised to recommend paracetamol alternatives.' },
-      { time: 'Jun 5, 08:00 SGT', text: 'Identified — Islandwide shortage confirmed at 87 outlets. Enterprise SG coordinating response.' },
-    ],
-  },
-  {
-    id: 'INC-0038',
-    title: 'Air Quality Advisory — PSI at Unhealthy Levels',
-    severity: 'medium',
-    type: 'Weather',
-    region: 'Nationwide',
-    status: 'monitoring',
-    verified: true,
-    updates: [
-      { time: 'Jun 5, 06:30 SGT', text: 'Monitoring — PSI at 156 (Unhealthy). Vulnerable groups should avoid prolonged outdoor activity. Wear N95 masks if going out.' },
-    ],
-  },
-];
-
-const pastIncidents: { date: string; items: { title: string; type: string; note: string }[] }[] = [
-  {
-    date: 'Jun 4, 2026',
-    items: [
-      { title: 'MRT East-West Line Disruption', type: 'Infrastructure', note: 'Resolved — Service resumed at 6:45 PM.' },
-      { title: 'Covid-19 Cluster — Jurong West MRT', type: 'Health', note: 'Resolved — Cluster isolated. Enhanced cleaning completed.' },
-    ],
-  },
-  {
-    date: 'Jun 3, 2026',
-    items: [
-      { title: 'Haze Advisory lifted', type: 'Weather', note: 'Resolved — PSI returned to Good range.' },
-    ],
-  },
-];
+type PastIncidentGroup = { date: string; items: { title: string; type: string; note: string }[] };
 
 const severityConfig: Record<string, { banner: string; dot: string; badge: string; label: string }> = {
   critical: { banner: 'bg-red-950/60 border-red-700', dot: 'bg-red-500', badge: 'bg-red-900 text-red-400', label: 'CRITICAL' },
@@ -111,7 +42,7 @@ const statusConfig: Record<string, string> = {
 };
 
 export default function PublicAlerts() {
-  const { data, loading, error } = useApi<{ incidents: Incident[]; pastIncidents: typeof pastIncidents }>('/api/citizen/incidents');
+  const { data, loading, error } = useApi<{ incidents: Incident[]; pastIncidents: PastIncidentGroup[] }>('/api/citizen/incidents');
   const [broadcasts, setBroadcasts] = useState<BroadcastAlert[]>([]);
   const incidents = data?.incidents ?? [];
   const pastIncidents = data?.pastIncidents ?? [];
@@ -196,6 +127,11 @@ export default function PublicAlerts() {
         </div>
 
         <div className="space-y-3">
+          {incidents.length === 0 && (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
+              No current incidents. Historical advisories are listed below.
+            </div>
+          )}
           {incidents.map((incident) => {
             const cfg = severityConfig[incident.severity];
             const isExpanded = expandedId === incident.id;

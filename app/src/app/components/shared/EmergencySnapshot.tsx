@@ -1,12 +1,9 @@
 import { AlertTriangle, CheckCircle, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router';
 
-const currentEmergencies = [
-  { title: 'Flash Flood Warning', region: 'Orchard Road & East Coast', severity: 'Critical' },
-  { title: 'Dengue Red Zone', region: 'Bedok North Ave 1', severity: 'High' },
-];
-
 const pastEmergencies = [
+  { title: 'Flash Flood Warning', note: 'Archived on Jun 5' },
+  { title: 'Dengue Red Zone', note: 'Archived on Jun 5' },
   { title: 'MRT East-West Line Disruption', note: 'Resolved on Jun 4' },
   { title: 'Haze Advisory', note: 'Lifted on Jun 3' },
 ];
@@ -20,13 +17,8 @@ export default function EmergencySnapshot({ portal }: { portal: 'public' | 'gov'
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-lg border border-red-800 bg-red-950/50 px-2.5 py-1 text-xs font-medium text-red-300">
             <AlertTriangle className="h-3.5 w-3.5" />
-            Current emergencies
+            Current emergencies: none
           </span>
-          {currentEmergencies.map((item) => (
-            <span key={item.title} className="rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-xs text-zinc-300">
-              {item.title} - {item.region}
-            </span>
-          ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {pastEmergencies.map((item) => (

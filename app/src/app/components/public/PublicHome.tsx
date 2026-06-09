@@ -5,24 +5,6 @@ import { Link } from 'react-router';
 import SingaporeRegionMap from '../SingaporeRegionMap';
 import { useApi } from '../../lib/api';
 
-const activeAlerts = [
-  { id: 1, type: 'Weather', message: 'Flash flood risk in Orchard & East Coast regions', severity: 'high', region: 'East / Central' },
-  { id: 2, type: 'Health', message: 'Air quality advisory — PSI at 156 (Unhealthy). Avoid prolonged outdoor activity.', severity: 'medium', region: 'All' },
-];
-
-const nearbyResources = [
-  { name: 'Singapore General Hospital', type: 'Hospital', distance: '1.2 km', status: 'Available' },
-  { name: 'Tanjong Pagar CC', type: 'Shelter', distance: '800 m', status: 'Available' },
-  { name: 'Outram Park Clinic', type: 'Clinic', distance: '1.5 km', status: 'Available' },
-];
-
-const updates = [
-  { time: '30 mins ago', message: 'Flash flood advisory issued for Orchard Road and East Coast Park areas.' },
-  { time: '2 hours ago', message: 'Dengue red zone declared at Bedok North Ave 1. Residents advised to remove stagnant water.' },
-  { time: '4 hours ago', message: 'Panadol Menstrual shortage confirmed islandwide. Authorities sourcing alternatives.' },
-  { time: '1 day ago', message: 'Government announces enhanced flood prevention measures for 2026.' },
-];
-
 type PublicHomeData = {
   activeCrisisLabels: string[];
   summary: string;
@@ -59,7 +41,9 @@ export default function PublicHome() {
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-              <span className="text-sm font-medium text-red-400">Active crises: {publicHome?.activeCrisisLabels.join(', ') ?? 'Loading'}</span>
+              <span className="text-sm font-medium text-red-400">
+                Active crises: {publicHome ? (publicHome.activeCrisisLabels.length ? publicHome.activeCrisisLabels.join(', ') : 'None') : 'Loading'}
+              </span>
             </div>
             <h2 className="text-2xl font-bold mb-2">Stay Informed & Safe</h2>
             <p className="text-zinc-400">
@@ -116,6 +100,11 @@ export default function PublicHome() {
               Active Alerts
             </h2>
             <div className="space-y-3">
+              {activeAlerts.length === 0 && (
+                <div className="rounded-lg border border-zinc-800 bg-zinc-800/60 p-4 text-sm text-zinc-500">
+                  No active alerts right now. Check Alerts for current broadcasts and archived advisories.
+                </div>
+              )}
               {activeAlerts.map((alert) => (
                 <div
                   key={alert.id}
@@ -146,6 +135,11 @@ export default function PublicHome() {
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
             <h2 className="text-lg font-semibold mb-4">Live Updates</h2>
             <div className="space-y-3">
+              {updates.length === 0 && (
+                <div className="rounded-lg border border-zinc-800 bg-zinc-800/60 p-4 text-sm text-zinc-500">
+                  No live updates are currently published.
+                </div>
+              )}
               {updates.map((update, idx) => (
                 <div key={idx} className="p-4 bg-zinc-800 rounded-lg">
                   <div className="text-xs text-zinc-500 mb-1">{update.time}</div>

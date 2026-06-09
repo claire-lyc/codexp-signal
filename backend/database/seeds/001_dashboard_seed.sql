@@ -7,18 +7,18 @@ ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO dashboard.crises (name, crisis_type, status, severity, summary, started_at)
 VALUES
-  ('Covid-19', 'health', 'active', 'medium', 'Active case monitoring and ICU capacity tracking.', '2026-06-05T06:50:00+08:00'),
-  ('Dengue', 'health', 'active', 'high', 'Red zone clusters expanding in the East region.', '2026-06-05T09:45:00+08:00'),
-  ('Flash Flood Risk', 'weather', 'active', 'high', 'Heavy rain reports clustered around Central and East regions.', '2026-06-05T10:23:00+08:00'),
-  ('Panadol Shortage', 'supply_chain', 'monitoring', 'medium', 'Medicine shortage reported across retail outlets.', '2026-06-05T08:30:00+08:00'),
-  ('Cyber Incident', 'cybersecurity', 'monitoring', 'low', 'Active cyber threats remain under monitoring.', '2026-06-05T07:15:00+08:00');
+  ('Covid-19', 'health', 'resolved', 'medium', 'Archived case monitoring and ICU capacity tracking scenario.', '2026-06-05T06:50:00+08:00'),
+  ('Dengue', 'health', 'resolved', 'high', 'Archived red zone cluster scenario in the East region.', '2026-06-05T09:45:00+08:00'),
+  ('Flash Flood Risk', 'weather', 'resolved', 'high', 'Archived heavy rain report scenario around Central and East regions.', '2026-06-05T10:23:00+08:00'),
+  ('Panadol Shortage', 'supply_chain', 'resolved', 'medium', 'Archived medicine shortage scenario across retail outlets.', '2026-06-05T08:30:00+08:00'),
+  ('Cyber Incident', 'cybersecurity', 'resolved', 'low', 'Archived cyber threat monitoring scenario.', '2026-06-05T07:15:00+08:00');
 
 INSERT INTO dashboard.alerts (title, message, crisis_type, severity, region, source_kind, status, created_at)
 VALUES
-  ('Flash flood risk in Orchard and East Coast', 'Water levels rising at Orchard Road underpass. Avoid the area and use alternate routes.', 'weather', 'critical', 'Central, East', 'manual', 'active', '2026-06-05T14:30:00+08:00'),
-  ('New dengue red zone at Bedok North Ave 1', 'NEA fogging operations underway after confirmed cluster growth.', 'health', 'high', 'East', 'manual', 'active', '2026-06-05T13:00:00+08:00'),
-  ('Panadol Menstrual shortage islandwide', 'Alternate suppliers contacted. Estimated restock within 4 days.', 'supply_chain', 'medium', 'Nationwide', 'manual', 'active', '2026-06-05T09:45:00+08:00'),
-  ('Air quality advisory at unhealthy levels', 'PSI at 156. Vulnerable groups should avoid prolonged outdoor activity.', 'weather', 'medium', 'Nationwide', 'manual', 'active', '2026-06-05T06:30:00+08:00'),
+  ('Flash flood risk in Orchard and East Coast', 'Water levels rising at Orchard Road underpass. Avoid the area and use alternate routes.', 'weather', 'critical', 'Central, East', 'manual', 'resolved', '2026-06-05T14:30:00+08:00'),
+  ('New dengue red zone at Bedok North Ave 1', 'NEA fogging operations underway after confirmed cluster growth.', 'health', 'high', 'East', 'manual', 'resolved', '2026-06-05T13:00:00+08:00'),
+  ('Panadol Menstrual shortage islandwide', 'Alternate suppliers contacted. Estimated restock within 4 days.', 'supply_chain', 'medium', 'Nationwide', 'manual', 'resolved', '2026-06-05T09:45:00+08:00'),
+  ('Air quality advisory at unhealthy levels', 'PSI at 156. Vulnerable groups should avoid prolonged outdoor activity.', 'weather', 'medium', 'Nationwide', 'manual', 'resolved', '2026-06-05T06:30:00+08:00'),
   ('MRT East-West Line disruption resolved', 'Service resumed at 6:45 PM.', 'infrastructure', 'low', 'West', 'manual', 'resolved', '2026-06-04T18:45:00+08:00');
 
 INSERT INTO dashboard.data_snapshots (source_id, crisis_type, snapshot_key, captured_at, payload)
@@ -44,4 +44,3 @@ SELECT
 FROM dashboard.data_sources
 WHERE code = 'signal_ui_seed'
 ON CONFLICT (source_id, snapshot_key, captured_at) DO NOTHING;
-

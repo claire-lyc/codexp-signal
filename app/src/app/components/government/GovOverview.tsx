@@ -39,65 +39,7 @@ const severitySpark: Record<string, string> = {
   low: '#38bdf8',
 };
 
-const fallbackCrisisCards: CrisisCard[] = [
-  {
-    id: 'covid',
-    label: 'Covid-19',
-    type: 'Health',
-    severity: 'medium',
-    path: '/gov/pandemic',
-    stats: [
-      { label: 'Active cases today', value: '378', delta: '+12%' },
-      { label: 'ICU occupancy', value: '25', delta: '+5' },
-    ],
-    icon: 'Activity',
-  },
-  {
-    id: 'dengue',
-    label: 'Dengue',
-    type: 'Health',
-    severity: 'high',
-    path: '/gov/pandemic',
-    stats: [
-      { label: 'Red zone clusters', value: '14', delta: '+3' },
-      { label: 'Cases this week', value: '212', delta: '+8%' },
-    ],
-    icon: 'Activity',
-  },
-  {
-    id: 'flood',
-    label: 'Flash Flood Risk',
-    type: 'Weather',
-    severity: 'high',
-    path: '/gov/weather',
-    stats: [
-      { label: 'High-risk zones', value: '6', delta: '' },
-      { label: 'Peak rainfall (1h)', value: '45mm', delta: 'Alert' },
-    ],
-    icon: 'Cloud',
-  },
-  {
-    id: 'panadol',
-    label: 'Panadol Shortage',
-    type: 'Supply Chain',
-    severity: 'medium',
-    path: '/gov/supply-chain',
-    stats: [
-      { label: 'Affected outlets', value: '87', delta: '' },
-      { label: 'Est. restock', value: '4 days', delta: '' },
-    ],
-    icon: 'Package',
-  },
-  {
-    id: 'cyber',
-    label: 'Cyber Incident',
-    type: 'Cybersecurity',
-    severity: 'low',
-    path: '/gov/cybersecurity',
-    stats: [{ label: 'Active threats', value: '3', delta: '-1' }],
-    icon: 'Shield',
-  },
-];
+const fallbackCrisisCards: CrisisCard[] = [];
 
 const alerts: Array<{ id: number | string; type: string; severity: string; message: string; region: string; time?: string }> = [];
 const trendData: Array<{ date: string; incidents: number }> = [];
@@ -175,7 +117,7 @@ export default function GovOverview() {
         <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
           {crisisCards.length === 0 && (
             <div className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
-              No active crisis situations available.
+              No active crisis situations. Archived static scenarios are available in Historical Analysis.
             </div>
           )}
           {crisisCards.map((card) => {

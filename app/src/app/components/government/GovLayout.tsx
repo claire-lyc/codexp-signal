@@ -66,6 +66,7 @@ const navSections = [
     title: 'Public Coordination',
     items: [
       { path: '/gov/public-sentiment', label: 'Public Sentiment', icon: MessageSquare },
+      { path: '/gov/forum', label: 'Community Forum', icon: Reply },
       { path: '/gov/volunteers', label: 'Volunteers & Resources', icon: Users },
     ],
   },

@@ -73,7 +73,7 @@ try {
       [
         card.label,
         toCrisisType(card.type),
-        card.severity === 'low' ? 'monitoring' : 'active',
+        'resolved',
         toSeverity(card.severity),
         card.stats.map((stat) => `${stat.label}: ${stat.value}${stat.delta ? ` (${stat.delta})` : ''}`).join('; '),
         capturedAt,
@@ -85,7 +85,7 @@ try {
     await pool.query(
       `
         INSERT INTO dashboard.alerts (title, message, crisis_type, severity, region, source_kind, status, created_at)
-        VALUES ($1, $2, $3, $4, $5, 'manual', 'active', $6)
+        VALUES ($1, $2, $3, $4, $5, 'manual', 'resolved', $6)
       `,
       [
         alert.message,
@@ -220,4 +220,3 @@ function toSeverity(value: string) {
     ? value
     : 'medium';
 }
-

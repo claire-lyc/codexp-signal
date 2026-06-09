@@ -6,10 +6,14 @@ import multer from 'multer';
 import { authenticateJwt, requireActor, type AuthenticatedRequest } from './authMiddleware.js';
 import { createAuthRouter } from './authRoutes.js';
 import {
+  banForumAuthor,
   createForumPost,
   createForumReply,
+  dislikeForumPost,
+  ForumAuthorBannedError,
   likeForumPost,
   listForumPosts,
+  moderateForumPost,
   reportForumPost,
 } from './forumRepository.js';
 import {
@@ -74,7 +78,7 @@ const upload = multer({
 
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') ?? true }));
 app.use(helmet());
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 app.use('/api/auth', createAuthRouter());
 
 app.get('/health', (_request, response) => {
@@ -114,6 +118,32 @@ app.get('/api/forum/posts', (_request, response) => {
   response.json({ items: listForumPosts() });
 });
 
+app.get('/api/forum/posts/moderation', ...requireGovUser, (_request, response) => {
+  response.json({ items: listForumPosts({ includeHidden: true }) });
+});
+
+app.post('/api/forum/posts/official', ...requireGovUser, async (request: AuthenticatedRequest, response, next) => {
+  const content = stringBody(request.body?.content);
+  if (!content) {
+    response.status(400).json({ error: 'Post content is required' });
+    return;
+  }
+
+  try {
+    const post = createForumPost({
+      author: request.user?.display_name ?? request.user?.username ?? 'Government Moderator',
+      content,
+      category: stringBody(request.body?.category),
+      verified: true,
+      moderationState: 'verified',
+      images: parseForumImages(request.body?.images),
+    });
+    response.status(201).json({ item: post });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post('/api/forum/posts', async (request, response, next) => {
   const content = stringBody(request.body?.content);
   if (!content) {
@@ -141,16 +171,30 @@ app.post('/api/forum/posts', async (request, response, next) => {
       content,
       category: stringBody(request.body?.category),
       aiFlag,
+      images: parseForumImages(request.body?.images),
     });
     forumPostCooldowns.set(cooldownKey, Date.now() + forumPostCooldownMs);
     response.status(201).json({ item: post });
   } catch (error) {
+    if (error instanceof ForumAuthorBannedError) {
+      response.status(403).json({ error: error.message });
+      return;
+    }
     next(error);
   }
 });
 
 app.post('/api/forum/posts/:id/like', (request, response) => {
-  const post = likeForumPost(request.params.id);
+  const post = likeForumPost(request.params.id, forumInteractionKey(request));
+  if (!post) {
+    response.status(404).json({ error: 'Forum post not found' });
+    return;
+  }
+  response.json({ item: post });
+});
+
+app.post('/api/forum/posts/:id/dislike', (request, response) => {
+  const post = dislikeForumPost(request.params.id, forumInteractionKey(request));
   if (!post) {
     response.status(404).json({ error: 'Forum post not found' });
     return;
@@ -167,6 +211,37 @@ app.post('/api/forum/posts/:id/report', (request, response) => {
   response.json({ item: post });
 });
 
+app.post('/api/forum/posts/:id/moderation', ...requireGovUser, (request: AuthenticatedRequest, response) => {
+  const action = request.body?.action;
+  if (action !== 'verify' && action !== 'hide' && action !== 'review' && action !== 'misleading' && action !== 'resolve') {
+    response.status(400).json({ error: 'Valid moderation action is required' });
+    return;
+  }
+
+  const post = moderateForumPost(request.params.id, {
+    action,
+    moderator: request.user?.display_name ?? request.user?.username ?? 'Government Moderator',
+    note: stringBody(request.body?.note),
+  });
+  if (!post) {
+    response.status(404).json({ error: 'Forum post not found' });
+    return;
+  }
+  response.json({ item: post });
+});
+
+app.post('/api/forum/posts/:id/ban-author', ...requireGovUser, (request: AuthenticatedRequest, response) => {
+  const post = banForumAuthor(request.params.id, {
+    moderator: request.user?.display_name ?? request.user?.username ?? 'Government Moderator',
+    note: stringBody(request.body?.note),
+  });
+  if (!post) {
+    response.status(404).json({ error: 'Forum post not found' });
+    return;
+  }
+  response.json({ item: post, bannedAuthor: post.author });
+});
+
 app.post('/api/forum/posts/:id/replies', (request, response) => {
   const content = stringBody(request.body?.content);
   if (!content) {
@@ -174,9 +249,36 @@ app.post('/api/forum/posts/:id/replies', (request, response) => {
     return;
   }
 
+  try {
+    const post = createForumReply(request.params.id, {
+      author: stringBody(request.body?.author),
+      content,
+    });
+    if (!post) {
+      response.status(404).json({ error: 'Forum post not found' });
+      return;
+    }
+    response.status(201).json({ item: post });
+  } catch (error) {
+    if (error instanceof ForumAuthorBannedError) {
+      response.status(403).json({ error: error.message });
+      return;
+    }
+    throw error;
+  }
+});
+
+app.post('/api/forum/posts/:id/official-replies', ...requireGovUser, (request: AuthenticatedRequest, response) => {
+  const content = stringBody(request.body?.content);
+  if (!content) {
+    response.status(400).json({ error: 'Reply content is required' });
+    return;
+  }
+
   const post = createForumReply(request.params.id, {
-    author: stringBody(request.body?.author),
+    author: request.user?.display_name ?? request.user?.username ?? 'Government Moderator',
     content,
+    official: true,
   });
   if (!post) {
     response.status(404).json({ error: 'Forum post not found' });
@@ -690,6 +792,20 @@ function parseImageMetadata(value: unknown) {
   }
 }
 
+function parseForumImages(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => {
+      const record = item as Record<string, unknown>;
+      return {
+        filename: stringBody(record.filename),
+        mimeType: stringBody(record.mimeType),
+        previewUrl: stringBody(record.previewUrl),
+      };
+    });
+}
+
 function isTicketStatus(value: unknown): value is TicketStatus {
   return value === 'open' || value === 'in-progress' || value === 'resolved' || value === 'grouped';
 }
@@ -711,6 +827,10 @@ function forumCooldownKey(request: express.Request, author?: string) {
   const forwardedFor = stringParam(request.headers['x-forwarded-for']);
   const clientIp = forwardedFor?.split(',')[0]?.trim() || request.ip || request.socket.remoteAddress || 'unknown';
   return `${clientIp}:${(author ?? 'Anonymous User').trim().toLowerCase()}`;
+}
+
+function forumInteractionKey(request: express.Request) {
+  return forumCooldownKey(request, request.get('user-agent') ?? 'anonymous');
 }
 
 function forumCooldownRemaining(key: string) {
