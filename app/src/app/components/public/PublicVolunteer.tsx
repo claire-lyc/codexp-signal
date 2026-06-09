@@ -297,12 +297,37 @@ export default function PublicVolunteer() {
 
   const applyForOpportunity = (opportunityId: number) => {
     if (!profile) return;
+    const opportunity = opportunities.find((item) => item.id === opportunityId);
+    const matchingRole = opportunity?.roleSlots.find((role) => (
+      role.requiredSkills.every((skill) => profile.skills.includes(skill)) && role.assigned < role.needed
+    ));
+    const nextAssignments = matchingRole
+      ? [
+          ...profile.assignments.filter((assignment) => assignment.opportunityId !== opportunityId),
+          {
+            id: `ASN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            opportunityId,
+            roleId: matchingRole.id,
+            roleTitle: matchingRole.title,
+            status: 'accepted' as const,
+            assignedAt: new Date().toISOString(),
+            note: `Automatically accepted for ${matchingRole.title}. Report to ${opportunity?.reportingPoint ?? 'the stated reporting point'}`,
+          },
+        ]
+      : profile.assignments;
     const nextProfile = {
       ...profile,
       appliedOpportunityIds: Array.from(new Set([...profile.appliedOpportunityIds, opportunityId])),
+      assignments: nextAssignments,
+      status: matchingRole ? 'assigned' as const : profile.status,
     };
-    setWorkTab('applications');
-    persistVolunteerProfile(nextProfile, 'Application sent to the coordinating agency for assignment.');
+    setWorkTab(matchingRole ? 'upcoming' : 'applications');
+    persistVolunteerProfile(
+      nextProfile,
+      matchingRole
+        ? `You were automatically accepted for ${matchingRole.title}.`
+        : 'Application sent to the coordinating agency for manual review.',
+    );
   };
 
   const updateAssignment = (assignmentId: string, status: VolunteerAssignment['status'], nextMessage: string) => {

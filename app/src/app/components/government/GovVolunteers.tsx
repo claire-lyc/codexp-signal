@@ -111,6 +111,10 @@ function bestRoleForProfile(profile: VolunteerProfile, opportunity: VolunteerOpp
     ?? opportunity.roleSlots[0];
 }
 
+function roleMatchesAllSkills(profile: VolunteerProfile, role: VolunteerRoleSlot) {
+  return role.requiredSkills.every((skill) => profile.skills.includes(skill));
+}
+
 function activeAssignmentsForRole(profiles: VolunteerProfile[], opportunityId: number, roleId: string) {
   return profiles.flatMap((profile) => (
     profile.assignments
@@ -152,7 +156,8 @@ export default function GovVolunteers() {
   const [activityLog, setActivityLog] = useState<string[]>([]);
   const [pageMode, setPageMode] = useState<'assignment' | 'profiles'>('assignment');
   const [boardTab, setBoardTab] = useState<'open' | 'full'>('open');
-  const [sideTab, setSideTab] = useState<'queue' | 'skills'>('queue');
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+  const [roleView, setRoleView] = useState<'pending' | 'accepted'>('pending');
 
   const loadCitizenProfile = () => setCitizenProfile(readVolunteerProfile());
   const loadRemoteProfiles = () =>
@@ -242,17 +247,13 @@ export default function GovVolunteers() {
     };
   }), [agencyOpportunities, rawApplicants]);
 
-  const applicationQueue = useMemo(() => agencyOpportunities.flatMap((opportunity) => (
-    rawApplicants
+  const manualApprovalCount = useMemo(() => agencyOpportunities.reduce((count, opportunity) => (
+    count + rawApplicants
       .filter((profile) => profile.appliedOpportunityIds.includes(opportunity.id))
-      .filter((profile) => !profile.assignments.some((assignment) => assignment.opportunityId === opportunity.id && assignment.status === 'declined'))
-      .map((profile) => ({
-        profile,
-        opportunity,
-        match: scoreVolunteerForOpportunity(profile, opportunity),
-        assigned: profile.assignments.find((assignment) => assignment.opportunityId === opportunity.id),
-      }))
-  )).sort((a, b) => Number(Boolean(a.assigned)) - Number(Boolean(b.assigned)) || b.match - a.match), [agencyOpportunities, rawApplicants]);
+      .filter((profile) => !profile.assignments.some((assignment) => assignment.opportunityId === opportunity.id))
+      .filter((profile) => !opportunity.roleSlots.some((role) => roleMatchesAllSkills(profile, role)))
+      .length
+  ), 0), [agencyOpportunities, rawApplicants]);
 
   const skillVerificationProfiles = useMemo(() => (
     rawApplicants
@@ -264,6 +265,8 @@ export default function GovVolunteers() {
   const openOpportunities = opportunities.filter((opportunity) => opportunity.filled < opportunity.needed);
   const fullOpportunities = opportunities.filter((opportunity) => opportunity.filled >= opportunity.needed);
   const visibleOpportunities = boardTab === 'open' ? openOpportunities : fullOpportunities;
+  const selectedOpportunity = visibleOpportunities.find((opportunity) => opportunity.id === expandedId) ?? visibleOpportunities[0] ?? null;
+  const selectedRole = selectedOpportunity?.roleSlots.find((role) => role.id === selectedRoleId) ?? selectedOpportunity?.roleSlots[0] ?? null;
   const visibleOpportunityIds = new Set(agencyOpportunities.map((opportunity) => opportunity.id));
 
   const pendingVerification = applicants.filter((profile) => profile.status === 'pending_review');
@@ -280,7 +283,7 @@ export default function GovVolunteers() {
 
   const agencyStats = {
     needs: agencyOpportunities.length,
-    applications: applicationQueue.length,
+    applications: manualApprovalCount,
     accepted: rawApplicants.reduce((count, profile) => (
       count + profile.assignments.filter((assignment) => {
         const opportunity = agencyOpportunities.find((item) => item.id === assignment.opportunityId);
@@ -305,20 +308,25 @@ export default function GovVolunteers() {
     note: role.specialRequirements ? `${role.specialRequirements}. Report to ${opportunity.reportingPoint}` : `Report to ${opportunity.reportingPoint}`,
   });
 
-  const assignVolunteer = (profile: VolunteerProfile, opportunity: VolunteerOpportunity, role: VolunteerRoleSlot) => {
+  const assignVolunteer = (
+    profile: VolunteerProfile,
+    opportunity: VolunteerOpportunity,
+    role: VolunteerRoleSlot,
+    status: VolunteerAssignment['status'] = 'accepted',
+  ) => {
     if (!canAllocate(opportunity)) {
       pushActivity(`${currentAgency} cannot assign ${opportunity.title}`);
       return;
     }
 
-    const assignment = makeAssignment(opportunity, role, 'offered');
+    const assignment = makeAssignment(opportunity, role, status);
 
     updateProfile(profile, {
       status: 'assigned',
       appliedOpportunityIds: Array.from(new Set([...profile.appliedOpportunityIds, opportunity.id])),
       assignments: [...profile.assignments.filter((item) => item.opportunityId !== opportunity.id), assignment],
     });
-    pushActivity(`${profile.name} offered ${role.title}`);
+    pushActivity(`${profile.name} accepted for ${role.title}`);
   };
 
   const rejectVolunteer = (profile: VolunteerProfile, opportunity: VolunteerOpportunity, role: VolunteerRoleSlot) => {
@@ -419,6 +427,42 @@ export default function GovVolunteers() {
 
   const canAllocate = (opportunity: VolunteerOpportunity) => currentAgency === 'All agencies' || currentAgency === opportunity.authorisedAgency;
 
+  useEffect(() => {
+    const autoAcceptCandidate = agencyOpportunities.flatMap((opportunity) => (
+      rawApplicants
+        .filter((profile) => profile.status !== 'pending_review')
+        .filter((profile) => profile.appliedOpportunityIds.includes(opportunity.id))
+        .filter((profile) => !profile.assignments.some((assignment) => assignment.opportunityId === opportunity.id))
+        .map((profile) => {
+          const matchingRole = opportunity.roleSlots.find((role) => {
+            if (!roleMatchesAllSkills(profile, role)) return false;
+            return filledSlotsForRole(rawApplicants, opportunity.id, role) < role.needed;
+          });
+          return matchingRole ? { profile, opportunity, role: matchingRole } : null;
+        })
+        .filter(Boolean)
+    ))[0];
+
+    if (autoAcceptCandidate) {
+      assignVolunteer(
+        autoAcceptCandidate.profile,
+        autoAcceptCandidate.opportunity,
+        autoAcceptCandidate.role,
+        'accepted',
+      );
+    }
+  }, [agencyOpportunities, rawApplicants]);
+
+  useEffect(() => {
+    if (!selectedOpportunity) {
+      if (selectedRoleId !== null) setSelectedRoleId(null);
+      return;
+    }
+    if (!selectedRole || !selectedOpportunity.roleSlots.some((role) => role.id === selectedRole.id)) {
+      setSelectedRoleId(selectedOpportunity.roleSlots[0]?.id ?? null);
+    }
+  }, [selectedOpportunity, selectedRole, selectedRoleId]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -440,10 +484,11 @@ export default function GovVolunteers() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <Metric icon={<Clock className="h-5 w-5 text-blue-500" />} label="Ready Now" value={stats.ready} badge="Ready" />
-        <Metric icon={<AlertCircle className="h-5 w-5 text-yellow-500" />} label="Pending Verification" value={stats.pending} badge="Review" />
-        <Metric icon={<Users className="h-5 w-5 text-orange-500" />} label="Waiting List" value={stats.waiting} badge="Manual" />
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+        <Metric icon={<MapPin className="h-5 w-5 text-blue-500" />} label="Open Needs" value={agencyStats.needs} badge="Events" />
+        <Metric icon={<Users className="h-5 w-5 text-orange-500" />} label="Manual Approvals" value={agencyStats.applications} badge="Review" />
+        <Metric icon={<AlertCircle className="h-5 w-5 text-yellow-500" />} label="Pending Verification" value={agencyStats.pendingSkills} badge="Review" />
+        <Metric icon={<ShieldCheck className="h-5 w-5 text-green-500" />} label="Accepted" value={agencyStats.accepted} badge="Assigned" />
         <Metric icon={<UserCheck className="h-5 w-5 text-purple-500" />} label="Deployed" value={stats.deployed} badge="Live" />
       </div>
 
@@ -451,22 +496,6 @@ export default function GovVolunteers() {
         <button onClick={() => setPageMode('assignment')} className={`rounded-md px-3 py-1.5 text-sm ${pageMode === 'assignment' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'}`}>Opportunity Assignment</button>
         <button onClick={() => setPageMode('profiles')} className={`rounded-md px-3 py-1.5 text-sm ${pageMode === 'profiles' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}>Volunteer Profiles & Certs</button>
       </div>
-
-      <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">{currentAgency} Volunteer Workspace</h2>
-            <p className="text-sm text-zinc-500">These figures are scoped to the selected agency and the needs shown below.</p>
-          </div>
-          <span className="rounded bg-zinc-800 px-3 py-1 text-xs text-zinc-300">{currentAgency === 'All agencies' ? 'All agencies' : 'Agency view'}</span>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-4">
-          <AgencyStat label="Open Needs" value={agencyStats.needs} />
-          <AgencyStat label="Applications" value={agencyStats.applications} />
-          <AgencyStat label="Accepted" value={agencyStats.accepted} />
-          <AgencyStat label="Skill Review" value={agencyStats.pendingSkills} />
-        </div>
-      </section>
 
       {showNeedForm && (
       <section className="rounded-xl border border-zinc-800 bg-zinc-900">
@@ -507,12 +536,12 @@ export default function GovVolunteers() {
       )}
 
       {pageMode === 'assignment' ? (
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <section className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
         <div className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold">Opportunity Assignment Board</h2>
-              <p className="text-xs text-zinc-500">{currentAgency === 'All agencies' ? 'Showing all agencies.' : `Showing ${currentAgency} needs only.`} Volunteers who match a role can be accepted directly; everyone else stays on the queue for review.</p>
+              <p className="text-xs text-zinc-500">{currentAgency === 'All agencies' ? 'Showing all agencies.' : `Showing ${currentAgency} needs only.`} Select an event to review its open roles and volunteer matches.</p>
             </div>
             <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-1">
               <button onClick={() => setBoardTab('open')} className={`rounded-md px-3 py-1.5 text-sm ${boardTab === 'open' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'}`}>Open ({openOpportunities.length})</button>
@@ -521,136 +550,93 @@ export default function GovVolunteers() {
           </div>
 
           {visibleOpportunities.map((opportunity) => (
-            <div key={opportunity.id} className={`overflow-hidden rounded-xl border ${urgencyColors[opportunity.urgency]}`}>
-              <div className="p-5">
-                <button className="w-full text-left" onClick={() => setExpandedId(expandedId === opportunity.id ? null : opportunity.id)}>
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="mb-2 flex flex-wrap items-center gap-3">
-                        <span className="font-semibold">{opportunity.title}</span>
-                        <span className={`rounded px-2 py-0.5 text-xs ${urgencyBadge[opportunity.urgency]}`}>{opportunity.urgency.toUpperCase()}</span>
-                        {!canAllocate(opportunity) && <span className="inline-flex items-center gap-1 text-xs text-zinc-500"><Lock className="h-3 w-3" />Auth: {opportunity.authorisedAgency}</span>}
-                      </div>
-                      <div className="flex flex-wrap gap-4 text-sm text-zinc-400">
-                        <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" />{opportunity.location}</span>
-                        <span>{opportunity.filled}/{opportunity.needed} assigned</span>
-                        <span>{opportunity.shift}</span>
-                      </div>
-                    </div>
-                    <ChevronDown className={`h-5 w-5 text-zinc-400 transition-transform ${expandedId === opportunity.id ? 'rotate-180' : ''}`} />
-                  </div>
-                </button>
-                <div className="mt-3 h-1.5 rounded-full bg-zinc-800">
-                  <div className={`h-1.5 rounded-full ${opportunity.filled >= opportunity.needed ? 'bg-green-500' : opportunity.urgency === 'high' ? 'bg-red-500' : 'bg-yellow-500'}`} style={{ width: `${Math.min(100, (opportunity.filled / opportunity.needed) * 100)}%` }} />
-                </div>
-                {canAllocate(opportunity) && (
-                  <button onClick={() => { setAllocateModal(opportunity); setAdditionalSlots(Math.max(1, opportunity.needed - opportunity.filled)); }} className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm transition-colors hover:bg-blue-700">
-                    <Plus className="h-4 w-4" />
-                    Open Slots
-                  </button>
-                )}
+            <div
+              key={opportunity.id}
+              className={`w-full rounded-xl border p-4 text-left transition-colors ${expandedId === opportunity.id ? `${urgencyColors[opportunity.urgency]} border-blue-500 ring-1 ring-blue-500/40` : urgencyColors[opportunity.urgency]}`}
+            >
+              <button className="w-full text-left" onClick={() => { setExpandedId(opportunity.id); setSelectedRoleId(opportunity.roleSlots[0]?.id ?? null); }}>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="font-semibold">{opportunity.title}</span>
+                <span className={`rounded px-2 py-0.5 text-xs ${urgencyBadge[opportunity.urgency]}`}>{opportunity.urgency.toUpperCase()}</span>
               </div>
-
-              {expandedId === opportunity.id && (
-                <div className="border-t border-zinc-800/60 p-5">
-                  <div className="mb-4 space-y-2">
-                    {opportunity.roleSlots.map((role) => {
-                      const filledSlots = filledSlotsForRole(rawApplicants, opportunity.id, role);
-                      const openSlots = Math.max(0, role.needed - filledSlots);
-
-                      return (
-                        <div key={role.id} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                              <div className="font-medium">{role.title}</div>
-                              <div className="mt-1 text-xs text-zinc-500">
-                                {opportunity.candidates.filter((candidate) => candidate.applied && !candidate.assigned).length} waiting or unassigned applicants
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap items-start justify-end gap-2">
-                              <div className="rounded border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-right text-xs text-zinc-400">
-                                <div>{openSlots} open / {role.needed} total</div>
-                                <div className="text-zinc-600">{filledSlots} accepted or offered</div>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {role.requiredSkills.map((skill) => <span key={skill} className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-400">{skill}</span>)}
-                          </div>
-                          {role.specialRequirements && <div className="mt-2 text-xs text-yellow-300">Special: {role.specialRequirements}</div>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <AcceptedVolunteers opportunity={opportunity} profiles={rawApplicants} />
-                  <div className="mb-3 text-sm font-medium text-zinc-300">Volunteer stack</div>
-                  <div className="space-y-2">
-                    {opportunity.candidates.map((candidate) => (
-                      <CandidateRow
-                        key={`${opportunity.id}-${candidate.profile.id}`}
-                        candidate={candidate}
-                        opportunity={opportunity}
-                        canAssign={canAllocate(opportunity)}
-                        onVerify={verifyVolunteer}
-                        onAssign={assignVolunteer}
-                        onReject={rejectVolunteer}
-                      />
-                    ))}
-                    {!opportunity.candidates.length && <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4 text-sm text-zinc-500">No applicants or suitable volunteers yet.</div>}
-                  </div>
-                </div>
-              )}
+              <div className="space-y-1 text-sm text-zinc-400">
+                <div className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" />{opportunity.location}</div>
+                <div>{opportunity.shift}</div>
+                <div>{opportunity.candidates.filter((candidate) => candidate.applied && !candidate.assigned).length} pending applicants</div>
+                <div>{opportunity.filled}/{opportunity.needed} assigned</div>
+              </div>
+              <div className="mt-3 h-1.5 rounded-full bg-zinc-800">
+                <div className={`h-1.5 rounded-full ${opportunity.filled >= opportunity.needed ? 'bg-green-500' : opportunity.urgency === 'high' ? 'bg-red-500' : 'bg-yellow-500'}`} style={{ width: `${Math.min(100, (opportunity.filled / opportunity.needed) * 100)}%` }} />
+              </div>
+              </button>
+              <div className="mt-4 space-y-2 border-t border-zinc-800/70 pt-3">
+                {opportunity.roleSlots.map((role) => {
+                  const filled = filledSlotsForRole(rawApplicants, opportunity.id, role);
+                  const isSelected = expandedId === opportunity.id && selectedRoleId === role.id;
+                  return (
+                    <button
+                      key={role.id}
+                      type="button"
+                      onClick={() => { setExpandedId(opportunity.id); setSelectedRoleId(role.id); }}
+                      className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-colors ${isSelected ? 'border-blue-500 bg-zinc-900 text-white' : 'border-zinc-800 bg-zinc-950/50 text-zinc-300 hover:border-zinc-700'}`}
+                    >
+                      <span className="font-medium">{role.title}</span>
+                      <span className="text-xs text-zinc-500">{filled}/{role.needed}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           ))}
           {!visibleOpportunities.length && <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">No {boardTab === 'open' ? 'open' : 'fully staffed'} opportunities.</div>}
         </div>
 
         <aside className="space-y-4">
-          <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-1">
-            <button onClick={() => setSideTab('queue')} className={`rounded-md px-3 py-1.5 text-sm ${sideTab === 'queue' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'}`}>Queue</button>
-            <button onClick={() => setSideTab('skills')} className={`rounded-md px-3 py-1.5 text-sm ${sideTab === 'skills' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}>Skill Review</button>
-          </div>
-          {sideTab === 'queue' ? (
+          {selectedOpportunity ? (
             <>
-              <h2 className="text-lg font-semibold">Application Queue</h2>
-              <p className="text-sm text-zinc-500">Only applications for {currentAgency === 'All agencies' ? 'visible agency needs' : `${currentAgency} needs`} are shown.</p>
-              {applicationQueue.map((item) => (
-                <ApplicantCard
-                  key={`${item.opportunity.id}-${item.profile.id}`}
-                  item={item}
-                  onOffer={(profile, opportunity) => assignVolunteer(profile, opportunity, bestRoleForProfile(profile, opportunity))}
-                  onReject={(profile, opportunity) => rejectVolunteer(profile, opportunity, opportunity.roleSlots[0])}
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-semibold">{selectedOpportunity.title}</h2>
+                    <p className="mt-1 text-sm text-zinc-500">{selectedOpportunity.authorisedAgency} - {selectedOpportunity.location} - {selectedOpportunity.shift}</p>
+                  </div>
+                  {!canAllocate(selectedOpportunity) && <span className="inline-flex items-center gap-1 text-xs text-zinc-500"><Lock className="h-3 w-3" />Auth: {selectedOpportunity.authorisedAgency}</span>}
+                </div>
+                <p className="mb-4 text-sm text-zinc-300">{selectedOpportunity.description}</p>
+                {canAllocate(selectedOpportunity) && (
+                  <button onClick={() => { setAllocateModal(selectedOpportunity); setAdditionalSlots(Math.max(1, selectedOpportunity.needed - selectedOpportunity.filled)); }} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm transition-colors hover:bg-blue-700">
+                    <Plus className="h-4 w-4" />
+                    Open Slots
+                  </button>
+                )}
+              </div>
+              {selectedRole ? (
+                <RoleAssignmentPanel
+                  key={selectedRole.id}
+                  role={selectedRole}
+                  opportunity={selectedOpportunity}
+                  candidates={selectedOpportunity.candidates}
+                  profiles={rawApplicants}
+                  canAssign={canAllocate(selectedOpportunity)}
+                  roleView={roleView}
+                  setRoleView={setRoleView}
+                  onVerify={verifyVolunteer}
+                  onAssign={assignVolunteer}
+                  onReject={rejectVolunteer}
                 />
-              ))}
-              {!applicationQueue.length && (
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-500">No relevant applications for this agency.</div>
-              )}
+              ) : null}
             </>
           ) : (
-            <>
-              <h2 className="text-lg font-semibold">Skill Verification</h2>
-              <p className="text-sm text-zinc-500">
-                {currentAgency === 'All agencies'
-                  ? 'Admin can verify pending volunteer identities and skills.'
-                  : 'Agencies see pending volunteers only when their claimed skills fit this agency needs.'}
-              </p>
-              {skillVerificationProfiles.map((profile) => (
-                <SkillVerificationCard key={profile.id} profile={profile} canVerify={currentAgency === 'All agencies'} onVerify={verifyVolunteer} />
-              ))}
-              {!skillVerificationProfiles.length && (
-                <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-500">No relevant pending skill verification.</div>
-              )}
-            </>
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">Select an event on the left to review its roles and volunteer stack.</div>
           )}
-          <RecentActivity items={activityLog} />
         </aside>
       </section>
       ) : (
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-4">
           <ActionSection
-            title="Pending profile approval"
-            description="Review submitted skills, contact details, and certification notes before moving volunteers into the live pool."
+            title="Volunteer Verification"
+            description="Review volunteer skills, certification notes, contact details, and profile readiness in one place."
             emptyMessage="No volunteer profiles are awaiting approval."
           >
             {pendingVerification.map((profile) => (
@@ -1003,21 +989,24 @@ function RoleBuilder({
 
 function CandidateRow({
   candidate,
+  role,
   opportunity,
+  roleHasCapacity,
   canAssign,
   onVerify,
   onAssign,
   onReject,
 }: {
   candidate: { profile: VolunteerProfile; match: number; breakdown: { skills: number; region: number; availability: number; total: number }; applied: boolean; assigned?: VolunteerAssignment };
+  role: VolunteerRoleSlot;
   opportunity: VolunteerOpportunity;
+  roleHasCapacity: boolean;
   canAssign: boolean;
   onVerify: (profile: VolunteerProfile) => void;
-  onAssign: (profile: VolunteerProfile, opportunity: VolunteerOpportunity, role: VolunteerRoleSlot) => void;
+  onAssign: (profile: VolunteerProfile, opportunity: VolunteerOpportunity, role: VolunteerRoleSlot, status?: VolunteerAssignment['status']) => void;
   onReject: (profile: VolunteerProfile, opportunity: VolunteerOpportunity, role: VolunteerRoleSlot) => void;
 }) {
   const { profile } = candidate;
-  const openRoles = opportunity.roleSlots.filter((role) => role.assigned < role.needed);
 
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3">
@@ -1045,30 +1034,116 @@ function CandidateRow({
       </div>
       {profile.status !== 'pending_review' && canAssign && !candidate.assigned && (
         <div className="mt-3 space-y-2 border-t border-zinc-800 pt-3">
-          {openRoles.map((role) => (
-            <div key={role.id} className="rounded-lg bg-zinc-950/50 p-2">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs font-medium text-zinc-300">
-                  {role.title}
-                  {role.specialRequirements ? <span className="ml-2 text-yellow-300">manual review</span> : null}
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={() => onAssign(profile, opportunity, role)} className="rounded bg-blue-600 px-2.5 py-1 text-xs hover:bg-blue-700">
-                    {role.requiredSkills.every((skill) => profile.skills.includes(skill)) ? 'Accept to role' : 'Approve manually'}
-                  </button>
-                  <button onClick={() => onReject(profile, opportunity, role)} className="rounded bg-zinc-700 px-2.5 py-1 text-xs text-zinc-200 hover:bg-zinc-600">Not selected</button>
-                </div>
-              </div>
-              <div className="text-xs text-zinc-500">
-                {role.requiredSkills.every((skill) => profile.skills.includes(skill))
-                  ? 'This volunteer meets the listed role skills.'
-                  : 'This volunteer can still be accepted manually if operational needs justify it.'}
+          <div className="rounded-lg bg-zinc-950/50 p-2">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-medium text-zinc-300">{role.title}</span>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => onAssign(profile, opportunity, role, 'accepted')} disabled={!roleHasCapacity} className="rounded bg-blue-600 px-2.5 py-1 text-xs hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+                  Accept volunteer
+                </button>
+                <button onClick={() => onReject(profile, opportunity, role)} className="rounded bg-zinc-700 px-2.5 py-1 text-xs text-zinc-200 hover:bg-zinc-600">Not selected</button>
               </div>
             </div>
-          ))}
-          {!openRoles.length && <span className="text-xs text-zinc-500">All role slots are filled.</span>}
+            <div className="text-xs text-zinc-500">
+              {roleMatchesAllSkills(profile, role)
+                ? 'This volunteer meets the listed role skills.'
+                : 'This volunteer does not meet every listed role skill, so acceptance here is a manual override.'}
+            </div>
+          </div>
+          {!roleHasCapacity && <span className="text-xs text-zinc-500">All role slots are filled.</span>}
         </div>
       )}
+    </div>
+  );
+}
+
+function RoleAssignmentPanel({
+  role,
+  opportunity,
+  candidates,
+  profiles,
+  canAssign,
+  roleView,
+  setRoleView,
+  onVerify,
+  onAssign,
+  onReject,
+}: {
+  role: VolunteerRoleSlot;
+  opportunity: VolunteerOpportunity;
+  candidates: Array<{
+    profile: VolunteerProfile;
+    match: number;
+    breakdown: { skills: number; region: number; availability: number; total: number };
+    applied: boolean;
+    assigned?: VolunteerAssignment;
+  }>;
+  profiles: VolunteerProfile[];
+  canAssign: boolean;
+  roleView: 'pending' | 'accepted';
+  setRoleView: (view: 'pending' | 'accepted') => void;
+  onVerify: (profile: VolunteerProfile) => void;
+  onAssign: (profile: VolunteerProfile, opportunity: VolunteerOpportunity, role: VolunteerRoleSlot, status?: VolunteerAssignment['status']) => void;
+  onReject: (profile: VolunteerProfile, opportunity: VolunteerOpportunity, role: VolunteerRoleSlot) => void;
+}) {
+  const filledSlots = filledSlotsForRole(profiles, opportunity.id, role);
+  const roleHasCapacity = filledSlots < role.needed;
+  const relevantCandidates = candidates.filter((candidate) => (
+    candidate.assigned?.roleId === role.id ||
+    candidate.applied ||
+    role.requiredSkills.some((skill) => candidate.profile.skills.includes(skill))
+  ));
+  const acceptedCandidates = relevantCandidates.filter((candidate) => (
+    candidate.assigned?.roleId === role.id &&
+    (candidate.assigned.status === 'accepted' || candidate.assigned.status === 'checked_in' || candidate.assigned.status === 'completed')
+  ));
+  const pendingCandidates = relevantCandidates.filter((candidate) => !candidate.assigned);
+  const visibleCandidates = roleView === 'accepted' ? acceptedCandidates : pendingCandidates;
+
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold">{role.title}</h3>
+          <div className="mt-1 text-xs text-zinc-500">{filledSlots}/{role.needed} filled · {relevantCandidates.length} visible volunteers</div>
+        </div>
+        <div className="rounded border border-zinc-800 bg-zinc-950 px-2.5 py-1.5 text-right text-xs text-zinc-400">
+          <div>{Math.max(0, role.needed - filledSlots)} open slots</div>
+          <div className="text-zinc-600">{opportunity.authorisedAgency}</div>
+        </div>
+      </div>
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {role.requiredSkills.map((skill) => <span key={skill} className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-400">{skill}</span>)}
+      </div>
+      {role.specialRequirements && <div className="mb-4 text-xs text-yellow-300">Special: {role.specialRequirements}</div>}
+      <div className="mb-4 inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-1">
+        <button onClick={() => setRoleView('pending')} className={`rounded-md px-3 py-1.5 text-sm ${roleView === 'pending' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'}`}>Yet to Accept ({pendingCandidates.length})</button>
+        <button onClick={() => setRoleView('accepted')} className={`rounded-md px-3 py-1.5 text-sm ${roleView === 'accepted' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}>Accepted ({acceptedCandidates.length})</button>
+      </div>
+      <div className="space-y-2">
+        {roleView === 'accepted'
+          ? acceptedCandidates.map((candidate) => (
+              <AcceptedVolunteerRow
+                key={`${opportunity.id}-${role.id}-${candidate.profile.id}`}
+                profile={candidate.profile}
+                assignment={candidate.assigned!}
+              />
+            ))
+          : pendingCandidates.map((candidate) => (
+              <CandidateRow
+                key={`${opportunity.id}-${role.id}-${candidate.profile.id}`}
+                candidate={candidate}
+                role={role}
+                opportunity={opportunity}
+                roleHasCapacity={roleHasCapacity}
+                canAssign={canAssign}
+                onVerify={onVerify}
+                onAssign={onAssign}
+                onReject={onReject}
+              />
+            ))}
+        {!visibleCandidates.length && <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 text-sm text-zinc-500">No volunteers in this filter for the selected role.</div>}
+      </div>
     </div>
   );
 }
