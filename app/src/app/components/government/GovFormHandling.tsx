@@ -9,13 +9,13 @@ import {
   Layers,
   MapPin,
   MessageSquare,
-  MoreHorizontal,
   Radio,
   Search,
   Send,
   Shield,
   ArrowDownUp,
   Tag,
+  Trash2,
   User,
   X,
 } from 'lucide-react';
@@ -211,6 +211,8 @@ export default function GovFormHandling() {
   const [pinnedAgencies, setPinnedAgencies] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [usingBackend, setUsingBackend] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingTicket, setDeletingTicket] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -389,6 +391,36 @@ export default function GovFormHandling() {
     setPingOpen(false);
   };
 
+  const deleteSelectedTicket = async () => {
+    if (!selectedTicket || deletingTicket) return;
+
+    setDeletingTicket(true);
+    let deleted = false;
+    try {
+      await requestDelete(`/api/tickets/${selectedTicket.id}`);
+      setUsingBackend(true);
+      deleted = true;
+    } catch {
+      if (usingBackend) {
+        setNotice(`Unable to delete ${selectedTicket.id}.`);
+      } else {
+        setUsingBackend(false);
+        deleted = true;
+      }
+    } finally {
+      if (deleted) {
+        setTickets((current) => {
+          const next = current.filter((ticket) => ticket.id !== selectedTicket.id);
+          setSelectedTicketId(next[0]?.id ?? '');
+          return next;
+        });
+        setNotice(`${selectedTicket.id} deleted.`);
+        setDeleteConfirmOpen(false);
+      }
+      setDeletingTicket(false);
+    }
+  };
+
   return (
     <div className="space-y-4 h-full">
       <div className="flex items-center justify-between">
@@ -511,8 +543,14 @@ export default function GovFormHandling() {
                   <CheckCircle className="w-3 h-3" />
                   Resolve
                 </button>
-                <button className="p-1.5 hover:bg-zinc-800 rounded transition-colors">
-                  <MoreHorizontal className="w-4 h-4 text-zinc-400" />
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmOpen(true)}
+                  className="p-1.5 hover:bg-red-950 rounded transition-colors"
+                  title="Delete ticket"
+                  aria-label="Delete ticket"
+                >
+                  <Trash2 className="w-4 h-4 text-red-400" />
                 </button>
               </div>
             </div>
@@ -646,6 +684,30 @@ export default function GovFormHandling() {
         )}
       </div>
 
+      {deleteConfirmOpen && selectedTicket && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 border border-red-900/70 rounded-xl p-6 w-96 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold flex items-center gap-2 text-red-300"><Trash2 className="w-5 h-5" />Delete Ticket</h3>
+              <button disabled={deletingTicket} onClick={() => setDeleteConfirmOpen(false)} className="p-1 hover:bg-zinc-800 rounded transition-colors disabled:opacity-50"><X className="w-4 h-4 text-zinc-400" /></button>
+            </div>
+            <p className="text-sm text-zinc-300">
+              Delete <span className="font-mono text-red-300">{selectedTicket.id}</span>? This removes the ticket and its comments, images, pings, and chat history from the database.
+            </p>
+            <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-500">
+              This action cannot be undone.
+            </div>
+            <div className="mt-5 flex gap-2">
+              <button disabled={deletingTicket} onClick={() => setDeleteConfirmOpen(false)} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm transition-colors disabled:opacity-50">Cancel</button>
+              <button disabled={deletingTicket} onClick={deleteSelectedTicket} className="flex-1 py-2 bg-red-600 hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400 rounded-lg text-sm transition-colors flex items-center justify-center gap-2">
+                <Trash2 className="w-4 h-4" />
+                {deletingTicket ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pingOpen && selectedTicket && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 w-96 shadow-2xl">
@@ -696,6 +758,14 @@ async function requestJson<T>(path: string, method: 'POST' | 'PATCH', body: unkn
   });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
   return response.json() as Promise<T>;
+}
+
+async function requestDelete(path: string) {
+  const response = await fetch(apiUrl(path), {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
 }
 
 function updateLocalTickets(updater: (current: Ticket[]) => Ticket[], setTickets: Dispatch<SetStateAction<Ticket[]>>) {

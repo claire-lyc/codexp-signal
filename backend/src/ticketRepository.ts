@@ -356,10 +356,10 @@ export async function updateTicketStatus(id: string, status: TicketStatus) {
     `
       UPDATE citizen.reports
       SET
-        status = $2,
+        status = $2::citizen.report_status,
         updated_at = now(),
-        chat_enabled = CASE WHEN $2 = 'resolved' THEN false ELSE true END,
-        chat_closed_at = CASE WHEN $2 = 'resolved' THEN now() ELSE NULL END
+        chat_enabled = CASE WHEN $2::citizen.report_status = 'resolved'::citizen.report_status THEN false ELSE true END,
+        chat_closed_at = CASE WHEN $2::citizen.report_status = 'resolved'::citizen.report_status THEN now() ELSE NULL END
       WHERE public_report_id = $1
     `,
     [id, toDbStatus(status) ?? 'submitted'],
@@ -409,6 +409,52 @@ export class TicketChatClosedError extends Error {
   constructor(publicReportId: string) {
     super(`Ticket ${publicReportId} is resolved and no longer accepts chat messages.`);
     this.name = 'TicketChatClosedError';
+  }
+}
+
+export async function deleteTicket(id: string) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const ticket = await client.query<{ id: string; public_report_id: string }>(
+      `
+        SELECT id, public_report_id
+        FROM citizen.reports
+        WHERE public_report_id = $1
+        LIMIT 1
+      `,
+      [id],
+    );
+
+    if (!ticket.rows[0]) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    await client.query(
+      `
+        UPDATE citizen.reports
+        SET grouped_report_id = NULL
+        WHERE grouped_report_id = $1
+      `,
+      [ticket.rows[0].id],
+    );
+
+    const deleted = await client.query<{ public_report_id: string }>(
+      `
+        DELETE FROM citizen.reports
+        WHERE id = $1
+        RETURNING public_report_id
+      `,
+      [ticket.rows[0].id],
+    );
+    await client.query('COMMIT');
+    return deleted.rows[0] ?? null;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
 }
 

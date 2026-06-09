@@ -10,12 +10,12 @@ import {
   createForumReply,
   likeForumPost,
   listForumPosts,
-  moderateForumPost,
   reportForumPost,
 } from './forumRepository.js';
 import {
   addTicketComment,
   createCitizenTicket,
+  deleteTicket,
   getTicketByPublicId,
   listTicketsForReporter,
   listTickets,
@@ -30,7 +30,7 @@ import {
   listAlerts,
   listCrises,
 } from './dashboardRepository.js';
-import { refreshExternalDashboardSnapshot, startExternalDashboardRefresh } from './externalDashboardRefresh.js';
+import { startExternalDashboardRefresh } from './externalDashboardRefresh.js';
 import {
   createBroadcast,
   listBroadcasts,
@@ -40,12 +40,6 @@ import {
 } from './broadcastRepository.js';
 import { detectPotentialMisinformation } from './misinformationDetector.js';
 import { detectTicketUrgency } from './severityDetector.js';
-import {
-  getVolunteerProfile,
-  listVolunteerProfiles,
-  patchVolunteerProfile,
-  upsertVolunteerProfile,
-} from './volunteerRepository.js';
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
@@ -80,10 +74,6 @@ app.get('/health', (_request, response) => {
 });
 
 app.get('/api/forum/posts', (_request, response) => {
-  response.json({ items: listForumPosts() });
-});
-
-app.get('/api/forum/posts/moderation', ...requireGovUser, (_request, response) => {
   response.json({ items: listForumPosts() });
 });
 
@@ -122,23 +112,6 @@ app.post('/api/forum/posts', async (request, response, next) => {
   }
 });
 
-app.post('/api/forum/posts/official', ...requireGovUser, (request: AuthenticatedRequest, response) => {
-  const content = stringBody(request.body?.content);
-  if (!content) {
-    response.status(400).json({ error: 'Post content is required' });
-    return;
-  }
-
-  const post = createForumPost({
-    author: request.user?.display_name ?? request.user?.username ?? request.user?.email ?? 'Government Moderator',
-    content,
-    category: stringBody(request.body?.category),
-    verified: true,
-    moderationState: 'verified',
-  });
-  response.status(201).json({ item: post });
-});
-
 app.post('/api/forum/posts/:id/like', (request, response) => {
   const post = likeForumPost(request.params.id);
   if (!post) {
@@ -150,25 +123,6 @@ app.post('/api/forum/posts/:id/like', (request, response) => {
 
 app.post('/api/forum/posts/:id/report', (request, response) => {
   const post = reportForumPost(request.params.id);
-  if (!post) {
-    response.status(404).json({ error: 'Forum post not found' });
-    return;
-  }
-  response.json({ item: post });
-});
-
-app.post('/api/forum/posts/:id/moderation', ...requireGovUser, (request: AuthenticatedRequest, response) => {
-  const action = stringBody(request.body?.action);
-  if (action !== 'verify' && action !== 'hide' && action !== 'review') {
-    response.status(400).json({ error: 'Moderation action is required' });
-    return;
-  }
-
-  const post = moderateForumPost(request.params.id, {
-    action,
-    moderator: request.user?.display_name ?? request.user?.username ?? request.user?.email ?? 'Government Moderator',
-    note: stringBody(request.body?.note),
-  });
   if (!post) {
     response.status(404).json({ error: 'Forum post not found' });
     return;
@@ -192,86 +146,6 @@ app.post('/api/forum/posts/:id/replies', (request, response) => {
     return;
   }
   response.status(201).json({ item: post });
-});
-
-app.post('/api/forum/posts/:id/official-replies', ...requireGovUser, (request: AuthenticatedRequest, response) => {
-  const content = stringBody(request.body?.content);
-  if (!content) {
-    response.status(400).json({ error: 'Reply content is required' });
-    return;
-  }
-
-  const post = createForumReply(request.params.id, {
-    author: request.user?.display_name ?? request.user?.username ?? request.user?.email ?? 'Government Moderator',
-    content,
-    official: true,
-  });
-  if (!post) {
-    response.status(404).json({ error: 'Forum post not found' });
-    return;
-  }
-  response.status(201).json({ item: post });
-});
-
-app.get('/api/volunteers/profile', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
-  try {
-    if (!request.user?.id) {
-      response.status(401).json({ error: 'Bearer token is required' });
-      return;
-    }
-
-    const item = await getVolunteerProfile(request.user.id);
-    response.json({ item: item ? { userId: item.user_id, profile: item.profile } : null });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.put('/api/volunteers/profile', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
-  try {
-    if (!request.user?.id) {
-      response.status(401).json({ error: 'Bearer token is required' });
-      return;
-    }
-
-    if (!request.body || typeof request.body !== 'object' || Array.isArray(request.body)) {
-      response.status(400).json({ error: 'Volunteer profile payload is required' });
-      return;
-    }
-
-    const item = await upsertVolunteerProfile(request.user.id, request.body as Record<string, unknown>);
-    response.json({ item: item ? { userId: item.user_id, profile: item.profile } : null });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get('/api/gov/volunteers/profiles', ...requireGovUser, async (_request, response, next) => {
-  try {
-    const items = await listVolunteerProfiles();
-    response.json({
-      items: items.map((item) => ({
-        userId: item.user_id,
-        profile: item.profile,
-      })),
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.patch('/api/gov/volunteers/profiles/:userId', ...requireGovUser, async (request: AuthenticatedRequest, response, next) => {
-  try {
-    if (!request.body || typeof request.body !== 'object' || Array.isArray(request.body)) {
-      response.status(400).json({ error: 'Volunteer profile patch is required' });
-      return;
-    }
-
-    const item = await patchVolunteerProfile(request.params.userId, request.body as Record<string, unknown>);
-    response.json({ item: item ? { userId: item.user_id, profile: item.profile } : null });
-  } catch (error) {
-    next(error);
-  }
 });
 
 app.get('/api/tickets', ...requireGovUser, async (request, response, next) => {
@@ -443,6 +317,19 @@ app.patch('/api/tickets/:id/status', ...requireGovUser, async (request, response
       response.status(409).json({ error: error.message });
       return;
     }
+    next(error);
+  }
+});
+
+app.delete('/api/tickets/:id', ...requireGovUser, async (request, response, next) => {
+  try {
+    const deleted = await deleteTicket(request.params.id);
+    if (!deleted) {
+      response.status(404).json({ error: 'Ticket not found' });
+      return;
+    }
+    response.status(204).send();
+  } catch (error) {
     next(error);
   }
 });
@@ -650,15 +537,6 @@ app.get(['/api/citizen/incidents', '/api/public/incidents'], async (_request, re
 
 app.get('/api/dashboard/cached-external', ...requireGovUser, async (_request, response, next) => {
   try {
-    response.json(await getSnapshotResponse('dashboard_cached_external'));
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post('/api/dashboard/cached-external/refresh', ...requireGovUser, async (_request, response, next) => {
-  try {
-    await refreshExternalDashboardSnapshot();
     response.json(await getSnapshotResponse('dashboard_cached_external'));
   } catch (error) {
     next(error);
