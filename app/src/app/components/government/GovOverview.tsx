@@ -40,7 +40,6 @@ const severitySpark: Record<string, string> = {
   low: '#38bdf8',
 };
 
-<<<<<<< HEAD
 const fallbackCrisisCards: CrisisCard[] = [
   { id: 'covid', label: 'Covid-19', type: 'Health', severity: 'medium', path: '/gov/pandemic', stats: [{ label: 'Active cases today', value: '378', delta: '+12%' }, { label: 'ICU occupancy', value: '25', delta: '+5' }], icon: 'Activity' },
   { id: 'dengue', label: 'Dengue', type: 'Health', severity: 'high', path: '/gov/pandemic', stats: [{ label: 'Red zone clusters', value: '14', delta: '+3' }, { label: 'Cases this week', value: '212', delta: '+8%' }], icon: 'Activity' },
@@ -55,11 +54,6 @@ const fallbackAlerts: AlertItem[] = [
   { id: 4, type: 'Infrastructure', severity: 'medium', message: 'Power grid fluctuation in Woodlands', region: 'North', time: '07:15 AM' },
   { id: 5, type: 'Health', severity: 'medium', message: 'New Covid-19 cluster at Jurong West MRT', region: 'West', time: '06:50 AM' },
 ];
-=======
-const fallbackCrisisCards: CrisisCard[] = [];
-
-const alerts: Array<{ id: number | string; type: string; severity: string; message: string; region: string; time?: string }> = [];
->>>>>>> 489eb72cc21e278c33a84853f304bdb708ac9922
 const trendData: Array<{ date: string; incidents: number }> = [];
 
 const filterTypes = ['All', 'Health', 'Weather', 'Supply', 'Infrastructure', 'Cybersecurity'];
@@ -147,14 +141,6 @@ export default function GovOverview() {
           <span className="text-xs text-zinc-600">Scroll to see all →</span>
         </div>
         <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
-<<<<<<< HEAD
-=======
-          {crisisCards.length === 0 && (
-            <div className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
-              No active crisis situations. Archived static scenarios are available in Historical Analysis.
-            </div>
-          )}
->>>>>>> 489eb72cc21e278c33a84853f304bdb708ac9922
           {crisisCards.map((card) => {
             const Icon = iconMap[card.icon as keyof typeof iconMap] ?? AlertCircle;
             const stats = Array.isArray(card.stats) ? card.stats : [];

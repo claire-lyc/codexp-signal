@@ -8,6 +8,7 @@ import {
   Zap,
   Shield,
   MessageSquare,
+  Reply,
   Users,
   Brain,
   History,
@@ -78,6 +79,7 @@ export default function GovLayout() {
   const [profileUser, setProfileUser] = useState<ProfileUser | null>(null);
   const notificationsRef = useRef<HTMLDivElement | null>(null);
   const profileRef = useRef<HTMLDivElement | null>(null);
+  const profileModalRef = useRef<HTMLDivElement | null>(null);
   const currentTime = new Date().toLocaleString('en-SG', {
     timeZone: 'Asia/Singapore',
     dateStyle: 'medium',
@@ -100,9 +102,12 @@ export default function GovLayout() {
       if (notificationsOpen && notificationsRef.current && !notificationsRef.current.contains(target)) {
         setNotificationsOpen(false);
       }
-      if (profileOpen && profileRef.current && !profileRef.current.contains(target)) {
+      const clickedProfileButton = profileRef.current?.contains(target);
+      const clickedProfileModal = profileModalRef.current?.contains(target);
+
+      if (profileOpen && !clickedProfileButton && !clickedProfileModal) {
         setProfileOpen(false);
-      }
+    }
     };
 
     document.addEventListener('mousedown', closeOnOutsideClick);
@@ -224,7 +229,10 @@ export default function GovLayout() {
 
       {profileOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4">
-          <div className="grid w-full max-w-3xl grid-cols-[220px_1fr] overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl">
+          <div
+            ref={profileModalRef}
+            className="grid w-full max-w-3xl grid-cols-[220px_1fr] overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl"
+          >
             <aside className="border-r border-zinc-800 bg-zinc-950/70 p-4">
               <div className="space-y-1">
                 <div className="flex items-center gap-3 rounded-xl bg-zinc-800 px-3 py-3 text-zinc-100">
