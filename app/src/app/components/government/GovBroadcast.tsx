@@ -35,6 +35,15 @@ type GovProfile = {
   agencyCode?: string | null;
 };
 
+type BroadcastDraft = {
+  sourceTicketId?: string;
+  title?: string;
+  message?: string;
+  severity?: Broadcast['severity'];
+  regions?: string[];
+  agencies?: string[];
+};
+
 export default function GovBroadcast() {
   const [message, setMessage] = useState('');
   const [title, setTitle] = useState('');
@@ -65,6 +74,27 @@ export default function GovBroadcast() {
       .then((response) => response.ok ? response.json() as Promise<{ user: GovProfile | null }> : Promise.reject())
       .then((data) => setCurrentAgencyCode(data.user?.agencyCode ?? null))
       .catch(() => setCurrentAgencyCode(null));
+  }, []);
+
+  useEffect(() => {
+    const rawDraft = window.localStorage.getItem('signal.broadcast.draft');
+    if (!rawDraft) return;
+
+    try {
+      const draft = JSON.parse(rawDraft) as BroadcastDraft;
+      setTitle(draft.title ?? '');
+      setMessage(draft.message ?? '');
+      if (draft.severity) setSeverity(draft.severity);
+      setRegions(draft.regions ?? []);
+      setSelectedAgencies(draft.agencies ?? []);
+      setSendToAgencies(Boolean(draft.agencies?.length));
+      setComposerOpen(true);
+      setNotice(draft.sourceTicketId ? `Draft created from ${draft.sourceTicketId}. Review before broadcasting.` : 'Draft loaded. Review before broadcasting.');
+    } catch {
+      setNotice('Could not load broadcast draft.');
+    } finally {
+      window.localStorage.removeItem('signal.broadcast.draft');
+    }
   }, []);
 
   const loadBroadcasts = async () => {
