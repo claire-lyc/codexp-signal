@@ -52,6 +52,12 @@ import {
 } from './notificationRepository.js';
 import { detectPotentialMisinformation } from './misinformationDetector.js';
 import { detectTicketUrgency } from './severityDetector.js';
+import {
+  getVolunteerProfile,
+  listVolunteerProfiles,
+  patchVolunteerProfile,
+  upsertVolunteerProfile,
+} from './volunteerRepository.js';
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
@@ -354,6 +360,68 @@ app.post('/api/forum/posts/:id/official-replies', ...requireGovUser, (request: A
     return;
   }
   response.status(201).json({ item: post });
+});
+
+app.get('/api/volunteers/profile', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
+  try {
+    if (!request.user?.id) {
+      response.status(401).json({ error: 'Bearer token is required' });
+      return;
+    }
+
+    const item = await getVolunteerProfile(request.user.id);
+    response.json({
+      item: item ? { userId: item.user_id, profile: item.profile } : null,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put('/api/volunteers/profile', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
+  try {
+    if (!request.user?.id) {
+      response.status(401).json({ error: 'Bearer token is required' });
+      return;
+    }
+
+    const body = asObject(request.body);
+    const profile = {
+      ...body,
+      name: stringBody(body.name) ?? request.user.display_name ?? request.user.username ?? 'Citizen Volunteer',
+      email: stringBody(body.email) ?? request.user.email ?? '',
+    };
+    const item = await upsertVolunteerProfile(request.user.id, profile);
+    response.json({
+      item: item ? { userId: item.user_id, profile: item.profile } : null,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/gov/volunteers/profiles', ...requireGovUser, async (_request, response, next) => {
+  try {
+    const items = await listVolunteerProfiles();
+    response.json({
+      items: items.map((item) => ({ userId: item.user_id, profile: item.profile })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch('/api/gov/volunteers/profiles/:userId', ...requireGovUser, async (request, response, next) => {
+  try {
+    const item = await patchVolunteerProfile(request.params.userId, asObject(request.body));
+    if (!item) {
+      response.status(404).json({ error: 'Volunteer profile not found' });
+      return;
+    }
+    response.json({ item: { userId: item.user_id, profile: item.profile } });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get('/api/tickets', ...requireGovUser, async (request, response, next) => {
@@ -889,7 +957,7 @@ async function getSnapshotResponse(snapshotKey: string) {
 }
 
 function asObject(value: unknown) {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function forumCooldownKey(request: express.Request, author?: string) {

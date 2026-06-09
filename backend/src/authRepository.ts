@@ -161,6 +161,23 @@ export async function getUserById(id: string): Promise<AuthenticatedUser | null>
   return rows[0] ?? null;
 }
 
+export async function updateUserProfileDetails(userId: string, input: { displayName?: string | null }) {
+  const displayName = typeof input.displayName === 'string' && input.displayName.trim()
+    ? input.displayName.trim()
+    : null;
+
+  await query(
+    `
+      UPDATE auth.users
+      SET display_name = $2, updated_at = now()
+      WHERE id = $1
+    `,
+    [userId, displayName],
+  );
+
+  return getUserById(userId);
+}
+
 export async function upsertPasswordUser(input: {
   username: string;
   password: string;

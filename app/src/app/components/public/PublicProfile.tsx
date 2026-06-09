@@ -24,6 +24,17 @@ type ProfileResponse = {
     tags: string[];
   } | null;
   preferences?: Preferences;
+  volunteerProfile?: {
+    name?: string;
+    phone?: string;
+    email?: string;
+    region?: string;
+    skills?: string[];
+    availability?: string[];
+    certifications?: string;
+    emergencyContact?: string;
+    status?: string;
+  } | null;
 };
 
 const agencyNames: Record<string, string> = {
@@ -113,6 +124,7 @@ export default function PublicProfile() {
   const profileTags = user?.tags?.length
     ? user.tags.map((tag) => agencyNames[tag] ?? tag)
     : [isGovernmentUser ? agencyName ?? role ?? 'Government agency' : 'Citizen'];
+  const volunteerProfile = profile?.volunteerProfile;
 
   return (
     <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[260px_minmax(0,1fr)]">
@@ -182,6 +194,35 @@ export default function PublicProfile() {
                 ))}
               </div>
             </div>
+            {volunteerProfile && (
+              <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-zinc-100">Volunteer profile sync</div>
+                    <div className="text-xs text-zinc-500">These details are shared with the volunteer workspace.</div>
+                  </div>
+                  <span className="rounded-lg border border-blue-800 bg-blue-950 px-2.5 py-1 text-xs text-blue-300">
+                    {volunteerProfile.status ?? 'Saved'}
+                  </span>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <InfoRow label="Volunteer Name" value={volunteerProfile.name ?? profileName} />
+                  <InfoRow label="Volunteer Phone" value={volunteerProfile.phone ?? preferences?.phoneNumber ?? 'Not set'} />
+                  <InfoRow label="Volunteer Email" value={volunteerProfile.email ?? user?.email ?? 'Not set'} />
+                  <InfoRow label="Preferred Region" value={volunteerProfile.region ?? 'Not set'} />
+                </div>
+                <div className="mt-4">
+                  <div className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Skills</div>
+                  <div className="flex flex-wrap gap-2">
+                    {(volunteerProfile.skills?.length ? volunteerProfile.skills : ['No skills added']).map((skill) => (
+                      <span key={skill} className="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-sm text-zinc-300">
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
         )}
 
