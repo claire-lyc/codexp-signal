@@ -14,6 +14,7 @@ import {
   Search,
   Send,
   Shield,
+  ArrowDownUp,
   Tag,
   User,
   X,
@@ -74,6 +75,12 @@ const sortOptions: Array<{ value: SortMode; label: string }> = [
   { value: 'oldest', label: 'Oldest first' },
   { value: 'ticket-number', label: 'Ticket number' },
 ];
+const sortIconLabels: Record<SortMode, string> = {
+  priority: 'Priority',
+  newest: 'Newest',
+  oldest: 'Oldest',
+  'ticket-number': 'Ticket #',
+};
 const urgencyRank: Record<TicketUrgency, number> = {
   critical: 0,
   high: 1,
@@ -419,8 +426,18 @@ export default function GovFormHandling() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search tickets..."
-                className="w-full pl-8 pr-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-red-600"
+                className="w-full pl-8 pr-24 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-red-600"
               />
+              <button
+                type="button"
+                onClick={() => setSortMode(nextSortMode(sortMode))}
+                title={`Sort: ${sortOptions.find((option) => option.value === sortMode)?.label ?? 'Priority'}`}
+                aria-label={`Sort: ${sortOptions.find((option) => option.value === sortMode)?.label ?? 'Priority'}`}
+                className="absolute right-1.5 top-1.5 flex h-7 min-w-7 items-center justify-center gap-1 rounded-md border border-zinc-700 bg-zinc-900 px-1.5 text-xs text-zinc-400 transition-colors hover:border-red-700 hover:text-red-300"
+              >
+                <ArrowDownUp className="h-3.5 w-3.5" />
+                <span className="max-w-12 truncate">{sortIconLabels[sortMode]}</span>
+              </button>
             </div>
             <div className="flex gap-1 flex-wrap">
               {statusOptions.map((status) => (
@@ -440,9 +457,6 @@ export default function GovFormHandling() {
             </select>
             <select value={filterAgency} onChange={(event) => setFilterAgency(event.target.value)} className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-red-600">
               {agencies.map((agency) => <option key={agency}>{agency}</option>)}
-            </select>
-            <select value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)} className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-red-600">
-              {sortOptions.map((option) => <option key={option.value} value={option.value}>Sort: {option.label}</option>)}
             </select>
           </div>
 
@@ -774,6 +788,11 @@ function ticketTime(ticket: Ticket) {
 function ticketNumber(ticket: Ticket) {
   const match = ticket.id.match(/\d+/);
   return match ? Number(match[0]) : 0;
+}
+
+function nextSortMode(sortMode: SortMode): SortMode {
+  const index = sortOptions.findIndex((option) => option.value === sortMode);
+  return sortOptions[(index + 1) % sortOptions.length].value;
 }
 
 function relativeTime(timestamp: string) {
