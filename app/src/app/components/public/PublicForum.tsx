@@ -2,12 +2,16 @@ import {
   AlertTriangle,
   CheckCircle,
   Flag,
+  Image as ImageIcon,
   MessageSquare,
+  Plus,
   Reply,
   Search,
   Send,
   Shield,
+  ThumbsDown,
   ThumbsUp,
+  X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
@@ -21,6 +25,13 @@ type ForumReply = {
   official?: boolean;
 };
 
+type ForumImage = {
+  id?: string;
+  filename: string | null;
+  mimeType: string | null;
+  previewUrl: string;
+};
+
 type ForumPost = {
   id: string;
   author: string;
@@ -29,14 +40,18 @@ type ForumPost = {
   verified: boolean;
   aiFlag: boolean;
   likes: number;
+  dislikes?: number;
   reports?: number;
-  moderationState?: 'live' | 'under_review' | 'verified' | 'hidden';
+  moderationState?: 'live' | 'under_review' | 'verified' | 'hidden' | 'misleading' | 'resolved';
   replies: ForumReply[];
+  images?: ForumImage[];
   category: string;
 };
 
 const storageKey = 'signal-forum-posts';
 const cooldownStorageKey = 'signal-forum-post-cooldown-until';
+const likedPostsStorageKey = 'signal-forum-liked-posts';
+const dislikedPostsStorageKey = 'signal-forum-disliked-posts';
 const forumCooldownMs = Number(import.meta.env.VITE_FORUM_POST_COOLDOWN_MS ?? 60_000);
 const categories = ['All', 'Health', 'Weather', 'Infrastructure', 'Supply', 'Community'];
 
@@ -50,31 +65,13 @@ const seedPosts: ForumPost[] = [
     verified: false,
     aiFlag: false,
     likes: 12,
+    dislikes: 0,
     replies: [
       {
         id: 'reply-1',
         author: 'Community Volunteer',
         content: 'Tampines West CC posted that collection starts from 2 PM. Bring NRIC for each household member.',
         createdAt: new Date(Date.now() - 80 * 60 * 1000).toISOString(),
-      },
-    ],
-    category: 'Health',
-  },
-  {
-    id: 'forum-2',
-    author: 'MOH Official',
-    createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
-    content:
-      'Important reminder: all mask distribution points are listed on the official MOH website. Please check there for the latest information.',
-    verified: true,
-    aiFlag: false,
-    likes: 45,
-    replies: [
-      {
-        id: 'reply-2',
-        author: 'Moderator',
-        content: 'Pinned as verified guidance.',
-        createdAt: new Date(Date.now() - 2.5 * 60 * 60 * 1000).toISOString(),
       },
     ],
     category: 'Health',
@@ -87,6 +84,7 @@ const seedPosts: ForumPost[] = [
     verified: false,
     aiFlag: false,
     likes: 8,
+    dislikes: 0,
     replies: [],
     category: 'Weather',
   },
@@ -98,6 +96,7 @@ const seedPosts: ForumPost[] = [
     verified: false,
     aiFlag: true,
     likes: 0,
+    dislikes: 0,
     replies: [],
     category: 'Health',
   },
@@ -107,6 +106,7 @@ export default function PublicForum() {
   const [posts, setPosts] = useState<ForumPost[]>(() => loadLocalPosts());
   const [author, setAuthor] = useState('');
   const [newPost, setNewPost] = useState('');
+  const [postImages, setPostImages] = useState<ForumImage[]>([]);
   const [category, setCategory] = useState('Community');
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
@@ -116,12 +116,19 @@ export default function PublicForum() {
   const [usingBackend, setUsingBackend] = useState(false);
   const [posting, setPosting] = useState(false);
   const [postCooldownUntil, setPostCooldownUntil] = useState(() => loadCooldownUntil());
+  const [likedPostIds, setLikedPostIds] = useState<Set<string>>(() => loadLikedPostIds());
+  const [dislikedPostIds, setDislikedPostIds] = useState<Set<string>>(() => loadDislikedPostIds());
+  const [selectedImageOpen, setSelectedImageOpen] = useState(true);
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    setSelectedImageOpen(true);
+  }, [expandedPostId]);
 
   useEffect(() => {
     let active = true;
@@ -135,7 +142,7 @@ export default function PublicForum() {
         .then((data) => {
           if (!active) return;
           setUsingBackend(true);
-          setPosts(data.items);
+          setPosts(sanitizeForumPosts(data.items));
         })
         .catch(() => {
           if (!active) return;
@@ -165,11 +172,48 @@ export default function PublicForum() {
       return categoryMatch && textMatch;
     });
   }, [activeCategory, posts, query]);
+  const selectedPost = filteredPosts.find((post) => post.id === expandedPostId) ?? null;
 
   const postCooldownSeconds = Math.max(0, Math.ceil((postCooldownUntil - now) / 1000));
 
   const replacePost = (updatedPost: ForumPost) => {
     setPosts((current) => current.map((post) => (post.id === updatedPost.id ? updatedPost : post)));
+  };
+
+  const rememberLikedPost = (postId: string) => {
+    setLikedPostIds((current) => {
+      const next = new Set(current);
+      next.add(postId);
+      localStorage.setItem(likedPostsStorageKey, JSON.stringify([...next]));
+      return next;
+    });
+    setDislikedPostIds((current) => {
+      const next = new Set(current);
+      next.delete(postId);
+      localStorage.setItem(dislikedPostsStorageKey, JSON.stringify([...next]));
+      return next;
+    });
+  };
+
+  const rememberDislikedPost = (postId: string) => {
+    setDislikedPostIds((current) => {
+      const next = new Set(current);
+      next.add(postId);
+      localStorage.setItem(dislikedPostsStorageKey, JSON.stringify([...next]));
+      return next;
+    });
+    setLikedPostIds((current) => {
+      const next = new Set(current);
+      next.delete(postId);
+      localStorage.setItem(likedPostsStorageKey, JSON.stringify([...next]));
+      return next;
+    });
+  };
+
+  const handleImageUpload = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const images = await Promise.all([...files].slice(0, 3).map(readForumImage));
+    setPostImages(images);
   };
 
   const handleSubmitPost = async () => {
@@ -196,6 +240,7 @@ export default function PublicForum() {
       author: author.trim() || 'Anonymous User',
       content,
       category,
+      images: postImages,
     });
 
     try {
@@ -203,8 +248,11 @@ export default function PublicForum() {
         author: optimisticPost.author,
         content,
         category,
+        images: postImages,
       });
       setPosts((current) => [data.item, ...current.filter((post) => post.id !== data.item.id)]);
+      setExpandedPostId(data.item.id);
+      setPostImages([]);
       setUsingBackend(true);
       setStatus({
         tone: data.item.aiFlag ? 'warning' : 'success',
@@ -226,6 +274,8 @@ export default function PublicForum() {
 
       setUsingBackend(false);
       updateLocalPosts((current) => [optimisticPost, ...current], setPosts);
+      setExpandedPostId(optimisticPost.id);
+      setPostImages([]);
       setStatus({
         tone: optimisticPost.aiFlag ? 'warning' : 'success',
         message: optimisticPost.aiFlag
@@ -238,16 +288,52 @@ export default function PublicForum() {
   };
 
   const handleLike = async (postId: string) => {
+    if (likedPostIds.has(postId)) {
+      setStatus({ tone: 'warning', message: 'You have already liked this post.' });
+      return;
+    }
+
     try {
       const data = await postJson<{ item: ForumPost }>(`/api/forum/posts/${postId}/like`, {});
       replacePost(data.item);
+      rememberLikedPost(postId);
       setUsingBackend(true);
     } catch {
       setUsingBackend(false);
       updateLocalPosts(
-        (current) => current.map((post) => (post.id === postId ? { ...post, likes: post.likes + 1 } : post)),
+        (current) => current.map((post) => (post.id === postId ? {
+          ...post,
+          likes: post.likes + 1,
+          dislikes: dislikedPostIds.has(postId) ? Math.max(0, (post.dislikes ?? 0) - 1) : post.dislikes ?? 0,
+        } : post)),
         setPosts,
       );
+      rememberLikedPost(postId);
+    }
+  };
+
+  const handleDislike = async (postId: string) => {
+    if (dislikedPostIds.has(postId)) {
+      setStatus({ tone: 'warning', message: 'You have already disliked this post.' });
+      return;
+    }
+
+    try {
+      const data = await postJson<{ item: ForumPost }>(`/api/forum/posts/${postId}/dislike`, {});
+      replacePost(data.item);
+      rememberDislikedPost(postId);
+      setUsingBackend(true);
+    } catch {
+      setUsingBackend(false);
+      updateLocalPosts(
+        (current) => current.map((post) => (post.id === postId ? {
+          ...post,
+          likes: likedPostIds.has(postId) ? Math.max(0, post.likes - 1) : post.likes,
+          dislikes: (post.dislikes ?? 0) + 1,
+        } : post)),
+        setPosts,
+      );
+      rememberDislikedPost(postId);
     }
   };
 
@@ -368,19 +454,42 @@ export default function PublicForum() {
             className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600"
           />
 
-          <button
-            type="button"
-            onClick={handleSubmitPost}
-            disabled={posting || postCooldownSeconds > 0 || !newPost.trim()}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
-          >
-            <Send className="h-4 w-4" />
-            {posting
-              ? 'Posting...'
-              : postCooldownSeconds > 0
-                ? `Wait ${postCooldownSeconds}s`
-                : 'Post to Community'}
-          </button>
+          {postImages.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {postImages.map((image) => (
+                <div key={image.previewUrl} className="relative h-20 w-20 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800">
+                  <img src={image.previewUrl} alt={image.filename ?? 'Forum upload'} className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setPostImages((current) => current.filter((item) => item.previewUrl !== image.previewUrl))}
+                    className="absolute right-1 top-1 rounded bg-zinc-950/80 px-1.5 py-0.5 text-xs text-zinc-200 hover:bg-red-950"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-300 transition-colors hover:bg-zinc-700" title="Add photo">
+              <Plus className="h-5 w-5" />
+              <input type="file" accept="image/*" multiple className="hidden" onChange={(event) => void handleImageUpload(event.target.files)} />
+            </label>
+            <button
+              type="button"
+              onClick={handleSubmitPost}
+              disabled={posting || postCooldownSeconds > 0 || !newPost.trim()}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+            >
+              <Send className="h-4 w-4" />
+              {posting
+                ? 'Posting...'
+                : postCooldownSeconds > 0
+                  ? `Wait ${postCooldownSeconds}s`
+                  : 'Post to Community'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -413,104 +522,222 @@ export default function PublicForum() {
           ))}
         </div>
 
-        <div className="space-y-4">
-          {filteredPosts.map((post) => {
-            const expanded = expandedPostId === post.id;
-
-            return (
-              <article
-                key={post.id}
-                className={`rounded-lg border p-5 ${
-                  post.aiFlag
-                    ? 'border-red-800 bg-red-950/20'
-                    : post.verified
-                      ? 'border-green-900/30 bg-green-950/10'
-                      : 'border-zinc-700 bg-zinc-800'
-                }`}
-              >
-                <div className="mb-3 flex items-start justify-between gap-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{post.author}</span>
-                    <span className="rounded bg-zinc-900 px-2 py-0.5 text-xs text-zinc-400">{post.category}</span>
-                    {post.verified && (
-                      <div className="flex items-center gap-1 rounded bg-green-950 px-2 py-0.5 text-xs text-green-400">
-                        <CheckCircle className="h-3 w-3" />
-                        <span>Official</span>
+        <div className="grid min-h-[560px] gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(420px,1.25fr)]">
+          <div className="space-y-3 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+            {filteredPosts.length === 0 && (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
+                No posts match this filter.
+              </div>
+            )}
+            {filteredPosts.map((post) => {
+              const selected = selectedPost?.id === post.id;
+              return (
+                <button
+                  key={post.id}
+                  type="button"
+                  onClick={() => setExpandedPostId(post.id)}
+                  className={`w-full rounded-lg border p-4 text-left transition-colors ${
+                    selected
+                      ? 'border-blue-600 bg-blue-950/30'
+                      : post.aiFlag
+                        ? 'border-red-900/70 bg-red-950/20 hover:bg-red-950/30'
+                        : 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800'
+                  }`}
+                >
+                  <div className="mb-2 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-zinc-100">{post.author}</span>
+                        {post.verified && <CheckCircle className="h-3.5 w-3.5 text-green-400" />}
+                        {post.aiFlag && <AlertTriangle className="h-3.5 w-3.5 text-red-400" />}
                       </div>
-                    )}
-                    {post.aiFlag && (
-                      <div className="flex items-center gap-1 rounded bg-red-950 px-2 py-0.5 text-xs text-red-400">
-                        <AlertTriangle className="h-3 w-3" />
-                        <span>Flagged - under review</span>
-                      </div>
-                    )}
-                  </div>
-                  <span className="shrink-0 text-xs text-zinc-500">{relativeTime(post.createdAt)}</span>
-                </div>
-
-                <p className={`mb-3 text-sm ${post.aiFlag ? 'blur-sm select-none' : 'text-zinc-300'}`}>
-                  {post.content}
-                </p>
-
-                {post.aiFlag && (
-                  <div className="mb-3 rounded border border-red-800 bg-red-950/30 p-3">
-                    <div className="flex items-start gap-2 text-xs text-red-400">
-                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                      <div>
-                        <strong>{post.moderationState === 'hidden' ? 'Content hidden:' : 'Content flagged:'}</strong>{' '}
-                        {post.moderationState === 'hidden'
-                          ? 'this post was removed from normal view while moderators investigate it.'
-                          : 'this post is hidden while a moderator verifies the claim.'}
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                        <span className="rounded bg-zinc-800 px-2 py-0.5">{post.category}</span>
+                        <span>{relativeTime(post.createdAt)}</span>
                       </div>
                     </div>
+                    <div className="flex shrink-0 items-center gap-1 rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-400">
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      {post.replies.length}
+                    </div>
                   </div>
-                )}
-
-                <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-500">
-                  <button type="button" onClick={() => handleLike(post.id)} className="flex items-center gap-1 transition-colors hover:text-blue-400">
-                    <ThumbsUp className="h-4 w-4" />
-                    <span>{post.likes}</span>
-                  </button>
-                  <button type="button" onClick={() => setExpandedPostId(expanded ? null : post.id)} className="flex items-center gap-1 transition-colors hover:text-blue-400">
-                    <Reply className="h-4 w-4" />
-                    <span>{post.replies.length} replies</span>
-                  </button>
-                  {!post.verified && (
-                    <button type="button" onClick={() => handleReport(post.id)} className="flex items-center gap-1 transition-colors hover:text-red-400">
-                      <Flag className="h-4 w-4" />
-                      <span>Report</span>
-                    </button>
+                  <p className={`line-clamp-2 text-sm leading-6 ${post.aiFlag ? 'text-red-200/70 blur-[2px]' : 'text-zinc-300'}`}>
+                    {post.content}
+                  </p>
+                  {post.images?.[0] && (
+                    <div className="mt-3 h-20 w-20 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800">
+                      <img src={post.images[0].previewUrl} alt={post.images[0].filename ?? 'Forum attachment'} className="h-full w-full object-cover" />
+                    </div>
                   )}
+                  <div className="mt-3 flex items-center gap-3 text-xs text-zinc-500">
+                    <span className={`inline-flex items-center gap-1 ${likedPostIds.has(post.id) ? 'text-blue-400' : ''}`}><ThumbsUp className="h-3.5 w-3.5" />{post.likes}</span>
+                    <span className={`inline-flex items-center gap-1 ${dislikedPostIds.has(post.id) ? 'text-red-400' : ''}`}><ThumbsDown className="h-3.5 w-3.5" />{post.dislikes ?? 0}</span>
+                    {post.reports ? <span className="inline-flex items-center gap-1 text-red-400"><Flag className="h-3.5 w-3.5" />{post.reports}</span> : null}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <aside className="min-h-[560px] rounded-lg border border-zinc-800 bg-zinc-950">
+            {selectedPost ? (
+              <div className="flex h-full flex-col">
+                <div className="border-b border-zinc-800 px-5 py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">{selectedPost.category}</span>
+                        {selectedPost.verified && (
+                          <span className="inline-flex items-center gap-1 rounded bg-green-950 px-2 py-0.5 text-xs text-green-400">
+                            <CheckCircle className="h-3 w-3" />
+                            Official
+                          </span>
+                        )}
+                        {selectedPost.aiFlag && (
+                          <span className="inline-flex items-center gap-1 rounded bg-red-950 px-2 py-0.5 text-xs text-red-400">
+                            <AlertTriangle className="h-3 w-3" />
+                            Under review
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="text-xl font-semibold leading-7">{threadTitle(selectedPost.content)}</h3>
+                      <div className="mt-1 text-xs text-zinc-500">Started by {selectedPost.author} - {relativeTime(selectedPost.createdAt)}</div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleLike(selectedPost.id)}
+                        disabled={likedPostIds.has(selectedPost.id)}
+                        className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-blue-400 disabled:cursor-not-allowed disabled:text-blue-500"
+                        aria-label="Like post"
+                      >
+                        <ThumbsUp className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDislike(selectedPost.id)}
+                        disabled={dislikedPostIds.has(selectedPost.id)}
+                        className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-red-400 disabled:cursor-not-allowed disabled:text-red-500"
+                        aria-label="Dislike post"
+                      >
+                        <ThumbsDown className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedPostId(null)}
+                        className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+                        aria-label="Close discussion"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                      {!selectedPost.verified && (
+                        <button type="button" onClick={() => handleReport(selectedPost.id)} className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-red-400" aria-label="Report post">
+                          <Flag className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                {expanded && (
-                  <div className="mt-4 space-y-3 border-t border-zinc-700 pt-4">
-                    {post.replies.map((reply) => (
+                <div className="flex-1 space-y-4 overflow-y-auto p-5">
+                  <div className={`rounded-lg border p-4 ${selectedPost.aiFlag ? 'border-red-900/70 bg-red-950/20' : 'border-zinc-800 bg-zinc-900'}`}>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <span className="font-medium">{selectedPost.author}</span>
+                      <span className="text-xs text-zinc-600">{new Date(selectedPost.createdAt).toLocaleString()}</span>
+                    </div>
+                    <p className={`whitespace-pre-wrap text-sm leading-6 ${selectedPost.aiFlag ? 'select-none blur-sm' : 'text-zinc-300'}`}>
+                      {selectedPost.content}
+                    </p>
+                  </div>
+
+                  {selectedPost.images?.length ? (
+                    <div className="rounded-lg border border-zinc-800 bg-zinc-900">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedImageOpen((open) => !open)}
+                        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-zinc-300 hover:bg-zinc-800"
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <ImageIcon className="h-4 w-4 text-blue-400" />
+                          {selectedPost.images.length} photo{selectedPost.images.length > 1 ? 's' : ''}
+                        </span>
+                        <span className="text-xs text-zinc-500">{selectedImageOpen ? 'Collapse' : 'Open'}</span>
+                      </button>
+                      {selectedImageOpen && (
+                        <div className="grid gap-3 border-t border-zinc-800 p-3 sm:grid-cols-2">
+                          {selectedPost.images.map((image) => (
+                            <a key={image.id ?? image.previewUrl} href={image.previewUrl} target="_blank" rel="noreferrer" className="overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950">
+                              <img src={image.previewUrl} alt={image.filename ?? 'Forum attachment'} className="max-h-72 w-full object-contain" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {selectedPost.aiFlag && (
+                    <div className="rounded-lg border border-red-800 bg-red-950/30 p-3">
+                      <div className="flex items-start gap-2 text-xs text-red-400">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <div>
+                          <strong>{selectedPost.moderationState === 'hidden' ? 'Content hidden:' : 'Content flagged:'}</strong>{' '}
+                          {selectedPost.moderationState === 'hidden'
+                            ? 'this post was removed from normal view while moderators investigate it.'
+                            : 'this post is hidden while a moderator verifies the claim.'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3 border-y border-zinc-800 py-3 text-xs text-zinc-500">
+                    <span>{selectedPost.likes} likes</span>
+                    <span>{selectedPost.dislikes ?? 0} dislikes</span>
+                    <span>{selectedPost.replies.length} replies</span>
+                    {selectedPost.reports ? <span className="text-red-400">{selectedPost.reports} reports</span> : null}
+                  </div>
+
+                  <div className="space-y-3">
+                    {selectedPost.replies.length === 0 && (
+                      <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 text-sm text-zinc-500">
+                        No replies yet.
+                      </div>
+                    )}
+                    {selectedPost.replies.map((reply) => (
                       <div key={reply.id} className={`rounded-lg p-3 ${reply.official ? 'border border-blue-800 bg-blue-950/30' : 'bg-zinc-900/70'}`}>
                         <div className="mb-1 flex items-center justify-between gap-3">
                           <span className={`text-sm font-medium ${reply.official ? 'text-blue-300' : ''}`}>{reply.author}</span>
                           <span className="text-xs text-zinc-600">{relativeTime(reply.createdAt)}</span>
                         </div>
-                        <p className="text-sm text-zinc-300">{reply.content}</p>
+                        <p className="text-sm leading-6 text-zinc-300">{reply.content}</p>
                       </div>
                     ))}
-
-                    <div className="flex gap-2">
-                      <input
-                        value={replyText}
-                        onChange={(event) => setReplyText(event.target.value)}
-                        placeholder="Write a reply..."
-                        className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
-                      />
-                      <button type="button" onClick={() => handleReply(post.id)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm transition-colors hover:bg-blue-700">
-                        Reply
-                      </button>
-                    </div>
                   </div>
-                )}
-              </article>
-            );
-          })}
+                </div>
+
+                <div className="border-t border-zinc-800 p-4">
+                  <div className="flex gap-2">
+                    <input
+                      value={replyText}
+                      onChange={(event) => setReplyText(event.target.value)}
+                      placeholder={`Reply to ${selectedPost.author}...`}
+                      className="flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    />
+                    <button type="button" onClick={() => handleReply(selectedPost.id)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm transition-colors hover:bg-blue-700">
+                      Reply
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex h-full min-h-[560px] items-center justify-center p-8 text-center">
+                <div>
+                  <MessageSquare className="mx-auto mb-3 h-8 w-8 text-zinc-600" />
+                  <div className="font-medium text-zinc-300">Select a post</div>
+                  <div className="mt-1 text-sm text-zinc-500">Click a community update to open the discussion thread here.</div>
+                </div>
+              </div>
+            )}
+          </aside>
         </div>
       </div>
     </div>
@@ -545,9 +772,33 @@ function loadLocalPosts() {
     const stored = localStorage.getItem(storageKey);
     if (!stored) return seedPosts;
     const parsed = JSON.parse(stored) as ForumPost[];
-    return Array.isArray(parsed) ? parsed : seedPosts;
+    return Array.isArray(parsed) ? sanitizeForumPosts(parsed) : seedPosts;
   } catch {
     return seedPosts;
+  }
+}
+
+function sanitizeForumPosts(posts: ForumPost[]) {
+  return posts
+    .filter((post) => post.author !== 'MOH Official')
+    .map((post) => ({ ...post, dislikes: post.dislikes ?? 0, images: post.images ?? [] }));
+}
+
+function loadLikedPostIds() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(likedPostsStorageKey) ?? '[]') as unknown;
+    return new Set(Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function loadDislikedPostIds() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(dislikedPostsStorageKey) ?? '[]') as unknown;
+    return new Set(Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []);
+  } catch {
+    return new Set<string>();
   }
 }
 
@@ -573,7 +824,7 @@ function updateLocalPosts(
   });
 }
 
-function createLocalPost(input: { author: string; content: string; category: string }): ForumPost {
+function createLocalPost(input: { author: string; content: string; category: string; images?: ForumImage[] }): ForumPost {
   return {
     id: crypto.randomUUID(),
     author: input.author,
@@ -582,9 +833,24 @@ function createLocalPost(input: { author: string; content: string; category: str
     verified: false,
     aiFlag: shouldFlag(input.content),
     likes: 0,
+    dislikes: 0,
     replies: [],
+    images: input.images ?? [],
     category: input.category,
   };
+}
+
+function readForumImage(file: File): Promise<ForumImage> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({
+      filename: file.name,
+      mimeType: file.type,
+      previewUrl: String(reader.result),
+    });
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 function shouldFlag(content: string) {
@@ -601,6 +867,11 @@ function relativeTime(timestamp: string) {
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours} hr ago`;
   return `${Math.round(hours / 24)} days ago`;
+}
+
+function threadTitle(content: string) {
+  const firstLine = content.trim().split(/\r?\n/)[0] ?? 'Community discussion';
+  return firstLine.length > 72 ? `${firstLine.slice(0, 69)}...` : firstLine;
 }
 
 function statusClass(tone: 'success' | 'warning' | 'error') {

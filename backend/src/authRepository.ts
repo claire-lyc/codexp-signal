@@ -32,7 +32,7 @@ export type NotificationPreferences = {
 };
 
 export async function createPasswordUser(input: {
-  email: string;
+  email?: string;
   password: string;
   displayName?: string;
   username?: string;
@@ -41,7 +41,15 @@ export async function createPasswordUser(input: {
   role?: string;
   agencyCode?: string;
 }) {
-  const email = normalizeEmail(input.email);
+  const username = input.username?.trim() || null;
+  const email = input.email
+    ? normalizeEmail(input.email)
+    : username
+    ? `${username.toLowerCase().replace(/\s+/g, '-')}.citizen@signal.local`
+    : null;
+  if (!email) {
+    throw new Error('Email or username is required');
+  }
   const passwordHash = await bcrypt.hash(input.password, 12);
 
   const client = await pool.connect();
@@ -53,7 +61,7 @@ export async function createPasswordUser(input: {
         VALUES ($1, $2, $3, $4, $5)
         RETURNING id, actor_type, display_name, email, username, tags, created_at, updated_at
       `,
-      [input.actorType, input.displayName ?? null, email, input.username ?? null, input.tags ?? []],
+      [input.actorType, input.displayName ?? username ?? null, email, username, input.tags ?? []],
     );
     const user = userResult.rows[0];
 
