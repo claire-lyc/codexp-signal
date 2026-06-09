@@ -115,6 +115,11 @@ type ImageRow = {
   created_at: string;
 };
 
+type ImageSummaryRow = {
+  report_id: string;
+  image_count: number;
+};
+
 type PingRow = {
   report_id: string;
   agency_code: string;
@@ -220,7 +225,7 @@ export async function listTickets(filters: {
     values,
   );
 
-  return hydrateTickets(reports);
+  return hydrateTickets(reports, { includeImages: false });
 }
 
 export async function getTicketByPublicId(publicReportId: string) {
@@ -265,7 +270,7 @@ export async function getTicketByPublicId(publicReportId: string) {
     [publicReportId],
   );
 
-  const [ticket] = await hydrateTickets(reports);
+  const [ticket] = await hydrateTickets(reports, { includeImages: true });
   return ticket ?? null;
 }
 
@@ -311,7 +316,7 @@ export async function listTicketsForReporter(userId: string) {
     [userId],
   );
 
-  return hydrateTickets(reports);
+  return hydrateTickets(reports, { includeImages: false });
 }
 
 export async function createCitizenTicket(input: {
@@ -383,27 +388,6 @@ export async function createCitizenTicket(input: {
     );
 
     const reportId = reportResult.rows[0].id;
-    const groupingCandidate = await findGroupingCandidate(client, {
-      id: reportId,
-      public_report_id: publicReportId,
-      crisis_type: dbCrisisType,
-      description: input.message.trim(),
-      title: input.title?.trim() || null,
-      location_text: input.location?.trim() || null,
-      assigned_group_id: null,
-      created_at: new Date().toISOString(),
-    });
-
-    if (groupingCandidate) {
-      await client.query(
-        `
-          UPDATE citizen.reports
-          SET grouped_report_id = $2, status = 'grouped'
-          WHERE id = $1
-        `,
-        [reportId, groupingCandidate.assigned_group_id ?? groupingCandidate.id],
-      );
-    }
 
     await client.query(
       `
@@ -457,6 +441,8 @@ export async function updateTicketStatus(id: string, status: TicketStatus) {
       UPDATE citizen.reports
       SET
         status = $2::citizen.report_status,
+        subject_tag_id = CASE WHEN $2::citizen.report_status = 'resolved'::citizen.report_status THEN NULL ELSE subject_tag_id END,
+        grouped_report_id = CASE WHEN $2::citizen.report_status = 'resolved'::citizen.report_status THEN NULL ELSE grouped_report_id END,
         updated_at = now(),
         chat_enabled = CASE WHEN $2::citizen.report_status = 'resolved'::citizen.report_status THEN false ELSE true END,
         chat_closed_at = CASE WHEN $2::citizen.report_status = 'resolved'::citizen.report_status THEN now() ELSE NULL END
@@ -808,11 +794,12 @@ export async function pingTicketAgencies(id: string, agencyCodes: string[], ping
   };
 }
 
-async function hydrateTickets(reports: ReportRow[]) {
+async function hydrateTickets(reports: ReportRow[], options: { includeImages?: boolean } = {}) {
   if (!reports.length) return [];
 
   const reportIds = reports.map((report) => report.id);
-  const [comments, images, pings, childGroups, subjectCategories, subjectPeers] = await Promise.all([
+  const includeImages = options.includeImages ?? false;
+  const [comments, images, imageSummaries, pings, childGroups, subjectCategories, subjectPeers] = await Promise.all([
     query<CommentRow>(
       `
         SELECT
@@ -830,12 +817,23 @@ async function hydrateTickets(reports: ReportRow[]) {
       `,
       [reportIds],
     ),
-    query<ImageRow>(
+    includeImages
+      ? query<ImageRow>(
+          `
+            SELECT id, report_id, original_filename, mime_type, byte_size, storage_key, processed_metadata, processing_status, created_at
+            FROM citizen.report_images
+            WHERE report_id = ANY($1::uuid[])
+            ORDER BY created_at ASC
+          `,
+          [reportIds],
+        )
+      : Promise.resolve([] as ImageRow[]),
+    query<ImageSummaryRow>(
       `
-        SELECT id, report_id, original_filename, mime_type, byte_size, storage_key, processed_metadata, processing_status, created_at
+        SELECT report_id, COUNT(*)::int AS image_count
         FROM citizen.report_images
         WHERE report_id = ANY($1::uuid[])
-        ORDER BY created_at ASC
+        GROUP BY report_id
       `,
       [reportIds],
     ),
@@ -889,16 +887,12 @@ async function hydrateTickets(reports: ReportRow[]) {
   ]);
 
   return reports.map((report) => {
-    const autoRelatedTickets = reports
-      .filter((candidate) => candidate.public_report_id !== report.public_report_id)
-      .filter((candidate) => reportSimilarityScore(report, candidate) >= 7)
-      .map((candidate) => candidate.public_report_id);
     const ticketImages = images.filter((image) => image.report_id === report.id);
+    const imageCount = imageSummaries.find((image) => image.report_id === report.id)?.image_count ?? 0;
     const relatedTickets = [
       ...(report.grouped_public_report_id ? [report.grouped_public_report_id] : []),
       ...childGroups.filter((item) => item.grouped_report_id === report.id).map((item) => item.public_report_id),
       ...childGroups.filter((item) => item.id === report.grouped_report_id).map((item) => item.public_report_id),
-      ...autoRelatedTickets,
       ...subjectPeers
         .filter((item) => item.subject_tag_id && item.subject_tag_id === report.subject_tag_id)
         .map((item) => item.public_report_id),
@@ -914,7 +908,7 @@ async function hydrateTickets(reports: ReportRow[]) {
       status: fromDbStatus(report.status),
       assignedAgency: report.assigned_agency_code ?? agencyFor(report.crisis_type).code,
       urgency: report.severity,
-      hasImage: ticketImages.length > 0,
+      hasImage: includeImages ? ticketImages.length > 0 : imageCount > 0,
       relatedTickets,
       comments: comments
         .filter((comment) => comment.report_id === report.id)

@@ -21,6 +21,7 @@
     "db:seed:profiles": "tsx src/seedGovProfiles.ts",
     "db:seed:json": "tsx src/seedDashboardFromJson.ts",
     "db:seed:tickets": "tsx src/seedTicketsFromJson.ts",
+    "db:backfill:ticket-subjects": "tsx src/backfillDemoTicketSubjectTags.ts",
     "db:init": "npm run db:up && npm run db:wait && npm run db:schema && npm run db:seed:json",
     "db:init:remote": "npm run db:schema:node && npm run db:seed:json"
   },

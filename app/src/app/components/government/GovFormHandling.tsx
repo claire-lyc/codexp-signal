@@ -115,6 +115,15 @@ const statusLabels: Record<TicketStatus, string> = {
   resolved: 'Resolved',
 };
 
+function seedSubjectTag(label: string, categories: string[]): SubjectTag {
+  return {
+    id: `seed-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+    label,
+    description: null,
+    categories,
+  };
+}
+
 const seedTickets: Ticket[] = [
   {
     id: 'TKT-0041',
@@ -128,7 +137,8 @@ const seedTickets: Ticket[] = [
     assignedAgency: 'Enterprise SG',
     urgency: 'high',
     hasImage: false,
-    relatedTickets: ['TKT-0038', 'TKT-0039'],
+    subjectTag: seedSubjectTag('Medicine shortage', ['supply']),
+    relatedTickets: ['TKT-0039'],
     comments: [commentSeed('internal', 'Enterprise SG should verify retail stock and supplier ETA.', 7)],
     pingedAgencies: [],
   },
@@ -143,6 +153,7 @@ const seedTickets: Ticket[] = [
     assignedAgency: 'PUB',
     urgency: 'critical',
     hasImage: true,
+    subjectTag: seedSubjectTag('Orchard Road flooding', ['flood', 'transport']),
     relatedTickets: ['TKT-0036'],
     comments: [commentSeed('internal', 'PUB ops notified. Check whether LTA traffic diversion is needed.', 11)],
     pingedAgencies: ['PUB'],
@@ -158,6 +169,7 @@ const seedTickets: Ticket[] = [
     assignedAgency: 'Enterprise SG',
     urgency: 'medium',
     hasImage: false,
+    subjectTag: seedSubjectTag('Medicine shortage', ['supply']),
     relatedTickets: ['TKT-0041'],
     comments: [],
     pingedAgencies: [],
@@ -173,6 +185,7 @@ const seedTickets: Ticket[] = [
     assignedAgency: 'MOH',
     urgency: 'high',
     hasImage: false,
+    subjectTag: seedSubjectTag('Dengue symptoms', ['health']),
     relatedTickets: [],
     comments: [],
     pingedAgencies: [],
@@ -203,6 +216,7 @@ const seedTickets: Ticket[] = [
     assignedAgency: 'PUB',
     urgency: 'critical',
     hasImage: true,
+    subjectTag: seedSubjectTag('Orchard Road flooding', ['flood', 'transport']),
     relatedTickets: ['TKT-0040'],
     comments: [],
     pingedAgencies: ['PUB'],
@@ -378,12 +392,23 @@ export default function GovFormHandling() {
         (current) =>
           current.map((item) =>
             item.id === ticket.id
-              ? { ...item, status, comments: [...item.comments, createComment('internal', `Status changed to ${status}.`)] }
+              ? {
+                  ...item,
+                  status,
+                  subjectTag: status === 'resolved' ? null : item.subjectTag,
+                  relatedTickets: status === 'resolved' ? [] : item.relatedTickets,
+                  comments: [...item.comments, createComment('internal', `Status changed to ${status}.`)],
+                }
               : item,
           ),
         setTickets,
       );
-      updatedTicket = { ...ticket, status };
+      updatedTicket = {
+        ...ticket,
+        status,
+        subjectTag: status === 'resolved' ? null : ticket.subjectTag,
+        relatedTickets: status === 'resolved' ? [] : ticket.relatedTickets,
+      };
     }
     if (updatedTicket && isResolved(updatedTicket) && queueView === 'active') {
       setSelectedTicketId((current) => {
@@ -761,7 +786,7 @@ export default function GovFormHandling() {
               </div>
 
               <div className="flex-1 flex flex-col overflow-hidden">
-                {!selectedTicket.startedWorkAt && !selectedTicketResolved && (
+                {selectedTicket.status === 'open' && !selectedTicket.startedWorkAt && !selectedTicketResolved && (
                   <div className="border-b border-blue-900/60 bg-blue-950/30 px-5 py-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
@@ -940,8 +965,13 @@ function TicketListItem({
       className={`w-full text-left p-3 border-b border-zinc-800 hover:bg-zinc-800/60 transition-colors ${selected ? 'bg-zinc-800' : ''}`}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
-        <UrgencyBadge urgency={ticket.urgency} compact />
-        <StatusBadge status={ticket.status} />
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          {ticket.status !== 'resolved' && <UrgencyBadge urgency={ticket.urgency} compact />}
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          {ticket.status !== 'resolved' && ticket.status !== 'grouped' && ticket.subjectTag && <SubjectGroupBadge label={ticket.subjectTag.label} />}
+          <StatusBadge status={ticket.status} label={ticket.status === 'grouped' && ticket.subjectTag ? compactSubjectLabel(ticket.subjectTag.label) : undefined} />
+        </div>
       </div>
       <div className="text-xs font-mono text-zinc-500">{ticket.id}</div>
       <div className="mt-1 text-sm font-medium line-clamp-2">{ticket.message}</div>
@@ -988,7 +1018,7 @@ function TicketDetailHeader({
         {ticket.relatedTickets.length > 0 && (
           <span className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-purple-950 border border-purple-800 text-purple-400 rounded-lg">
             <Layers className="w-3 h-3" />
-            Grouped ({ticket.relatedTickets.length})
+            {compactSubjectLabel(ticket.subjectTag?.label ?? 'Grouped')}
           </span>
         )}
         <button
@@ -1028,8 +1058,20 @@ function ActionMenuButton({ icon, label, danger = false, onClick }: { icon: Reac
   );
 }
 
-function StatusBadge({ status }: { status: TicketStatus }) {
-  return <span className={`inline-flex h-6 shrink-0 items-center rounded-md border px-2 text-xs font-medium ${statusColors[status]}`}>{statusLabels[status]}</span>;
+function StatusBadge({ status, label }: { status: TicketStatus; label?: string }) {
+  return <span className={`inline-flex h-6 shrink-0 items-center rounded-md border px-2 text-xs font-medium ${statusColors[status]}`}>{label ?? statusLabels[status]}</span>;
+}
+
+function SubjectGroupBadge({ label }: { label: string }) {
+  return (
+    <span className={`inline-flex h-6 shrink-0 items-center rounded-md border px-2 text-xs font-medium ${statusColors.grouped}`}>
+      {compactSubjectLabel(label)}
+    </span>
+  );
+}
+
+function compactSubjectLabel(label: string) {
+  return label.length >= 10 ? `${label.slice(0, 7)}...` : label;
 }
 
 function UrgencyBadge({ urgency, compact = false }: { urgency: TicketUrgency; compact?: boolean }) {

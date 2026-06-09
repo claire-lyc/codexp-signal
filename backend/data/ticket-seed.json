@@ -14,7 +14,7 @@
       "assignedAgency": "Enterprise SG",
       "urgency": "high",
       "hasImage": false,
-      "relatedTickets": ["TKT-0038", "TKT-0039"],
+      "relatedTickets": ["TKT-0039"],
       "comments": [
         {
           "author": "GOV-HANDLER-001",
@@ -91,7 +91,7 @@
       "location": "Jurong East MRT, West",
       "crisisType": "Infrastructure",
       "reportType": "transport",
-      "subjectTag": "MRT disruption",
+      "subjectTag": null,
       "status": "resolved",
       "assignedAgency": "LTA",
       "urgency": "medium",
