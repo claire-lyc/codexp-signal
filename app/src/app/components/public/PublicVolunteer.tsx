@@ -682,8 +682,8 @@ function DashboardSummary({
           <div className="mt-1 text-xl font-bold">{offers}</div>
         </div>
         <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
-          <div className="text-xs text-zinc-500">Assigned / Completed</div>
-          <div className="mt-1 text-xl font-bold">{upcoming} / {completed}</div>
+          <div className="text-xs text-zinc-500">Completed / Assigned</div>
+          <div className="mt-1 text-xl font-bold">{completed} / {upcoming}</div>
         </div>
       </div>
     </div>
