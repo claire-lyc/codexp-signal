@@ -7,6 +7,7 @@ import { AlertCircle, MapPin, Activity, Cloud, Package, Shield, ChevronRight, Fi
 import { Link } from 'react-router';
 import SingaporeRegionMap, { type MapMarker } from '../SingaporeRegionMap';
 import { useApi } from '../../lib/api';
+import { resolveAlertLocations } from '../../lib/singaporeLocations';
 
 const iconMap = { Activity, Cloud, Package, Shield };
 type CrisisCard = {
@@ -59,14 +60,6 @@ const trendData: Array<{ date: string; incidents: number }> = [];
 const filterTypes = ['All', 'Health', 'Weather', 'Supply', 'Infrastructure', 'Cybersecurity'];
 const filterSeverities = ['All', 'High', 'Medium', 'Low'];
 const filterRegions = ['All', 'North', 'South', 'East', 'West', 'Central', 'Nationwide'];
-const regionCoordinates: Record<string, { latitude: number; longitude: number }> = {
-  Nationwide: { latitude: 1.3521, longitude: 103.8198 },
-  North: { latitude: 1.4291, longitude: 103.8354 },
-  South: { latitude: 1.276, longitude: 103.8457 },
-  East: { latitude: 1.3529, longitude: 103.9441 },
-  West: { latitude: 1.3456, longitude: 103.7019 },
-  Central: { latitude: 1.3021, longitude: 103.8398 },
-};
 
 export default function GovOverview() {
   const { data, loading, error } = useApi<OverviewData>('/api/gov/overview');
@@ -115,23 +108,21 @@ export default function GovOverview() {
 
   const mapMarkers = useMemo<MapMarker[]>(() => {
     const baseAlerts = selectedAlertId ? filteredAlerts.filter((alert) => alert.id === selectedAlertId) : filteredAlerts;
-    return baseAlerts.map((alert) => {
-      const regionName = filterRegions.find((region) => alert.region?.includes(region) && region !== 'All') ?? 'Nationwide';
-      const coordinates = regionCoordinates[regionName] ?? regionCoordinates.Nationwide;
-      return {
-        id: String(alert.id),
-        name: alert.region || 'Nationwide',
-        latitude: coordinates.latitude,
-        longitude: coordinates.longitude,
+    return baseAlerts.flatMap((alert) =>
+      resolveAlertLocations(alert.region, alert.message).map((location, index) => ({
+        id: `${alert.id}-${index}`,
+        name: location.name,
+        latitude: location.latitude,
+        longitude: location.longitude,
         value: alert.severity.toUpperCase(),
-        detail: alert.message,
+        detail: `${alert.type}: ${alert.message}`,
         severity: alert.severity as 'high' | 'medium' | 'low',
-      };
-    });
+      })),
+    );
   }, [filteredAlerts, selectedAlertId]);
 
   const focusAlertOnMap = (alert: (typeof filteredAlerts)[number]) => {
-    setSelectedAlertId(alert.id);
+    setSelectedAlertId((current) => (current === alert.id ? null : alert.id));
     mapSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
@@ -161,13 +152,13 @@ export default function GovOverview() {
               <Link
                 key={card.id}
                 to={card.path}
-                className="group relative min-h-[184px] w-80 flex-shrink-0 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 p-4 pr-[156px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:border-zinc-700 hover:bg-zinc-800/80"
+                className="group relative min-h-[184px] w-[21rem] flex-shrink-0 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:border-zinc-700 hover:bg-zinc-800/80"
               >
                 <div className="absolute inset-x-0 bottom-0 h-px bg-zinc-700/60" />
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <span className="flex min-w-0 items-center gap-2 text-xs text-zinc-500">
+                  <span className="flex items-start gap-2 text-xs text-zinc-500">
                     <Icon className="h-4 w-4 flex-shrink-0 text-zinc-500" />
-                    <span className="truncate">{card.type}</span>
+                    <span className="leading-4 text-zinc-400">{card.type}</span>
                     <ChevronRight className="h-3 w-3 text-zinc-600 transition-transform group-hover:translate-x-0.5" />
                   </span>
                   <span className={`rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${severityBadge[card.severity]}`}>
@@ -175,38 +166,31 @@ export default function GovOverview() {
                   </span>
                 </div>
 
-                <div className="flex min-h-[118px] min-w-0 flex-col justify-center">
-                  <div className="mb-3 truncate text-sm font-semibold text-zinc-100">
-                    {card.label}
-                  </div>
-
-                  <div className="text-3xl font-bold tracking-tight text-zinc-50">
-                    {primaryStat?.value ?? '--'}
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-snug text-zinc-500">
-                    <span>{primaryStat?.label ?? 'Current metric'}</span>
-                    {primaryStat?.delta && (
-                      <span className="text-zinc-400">{primaryStat.delta}</span>
-                    )}
-                  </div>
-
-                  {secondaryStat && (
-                    <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-snug text-zinc-500">
-                      <span>{secondaryStat.label}</span>
-                      <span className="font-semibold text-zinc-200">
-                        {secondaryStat.value}
-                      </span>
-                      {secondaryStat.delta && <span>{secondaryStat.delta}</span>}
+                <div className="grid min-h-[118px] grid-cols-[minmax(0,1fr)_124px] gap-4">
+                  <div className="min-w-0">
+                    <div className="mb-3 text-sm font-semibold leading-5 text-zinc-100">
+                      {card.label}
                     </div>
-                  )}
-                </div>
-
-                <div className="absolute right-4 top-1/2 flex h-[94px] w-[124px] -translate-y-1/2 items-center justify-center rounded-lg bg-zinc-950/35 px-2 py-2">
-                  <MiniTrend
-                    color={severitySpark[card.severity] ?? '#34d399'}
-                    seed={String(card.id)}
-                  />
+                    <div className="mb-3 flex items-end gap-3">
+                      <div className="text-3xl font-bold tracking-tight text-zinc-50">
+                        {primaryStat?.value ?? '--'}
+                      </div>
+                      {primaryStat?.delta ? <span className="pb-1 text-xs font-medium text-zinc-400">{primaryStat.delta}</span> : null}
+                    </div>
+                    <div className="text-xs leading-5 text-zinc-500">{primaryStat?.label ?? 'Current metric'}</div>
+                    {secondaryStat ? (
+                      <div className="mt-1 text-xs leading-5 text-zinc-500">
+                        {secondaryStat.label}: <span className="font-semibold text-zinc-200">{secondaryStat.value}</span>
+                        {secondaryStat.delta ? <span className="ml-2 text-zinc-400">{secondaryStat.delta}</span> : null}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="flex h-[94px] w-[124px] items-center justify-center self-center rounded-lg bg-zinc-950/35 px-2 py-2">
+                    <MiniTrend
+                      color={severitySpark[card.severity] ?? '#34d399'}
+                      seed={String(card.id)}
+                    />
+                  </div>
                 </div>
               </Link>
             );
@@ -335,7 +319,7 @@ export default function GovOverview() {
                     : alert.severity === 'medium'
                     ? 'bg-yellow-950/30 border-yellow-800'
                     : 'bg-blue-950/30 border-blue-800'
-                } ${selectedAlertId === alert.id ? 'ring-1 ring-white/60' : ''} w-full text-left transition-colors hover:bg-zinc-800/60`}
+                } ${selectedAlertId === alert.id ? 'border-white/60 bg-zinc-800/85 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.28)]' : ''} w-full text-left transition-colors hover:bg-zinc-800/60`}
               >
                 <div className="flex items-start gap-2">
                   <AlertCircle

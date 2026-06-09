@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router';
-import { apiUrl } from '../../lib/api';
-import { authHeaders, clearAuthTokens, hasAuthToken } from '../../lib/auth';
+import { fetchWithAuth } from '../../lib/api';
+import { hasAuthToken } from '../../lib/auth';
 
 type AuthState = 'checking' | 'allowed' | 'denied';
 
@@ -17,7 +17,7 @@ export default function RequireAuth() {
 
     let cancelled = false;
 
-    fetch(apiUrl('/api/auth/me'), { headers: authHeaders() })
+    fetchWithAuth('/api/auth/me')
       .then((response) => {
         if (!response.ok) throw new Error('Unauthorized');
         return response.json() as Promise<{ user: { actorType?: string | null } | null }>;
@@ -32,7 +32,6 @@ export default function RequireAuth() {
         if (!cancelled) setState('allowed');
       })
       .catch(() => {
-        clearAuthTokens();
         if (!cancelled) setState('denied');
       });
 

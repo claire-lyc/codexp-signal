@@ -1,9 +1,7 @@
 // GET /api/citizen/alerts — linked to Government Broadcast Centre
 import { CheckCircle, AlertTriangle, Bell, Shield, ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useApi } from '../../lib/api';
-import { apiUrl } from '../../lib/api';
-import { authHeaders } from '../../lib/auth';
+import { fetchWithAuth, useApi } from '../../lib/api';
 
 type Incident = {
   id: string;
@@ -69,7 +67,7 @@ export default function PublicAlerts() {
   const resolvedBroadcasts = broadcasts.filter((item) => item.status === 'resolved');
 
   useEffect(() => {
-    fetch(apiUrl('/api/citizen/broadcasts'), { headers: authHeaders() })
+    fetchWithAuth('/api/citizen/broadcasts')
       .then((response) => {
         if (!response.ok) throw new Error('Broadcasts unavailable');
         return response.json() as Promise<{ items: BroadcastAlert[] }>;

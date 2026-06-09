@@ -4,8 +4,8 @@ import { AlertTriangle, MapPin, Activity, Shield, TrendingUp, Navigation } from 
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import SingaporeRegionMap, { type MapMarker } from '../SingaporeRegionMap';
-import { apiUrl, useApi } from '../../lib/api';
-import { authHeaders } from '../../lib/auth';
+import { fetchWithAuth, useApi } from '../../lib/api';
+import { resolveAlertLocations } from '../../lib/singaporeLocations';
 
 type PublicHomeData = {
   activeCrisisLabels: string[];
@@ -54,20 +54,11 @@ const statColours: Record<string, { bg: string; text: string }> = {
   green: { bg: 'bg-green-950', text: 'text-green-500' },
   blue: { bg: 'bg-blue-950', text: 'text-blue-500' },
 };
-const regionCoordinates: Record<string, { latitude: number; longitude: number }> = {
-  Nationwide: { latitude: 1.3521, longitude: 103.8198 },
-  North: { latitude: 1.4291, longitude: 103.8354 },
-  South: { latitude: 1.276, longitude: 103.8457 },
-  East: { latitude: 1.3529, longitude: 103.9441 },
-  West: { latitude: 1.3456, longitude: 103.7019 },
-  Central: { latitude: 1.3021, longitude: 103.8398 },
-  All: { latitude: 1.3521, longitude: 103.8198 },
-};
-
 export default function PublicHome() {
   const { data: publicHome, loading, error } = useApi<PublicHomeData>('/api/citizen/home');
   const { data: citizenAlerts } = useApi<{ items: LiveCitizenAlert[] }>('/api/citizen/alerts');
   const [broadcasts, setBroadcasts] = useState<BroadcastAlert[]>([]);
+  const [selectedAlertId, setSelectedAlertId] = useState<string | number | null>(null);
   const liveAlerts = (citizenAlerts?.items ?? [])
     .filter((alert) => alert.status !== 'resolved')
     .map(mapLiveAlertToHomeAlert);
@@ -79,26 +70,29 @@ export default function PublicHome() {
   const nearbyResources = publicHome?.nearbyResources ?? [];
   const updates = publicHome?.updates ?? [];
   const stats = publicHome?.stats ?? publicStats;
-  const mapMarkers = useMemo<MapMarker[]>(() => visibleAlerts.map((alert) => {
-    const regionName = Object.keys(regionCoordinates).find((region) => alert.region?.includes(region)) ?? 'Nationwide';
-    const coordinates = regionCoordinates[regionName] ?? regionCoordinates.Nationwide;
-    return {
-      id: String(alert.id),
-      name: alert.region || 'Nationwide',
-      latitude: coordinates.latitude,
-      longitude: coordinates.longitude,
-      value: `${alert.type} - ${alert.severity.toUpperCase()}`,
-      detail: alert.title ? `${alert.title}. ${alert.message}` : alert.message,
-      severity: alert.severity === 'critical' || alert.severity === 'high'
-        ? 'high'
-        : alert.severity === 'medium'
-          ? 'medium'
-          : 'low',
-    };
-  }), [visibleAlerts]);
+  const focusedAlerts = selectedAlertId ? visibleAlerts.filter((alert) => alert.id === selectedAlertId) : visibleAlerts;
+  const mapMarkers = useMemo<MapMarker[]>(
+    () =>
+      focusedAlerts.flatMap((alert) =>
+        resolveAlertLocations(alert.region, alert.title, alert.message).map((location, index) => ({
+          id: `${alert.id}-${index}`,
+          name: location.name,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          value: `${alert.type} - ${alert.severity.toUpperCase()}`,
+          detail: alert.title ? `${alert.title}. ${alert.message}` : alert.message,
+          severity: alert.severity === 'critical' || alert.severity === 'high'
+            ? 'high'
+            : alert.severity === 'medium'
+              ? 'medium'
+              : 'low',
+        })),
+      ),
+    [focusedAlerts],
+  );
 
   useEffect(() => {
-    fetch(apiUrl('/api/citizen/broadcasts'), { headers: authHeaders() })
+    fetchWithAuth('/api/citizen/broadcasts')
       .then((response) => {
         if (!response.ok) throw new Error('Broadcasts unavailable');
         return response.json() as Promise<{ items: BroadcastAlert[] }>;
@@ -106,6 +100,12 @@ export default function PublicHome() {
       .then((data) => setBroadcasts(data.items))
       .catch(() => setBroadcasts([]));
   }, []);
+
+  useEffect(() => {
+    if (selectedAlertId && !visibleAlerts.some((alert) => alert.id === selectedAlertId)) {
+      setSelectedAlertId(null);
+    }
+  }, [selectedAlertId, visibleAlerts]);
 
   return (
     <div className="space-y-8">
@@ -176,9 +176,11 @@ export default function PublicHome() {
                 </div>
               )}
               {visibleAlerts.map((alert) => (
-                <div
+                <button
                   key={alert.id}
-                  className={`p-4 rounded-lg border ${alert.severity === 'critical' || alert.severity === 'high' ? 'bg-red-950/30 border-red-800' : alert.severity === 'medium' ? 'bg-yellow-950/30 border-yellow-800' : 'bg-green-950/30 border-green-800'}`}
+                  type="button"
+                  onClick={() => setSelectedAlertId((current) => (current === alert.id ? null : alert.id))}
+                  className={`w-full rounded-lg border p-4 text-left transition-colors ${alert.severity === 'critical' || alert.severity === 'high' ? 'bg-red-950/30 border-red-800' : alert.severity === 'medium' ? 'bg-yellow-950/30 border-yellow-800' : 'bg-green-950/30 border-green-800'} ${selectedAlertId === alert.id ? 'border-white/60 bg-zinc-800/80 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.28)]' : 'hover:bg-zinc-800/60'}`}
                 >
                   <div className="flex items-start gap-3">
                     <AlertTriangle className={`w-5 h-5 mt-0.5 ${alert.severity === 'critical' || alert.severity === 'high' ? 'text-red-500' : alert.severity === 'medium' ? 'text-yellow-500' : 'text-green-500'}`} />
@@ -190,7 +192,7 @@ export default function PublicHome() {
                       <p className="text-sm text-zinc-300">{alert.message}</p>
                     </div>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
             <Link

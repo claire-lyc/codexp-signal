@@ -65,6 +65,17 @@ type ReportRow = {
   created_at: string;
 };
 
+type GroupingCandidate = {
+  id: string;
+  public_report_id: string;
+  crisis_type: DbCrisisType;
+  description: string;
+  title: string | null;
+  location_text: string | null;
+  assigned_group_id: string | null;
+  created_at: string;
+};
+
 type CommentRow = {
   id: string;
   report_id: string;
@@ -309,6 +320,28 @@ export async function createCitizenTicket(input: {
     );
 
     const reportId = reportResult.rows[0].id;
+    const groupingCandidate = await findGroupingCandidate(client, {
+      id: reportId,
+      public_report_id: publicReportId,
+      crisis_type: dbCrisisType,
+      description: input.message.trim(),
+      title: input.title?.trim() || null,
+      location_text: input.location?.trim() || null,
+      assigned_group_id: null,
+      created_at: new Date().toISOString(),
+    });
+
+    if (groupingCandidate) {
+      await client.query(
+        `
+          UPDATE citizen.reports
+          SET grouped_report_id = $2, status = 'grouped'
+          WHERE id = $1
+        `,
+        [reportId, groupingCandidate.assigned_group_id ?? groupingCandidate.id],
+      );
+    }
+
     await client.query(
       `
         INSERT INTO citizen.report_comments (report_id, author_user_id, author_type, visibility, body)
@@ -462,6 +495,90 @@ export async function deleteTicket(id: string) {
   }
 }
 
+async function findGroupingCandidate(
+  client: { query: typeof pool.query },
+  report: GroupingCandidate,
+) {
+  const rows = await client.query<GroupingCandidate>(
+    `
+      SELECT
+        id,
+        public_report_id,
+        crisis_type,
+        description,
+        title,
+        location_text,
+        grouped_report_id AS assigned_group_id,
+        created_at
+      FROM citizen.reports
+      WHERE id <> $1
+        AND crisis_type = $2
+        AND created_at >= now() - interval '7 days'
+        AND status <> 'resolved'
+      ORDER BY created_at DESC
+      LIMIT 25
+    `,
+    [report.id, report.crisis_type],
+  );
+
+  const scored = rows.rows
+    .map((candidate) => ({ candidate, score: reportSimilarityScore(report, candidate) }))
+    .filter((item) => item.score >= 7)
+    .sort((left, right) => right.score - left.score);
+
+  return scored[0]?.candidate ?? null;
+}
+
+function normalizedTokens(value: string | null | undefined) {
+  const stopwords = new Set(['the', 'and', 'with', 'from', 'this', 'that', 'have', 'into', 'near', 'area', 'road', 'station', 'today']);
+  return new Set(
+    (value ?? '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((token) => token.length > 3 && !stopwords.has(token)),
+  );
+}
+
+function normalizedLocation(value: string | null | undefined) {
+  return (value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\b(north|south|east|west|central)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function reportSimilarityScore(
+  left: Pick<GroupingCandidate, 'crisis_type' | 'description' | 'title' | 'location_text' | 'created_at'>,
+  right: Pick<GroupingCandidate, 'crisis_type' | 'description' | 'title' | 'location_text' | 'created_at'>,
+) {
+  let score = 0;
+  if (left.crisis_type === right.crisis_type) score += 3;
+
+  const leftLocation = normalizedLocation(left.location_text);
+  const rightLocation = normalizedLocation(right.location_text);
+  if (leftLocation && rightLocation) {
+    if (leftLocation === rightLocation) {
+      score += 3;
+    } else if (leftLocation.includes(rightLocation) || rightLocation.includes(leftLocation)) {
+      score += 2;
+    }
+  }
+
+  const leftTokens = normalizedTokens(`${left.title ?? ''} ${left.description}`);
+  const rightTokens = normalizedTokens(`${right.title ?? ''} ${right.description}`);
+  const sharedTokens = [...leftTokens].filter((token) => rightTokens.has(token)).length;
+  score += Math.min(sharedTokens, 4);
+
+  const leftTime = new Date(left.created_at).getTime();
+  const rightTime = new Date(right.created_at).getTime();
+  const ageHours = Math.abs(leftTime - rightTime) / (1000 * 60 * 60);
+  if (ageHours <= 48) score += 1;
+
+  return score;
+}
+
 export async function pingTicketAgencies(id: string, agencyCodes: string[], pingedByUserId?: string | null) {
   const ticket = await getReportInternalId(id);
   if (!ticket) return null;
@@ -559,11 +676,16 @@ async function hydrateTickets(reports: ReportRow[]) {
   ]);
 
   return reports.map((report) => {
+    const autoRelatedTickets = reports
+      .filter((candidate) => candidate.public_report_id !== report.public_report_id)
+      .filter((candidate) => reportSimilarityScore(report, candidate) >= 7)
+      .map((candidate) => candidate.public_report_id);
     const ticketImages = images.filter((image) => image.report_id === report.id);
     const relatedTickets = [
       ...(report.grouped_public_report_id ? [report.grouped_public_report_id] : []),
       ...childGroups.filter((item) => item.grouped_report_id === report.id).map((item) => item.public_report_id),
       ...childGroups.filter((item) => item.id === report.grouped_report_id).map((item) => item.public_report_id),
+      ...autoRelatedTickets,
     ].filter((ticketId, index, all) => ticketId !== report.public_report_id && all.indexOf(ticketId) === index);
 
     return {
