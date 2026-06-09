@@ -5,6 +5,12 @@ type Locality = {
   aliases: string[];
 };
 
+export type SingaporeAreaGroup = {
+  id: 'north' | 'east' | 'south' | 'west' | 'central';
+  label: 'North' | 'East' | 'South' | 'West' | 'Central';
+  areas: string[];
+};
+
 const localities: Locality[] = [
   { name: 'Clementi', latitude: 1.3151, longitude: 103.7650, aliases: ['clementi'] },
   { name: 'Jurong East', latitude: 1.3329, longitude: 103.7436, aliases: ['jurong east'] },
@@ -22,6 +28,94 @@ const localities: Locality[] = [
   { name: 'Toa Payoh', latitude: 1.3323, longitude: 103.8474, aliases: ['toa payoh'] },
   { name: 'Hougang', latitude: 1.3619, longitude: 103.8860, aliases: ['hougang'] },
   { name: 'Pasir Ris', latitude: 1.3731, longitude: 103.9493, aliases: ['pasir ris'] },
+];
+
+export const singaporeAreaGroups: SingaporeAreaGroup[] = [
+  {
+    id: 'north',
+    label: 'North',
+    areas: [
+      'Ang Mo Kio',
+      'Central Water Catchment',
+      'Hougang',
+      'Lim Chu Kang',
+      'Mandai',
+      'North-Eastern Islands',
+      'Punggol',
+      'Seletar',
+      'Sembawang',
+      'Sengkang',
+      'Serangoon',
+      'Simpang',
+      'Sungei Kadut',
+      'Woodlands',
+      'Yishun',
+    ],
+  },
+  {
+    id: 'east',
+    label: 'East',
+    areas: [
+      'Bedok',
+      'Changi',
+      'Changi Bay',
+      'Pasir Ris',
+      'Paya Lebar',
+      'Tampines',
+    ],
+  },
+  {
+    id: 'south',
+    label: 'South',
+    areas: [
+      'Bukit Merah',
+      'Downtown Core',
+      'Marina East',
+      'Marina South',
+      'Outram',
+      'Southern Islands',
+      'Straits View',
+    ],
+  },
+  {
+    id: 'west',
+    label: 'West',
+    areas: [
+      'Boon Lay',
+      'Bukit Batok',
+      'Bukit Panjang',
+      'Choa Chu Kang',
+      'Clementi',
+      'Jurong East',
+      'Jurong West',
+      'Pioneer',
+      'Tengah',
+      'Tuas',
+      'Western Islands',
+      'Western Water Catchment',
+    ],
+  },
+  {
+    id: 'central',
+    label: 'Central',
+    areas: [
+      'Bishan',
+      'Bukit Timah',
+      'Geylang',
+      'Kallang',
+      'Marine Parade',
+      'Museum',
+      'Newton',
+      'Novena',
+      'Orchard',
+      'Queenstown',
+      'River Valley',
+      'Rochor',
+      'Singapore River',
+      'Tanglin',
+      'Toa Payoh',
+    ],
+  },
 ];
 
 const regionalFallbacks: Record<string, Locality[]> = {

@@ -127,6 +127,7 @@ export default function PublicTickets() {
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [submitMessage, setSubmitMessage] = useState('');
   const [showAllTags, setShowAllTags] = useState(false);
+  const [reportComposerOpen, setReportComposerOpen] = useState(false);
   const [locating, setLocating] = useState(false);
   const visibleTags = showAllTags ? ticketTags : ticketTags.slice(0, 5);
   const matchingSubjectTags = useMemo(() => {
@@ -315,6 +316,7 @@ export default function PublicTickets() {
       setCreatedTicket(data);
       setTickets((current) => [item, ...current.filter((ticket) => ticket.id !== item.id)]);
       setSelectedTicket(item);
+      setReportComposerOpen(false);
       setDescription('');
       setLocation('');
       setLatitude(null);
@@ -431,16 +433,26 @@ export default function PublicTickets() {
   return (
     <div className="space-y-6">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-5">
-          <h1 className="text-3xl font-bold">Report an Issue</h1>
-          <p className="text-zinc-400">Send a report, then follow replies and status updates from the assigned agency in one place.</p>
+        <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">My Reports</h1>
+            <p className="text-zinc-400">Track submitted reports, open any case for follow-up messages, and file a new report when needed.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReportComposerOpen((open) => !open)}
+            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${reportComposerOpen ? 'bg-zinc-800 text-zinc-100 hover:bg-zinc-700' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+          >
+            {reportComposerOpen ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            {reportComposerOpen ? 'Close report form' : 'Submit a report'}
+          </button>
         </div>
         <EmergencyBanner />
       </div>
 
-      <div className="mx-auto grid max-w-7xl gap-4 lg:grid-cols-[minmax(360px,0.85fr)_minmax(0,1.15fr)]">
-        <section className="min-w-0 space-y-4">
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900">
+      <div className="mx-auto max-w-7xl space-y-4">
+        {reportComposerOpen && (
+          <section className="rounded-xl border border-zinc-800 bg-zinc-900">
             <div className="border-b border-zinc-800 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
@@ -591,8 +603,11 @@ export default function PublicTickets() {
                 )}
               </div>
             </div>
-          </div>
+          </section>
+        )}
 
+        <div className="grid gap-4 lg:grid-cols-[minmax(360px,0.85fr)_minmax(0,1.15fr)]">
+        <section className="min-w-0 space-y-4">
           <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
             <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -633,6 +648,7 @@ export default function PublicTickets() {
         <aside className="space-y-4">
           <DiscussionPanel ticket={selectedTicket} reply={reply} setReply={setReply} sendReply={sendReply} />
         </aside>
+        </div>
       </div>
     </div>
   );

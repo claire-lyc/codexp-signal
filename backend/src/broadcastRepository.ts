@@ -236,11 +236,12 @@ async function getAgencyIds(codes: string[]) {
 function toBroadcastItem(row: BroadcastRow, updates: BroadcastItem['updates']): BroadcastItem {
   const targetAgencies = row.target_agencies ?? [];
   const targetRegions = row.target_regions ?? [];
+  const citizenTargetLabel = targetRegions.length ? `Citizens in ${targetRegions.join(', ')}` : 'All Citizens';
   const targetParts = [
-    row.target_type === 'all_citizens' ? 'All Citizens' : null,
+    row.target_type === 'all_citizens' || targetRegions.length ? citizenTargetLabel : null,
     targetAgencies.length ? targetAgencies.join(', ') : row.target_type === 'agencies' ? 'Selected Agencies' : null,
-    targetRegions.length ? targetRegions.join(', ') : row.target_type === 'regions' ? 'Selected Regions' : null,
   ].filter(Boolean);
+  const citizenRecipients = targetRegions.length ? Math.max(1, targetRegions.length) * 180000 : 5000000;
   return {
     id: row.id,
     title: row.title,
@@ -250,7 +251,7 @@ function toBroadcastItem(row: BroadcastRow, updates: BroadcastItem['updates']): 
     targetAgencies,
     targetRegions,
     platforms: row.platforms,
-    recipients: row.target_type === 'regions' ? Math.max(1, targetRegions.length) * 200000 : row.target_type === 'agencies' ? Math.max(1, targetAgencies.length) * 1000 : 5000000,
+    recipients: citizenRecipients + (targetAgencies.length ? Math.max(1, targetAgencies.length) * 1000 : 0),
     status: row.status === 'resolved' ? 'resolved' : 'ongoing',
     time: relativeTime(row.created_at),
     createdAt: row.created_at,
