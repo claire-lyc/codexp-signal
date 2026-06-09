@@ -38,21 +38,7 @@ type CitizenAlert = {
   resolved_at: string | null;
 };
 
-const pastIncidents: { date: string; items: { title: string; type: string; note: string }[] }[] = [
-  {
-    date: 'Jun 4, 2026',
-    items: [
-      { title: 'MRT East-West Line Disruption', type: 'Infrastructure', note: 'Resolved — Service resumed at 6:45 PM.' },
-      { title: 'Covid-19 Cluster — Jurong West MRT', type: 'Health', note: 'Resolved — Cluster isolated. Enhanced cleaning completed.' },
-    ],
-  },
-  {
-    date: 'Jun 3, 2026',
-    items: [
-      { title: 'Haze Advisory lifted', type: 'Weather', note: 'Resolved — PSI returned to Good range.' },
-    ],
-  },
-];
+type PastIncidentGroup = { date: string; items: { title: string; type: string; note: string }[] };
 
 const severityConfig: Record<string, { banner: string; dot: string; badge: string; label: string }> = {
   critical: { banner: 'bg-red-950/60 border-red-700', dot: 'bg-red-500', badge: 'bg-red-900 text-red-400', label: 'CRITICAL' },
@@ -68,7 +54,7 @@ const statusConfig: Record<string, string> = {
 };
 
 export default function PublicAlerts() {
-  const { data, loading, error } = useApi<{ incidents: Incident[]; pastIncidents: typeof pastIncidents }>('/api/citizen/incidents');
+  const { data, loading, error } = useApi<{ incidents: Incident[]; pastIncidents: PastIncidentGroup[] }>('/api/citizen/incidents');
   const { data: liveAlertsData } = useApi<{ items: CitizenAlert[] }>('/api/citizen/alerts');
   const [broadcasts, setBroadcasts] = useState<BroadcastAlert[]>([]);
   const snapshotIncidents = data?.incidents ?? [];
@@ -156,6 +142,11 @@ export default function PublicAlerts() {
         </div>
 
         <div className="space-y-3">
+          {incidents.length === 0 && (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
+              No current incidents. Historical advisories are listed below.
+            </div>
+          )}
           {incidents.map((incident) => {
             const cfg = severityConfig[incident.severity];
             const isExpanded = expandedId === incident.id;

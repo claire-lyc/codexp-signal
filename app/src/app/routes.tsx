@@ -30,6 +30,7 @@ export const router = createBrowserRouter([
           { path: "infrastructure", lazy: lazyRoute(() => import("./components/government/GovInfrastructure")) },
           { path: "cybersecurity", lazy: lazyRoute(() => import("./components/government/GovCybersecurity")) },
           { path: "public-sentiment", lazy: lazyRoute(() => import("./components/government/GovPublicSentiment")) },
+          { path: "forum", lazy: lazyRoute(() => import("./components/government/GovPublicSentiment")) },
           { path: "form-handling", lazy: lazyRoute(() => import("./components/government/GovFormHandling")) },
           { path: "volunteers", lazy: lazyRoute(() => import("./components/government/GovVolunteers")) },
           { path: "ai-recommendations", lazy: lazyRoute(() => import("./components/government/GovAIRecommendations")) },
