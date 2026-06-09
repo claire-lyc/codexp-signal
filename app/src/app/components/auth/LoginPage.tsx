@@ -13,6 +13,7 @@ type AuthUser = {
   email: string | null;
   username: string | null;
   role: string | null;
+  agencyId?: string | null;
 };
 
 function portalFromTarget(target: string | null): PortalKind {
@@ -26,7 +27,7 @@ export default function LoginPage() {
   const redirectTarget = searchParams.get('redirect');
   const requestedPortal = searchParams.get('portal');
   const portal = (requestedPortal === 'gov' || requestedPortal === 'public' ? requestedPortal : portalFromTarget(redirectTarget)) as PortalKind;
-  const redirectTo = redirectTarget || (portal === 'gov' ? '/gov' : '/public');
+  const redirectTo = portal === 'gov' ? '/gov' : (redirectTarget || '/public');
   const [mode, setMode] = useState<AuthMode>('login');
 
   const [displayName, setDisplayName] = useState('');
@@ -140,9 +141,10 @@ export default function LoginPage() {
       }
 
       saveAuthTokens(payload.tokens);
-      const nextPath = payload.user?.actorType === 'government_user' || payload.user?.actorType === 'system'
-        ? '/gov'
-        : redirectTo;
+      if (payload.user) {
+        localStorage.setItem('signal-current-user', JSON.stringify(payload.user));
+      }
+      const nextPath = portal === 'gov' ? '/gov' : redirectTo;
       navigate(nextPath, { replace: true });
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : mode === 'register' ? 'Unable to register' : 'Unable to log in');
