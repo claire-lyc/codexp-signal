@@ -1,6 +1,5 @@
 ﻿# codexp-signal
 
-
 ## Hackathon mission: Quick Aid
 
 SiGnal is a Singapore-focused fast response web application for disaster and health emergency coordination. It is designed to gather information from multiple sources - including outbreak signals, hospital capacity, weather and flood risks, medicine supply constraints, citizen reports, and volunteer readiness - so leaders, responders, and communities can make quicker, clearer decisions during crises.
