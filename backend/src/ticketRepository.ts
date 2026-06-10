@@ -280,11 +280,12 @@ export async function getTicketByPublicId(publicReportId: string) {
 }
 
 export async function listTicketsForReporter(userId: string, options: { visibleFeed?: boolean } = {}) {
+  if (options.visibleFeed) {
+    const allTickets = await listTickets();
+    return allTickets.filter((ticket) => ticket.status !== 'spam');
+  }
+
   await auditExistingReportModeration();
-  const values = options.visibleFeed ? [] : [userId];
-  const ownershipWhere = options.visibleFeed
-    ? `reports.status <> 'rejected'::citizen.report_status`
-    : `reports.reporter_user_id = $1 AND reports.status <> 'rejected'::citizen.report_status`;
 
   const reports = await query<ReportRow>(
     `
@@ -321,10 +322,11 @@ export async function listTicketsForReporter(userId: string, options: { visibleF
       LEFT JOIN citizen.report_subject_tags subject_tags ON subject_tags.id = reports.subject_tag_id
       LEFT JOIN auth.users started_by ON started_by.id = reports.started_work_by_user_id
       LEFT JOIN auth.users current_handler ON current_handler.id = reports.current_handler_user_id
-      WHERE ${ownershipWhere}
+      WHERE reports.reporter_user_id = $1
+        AND reports.status <> 'rejected'::citizen.report_status
       ORDER BY reports.created_at DESC
     `,
-    values,
+    [userId],
   );
 
   return hydrateTickets(reports, { includeImages: false });
