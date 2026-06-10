@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowDownUp, CheckCircle, Globe, MapPin, MessageSquare, Plus, Radio, Search, Send, Shield, Trash2, Users, X, type LucideIcon } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowDownUp, CheckCircle, Funnel, Globe, MapPin, MessageSquare, Plus, Radio, RotateCcw, Search, Send, Shield, Trash2, Users, X, type LucideIcon } from 'lucide-react';
 import { apiUrl, fetchWithAuth } from '../../lib/api';
 import { authHeaders } from '../../lib/auth';
 import { singaporeAreaGroups } from '../../lib/singaporeLocations';
@@ -66,7 +66,9 @@ export default function GovBroadcast() {
   const [severityFilter, setSeverityFilter] = useState<'All' | Broadcast['severity']>('All');
   const [senderFilter, setSenderFilter] = useState('All senders');
   const [regionFilter, setRegionFilter] = useState('All regions');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [currentAgencyCode, setCurrentAgencyCode] = useState<string | null>(null);
+  const filtersRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     loadBroadcasts();
@@ -96,6 +98,19 @@ export default function GovBroadcast() {
       window.localStorage.removeItem('signal.broadcast.draft');
     }
   }, []);
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+
+    const closeFilters = (event: MouseEvent) => {
+      if (filtersRef.current && !filtersRef.current.contains(event.target as Node)) {
+        setFiltersOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', closeFilters);
+    return () => document.removeEventListener('mousedown', closeFilters);
+  }, [filtersOpen]);
 
   const loadBroadcasts = async () => {
     try {
@@ -242,6 +257,11 @@ export default function GovBroadcast() {
     () => ['All regions', 'Nationwide', ...singaporeAreaGroups.flatMap((group) => group.areas)],
     [],
   );
+  const activeFilterCount = [
+    severityFilter !== 'All',
+    senderFilter !== 'All senders',
+    regionFilter !== 'All regions',
+  ].filter(Boolean).length;
   const visibleQueue = queueView === 'archive' ? resolvedBroadcasts : ongoingBroadcasts;
   const filteredQueue = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -389,39 +409,93 @@ export default function GovBroadcast() {
                 </div>
               </div>
               <div className="space-y-2 border-b border-zinc-800 p-3">
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-500" />
-                  <input
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search broadcasts..."
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-800 py-2 pl-8 pr-24 text-sm focus:outline-none focus:ring-1 focus:ring-red-600"
-                  />
+                <div ref={filtersRef} className="relative flex gap-1.5">
+                  <div className="relative min-w-0 flex-1">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-500" />
+                    <input
+                      value={query}
+                      onChange={(event) => setQuery(event.target.value)}
+                      placeholder="Search broadcasts..."
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-800 py-2 pl-8 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-red-600"
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={() => setOngoingSort(nextBroadcastSort(ongoingSort))}
                     title={`Sort: ${currentSortLabel}`}
                     aria-label={`Sort: ${currentSortLabel}`}
-                    className="absolute right-1.5 top-1.5 flex h-7 min-w-7 items-center justify-center gap-1 rounded-md border border-zinc-700 bg-zinc-900 px-1.5 text-xs text-zinc-400 transition-colors hover:border-red-700 hover:text-red-300"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:border-red-700 hover:text-red-300"
                   >
                     <ArrowDownUp className="h-3.5 w-3.5" />
-                    <span className="max-w-12 truncate">{currentSortLabel}</span>
                   </button>
-                </div>
-                <div className="grid gap-1.5">
-                  <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value as 'All' | Broadcast['severity'])} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-red-600">
-                    <option value="All">All severities</option>
-                    <option value="critical">Critical</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                  </select>
-                  <select value={senderFilter} onChange={(event) => setSenderFilter(event.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-red-600">
-                    {senderOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-                  </select>
-                  <select value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-red-600">
-                    {regionOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setFiltersOpen((open) => !open)}
+                    title="Filter broadcasts"
+                    aria-label="Filter broadcasts"
+                    aria-expanded={filtersOpen}
+                    className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+                      filtersOpen || activeFilterCount
+                        ? 'border-red-700 bg-red-950/50 text-red-300'
+                        : 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:border-red-700 hover:text-red-300'
+                    }`}
+                  >
+                    <Funnel className="h-4 w-4" />
+                    {activeFilterCount ? (
+                      <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
+                        {activeFilterCount}
+                      </span>
+                    ) : null}
+                  </button>
+
+                  {filtersOpen ? (
+                    <div className="absolute right-0 top-full z-40 mt-2 w-72 rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-2xl shadow-black/60">
+                      <div className="mb-3 flex items-center justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-zinc-100">Filter broadcasts</div>
+                          <div className="text-xs text-zinc-500">{activeFilterCount ? `${activeFilterCount} active` : 'Showing all broadcasts'}</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSeverityFilter('All');
+                            setSenderFilter('All senders');
+                            setRegionFilter('All regions');
+                          }}
+                          disabled={!activeFilterCount}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-30"
+                          title="Reset filters"
+                          aria-label="Reset filters"
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="space-y-3">
+                        <label className="block">
+                          <span className="mb-1 block text-xs font-medium text-zinc-400">Severity</span>
+                          <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value as 'All' | Broadcast['severity'])} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-red-600">
+                            <option value="All">All severities</option>
+                            <option value="critical">Critical</option>
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                          </select>
+                        </label>
+                        <label className="block">
+                          <span className="mb-1 block text-xs font-medium text-zinc-400">Sender</span>
+                          <select value={senderFilter} onChange={(event) => setSenderFilter(event.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-red-600">
+                            {senderOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                          </select>
+                        </label>
+                        <label className="block">
+                          <span className="mb-1 block text-xs font-medium text-zinc-400">Region</span>
+                          <select value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-red-600">
+                            {regionOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap gap-1.5 text-xs text-zinc-500">
                   {[severityFilter !== 'All' ? severityFilter : null, senderFilter !== 'All senders' ? senderFilter : null, regionFilter !== 'All regions' ? regionFilter : null].filter(Boolean).map((value) => (

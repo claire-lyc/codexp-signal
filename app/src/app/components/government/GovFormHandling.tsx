@@ -80,6 +80,20 @@ type SortMode = 'priority' | 'newest' | 'oldest' | 'ticket-number';
 type QueueView = 'active' | 'archive';
 
 const agencies = ['All Agencies', 'MOH', 'PUB', 'LTA', 'Enterprise SG', 'SPF', 'SCDF', 'NEA', 'CSA', 'GOV-OPS'];
+const governmentUsers = [
+  'All Government Users',
+  'Amirah Tan',
+  'Daniel Koh',
+  'Jolene Lim',
+  'Marcus Yeo',
+  'Nur Aisyah',
+  'Rachel Ong',
+  'Sean Lee',
+  'Form Handler',
+  'Admin',
+  'MOH',
+  'PUB',
+];
 const pingableAgencies = ['MOH', 'PUB', 'LTA', 'Enterprise SG', 'SPF', 'SCDF', 'NEA', 'MSF'];
 const statusOptions: Array<'All' | TicketStatus> = ['All', 'open', 'in-progress', 'resolved'];
 const crisisTypes = ['All', 'Health', 'Weather', 'Supply Chain', 'Infrastructure', 'Cybersecurity'];
@@ -246,6 +260,7 @@ export default function GovFormHandling() {
   const [filterStatus, setFilterStatus] = useState<'All' | TicketStatus>('All');
   const [filterCrisis, setFilterCrisis] = useState('All');
   const [filterAgency, setFilterAgency] = useState('All Agencies');
+  const [filterGovernmentUser, setFilterGovernmentUser] = useState('All Government Users');
   const [filterSubjectId, setFilterSubjectId] = useState('All Subjects');
   const [sortMode, setSortMode] = useState<SortMode>('priority');
   const [queueView, setQueueView] = useState<QueueView>('active');
@@ -371,6 +386,10 @@ export default function GovFormHandling() {
         const statusMatch = filterStatus === 'All' || ticket.status === filterStatus;
         const crisisMatch = filterCrisis === 'All' || ticket.crisisType === filterCrisis;
         const agencyMatch = filterAgency === 'All Agencies' || ticket.assignedAgency === filterAgency || ticket.pingedAgencies.includes(filterAgency);
+        const governmentUserMatch =
+          filterGovernmentUser === 'All Government Users' ||
+          ticket.currentHandler === filterGovernmentUser ||
+          ticket.startedWorkBy === filterGovernmentUser;
         const subjectMatch =
           filterSubjectId === 'All Subjects' ||
           (filterSubjectId === 'Ungrouped' ? !ticket.subjectTag : ticket.subjectTag?.id === filterSubjectId);
@@ -380,10 +399,10 @@ export default function GovFormHandling() {
           ticket.message.toLowerCase().includes(normalizedQuery) ||
           ticket.location.toLowerCase().includes(normalizedQuery) ||
           ticket.reporter.toLowerCase().includes(normalizedQuery);
-        return archiveMatch && statusMatch && crisisMatch && agencyMatch && subjectMatch && queryMatch;
+        return archiveMatch && statusMatch && crisisMatch && agencyMatch && governmentUserMatch && subjectMatch && queryMatch;
       })
       .sort((a, b) => sortTickets(a, b, sortMode));
-  }, [filterAgency, filterCrisis, filterStatus, filterSubjectId, query, queueView, sortMode, tickets]);
+  }, [filterAgency, filterCrisis, filterGovernmentUser, filterStatus, filterSubjectId, query, queueView, sortMode, tickets]);
 
   const ticketMatchesCurrentScope = (ticket: Ticket, status: 'All' | TicketStatus = filterStatus) => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -391,6 +410,10 @@ export default function GovFormHandling() {
     const statusMatch = status === 'All' || ticket.status === status;
     const crisisMatch = filterCrisis === 'All' || ticket.crisisType === filterCrisis;
     const agencyMatch = filterAgency === 'All Agencies' || ticket.assignedAgency === filterAgency || ticket.pingedAgencies.includes(filterAgency);
+    const governmentUserMatch =
+      filterGovernmentUser === 'All Government Users' ||
+      ticket.currentHandler === filterGovernmentUser ||
+      ticket.startedWorkBy === filterGovernmentUser;
     const subjectMatch =
       filterSubjectId === 'All Subjects' ||
       (filterSubjectId === 'Ungrouped' ? !ticket.subjectTag : ticket.subjectTag?.id === filterSubjectId);
@@ -400,7 +423,7 @@ export default function GovFormHandling() {
       ticket.message.toLowerCase().includes(normalizedQuery) ||
       ticket.location.toLowerCase().includes(normalizedQuery) ||
       ticket.reporter.toLowerCase().includes(normalizedQuery);
-    return archiveMatch && statusMatch && crisisMatch && agencyMatch && subjectMatch && queryMatch;
+    return archiveMatch && statusMatch && crisisMatch && agencyMatch && governmentUserMatch && subjectMatch && queryMatch;
   };
 
   const visibleStatusOptions: Array<'All' | TicketStatus> =
@@ -411,7 +434,7 @@ export default function GovFormHandling() {
       counts[status] = tickets.filter((ticket) => ticketMatchesCurrentScope(ticket, status)).length;
       return counts;
     }, {})
-  ), [visibleStatusOptions, tickets, query, queueView, filterAgency, filterCrisis, filterSubjectId]);
+  ), [visibleStatusOptions, tickets, query, queueView, filterAgency, filterCrisis, filterGovernmentUser, filterSubjectId]);
 
   const selectedTicket = tickets.find((ticket) => ticket.id === selectedTicketId) ?? filtered[0] ?? null;
   const selectedTicketResolved = selectedTicket ? isResolved(selectedTicket) : false;
@@ -830,6 +853,14 @@ export default function GovFormHandling() {
             </select>
             <select value={filterAgency} onChange={(event) => setFilterAgency(event.target.value)} className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-600">
               {agencies.map((agency) => <option key={agency}>{agency}</option>)}
+            </select>
+            <select
+              value={filterGovernmentUser}
+              onChange={(event) => setFilterGovernmentUser(event.target.value)}
+              className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-600"
+              aria-label="Filter by government user"
+            >
+              {governmentUsers.map((user) => <option key={user}>{user}</option>)}
             </select>
             <div className="space-y-1 rounded-lg border border-zinc-800 bg-zinc-950 p-2">
               <div className="flex items-center justify-between">

@@ -15,6 +15,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { fetchWithAuth } from '../../lib/api';
+import PublicCrisisAssistant from './PublicCrisisAssistant';
 import CitizenOnboarding from './CitizenOnboarding';
 
 const navItems = [
@@ -214,6 +215,8 @@ export default function PublicLayout() {
           </div>
         </div>
       </footer>
+
+      <PublicCrisisAssistant />
     </div>
   );
 }
