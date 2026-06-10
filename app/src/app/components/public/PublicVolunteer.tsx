@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { apiUrl } from '../../lib/api';
-import { API_REFRESH_INTERVAL_MS } from '../../lib/api';
 import { authHeaders } from '../../lib/auth';
 import {
   clearVolunteerProfile,
@@ -28,6 +27,7 @@ import {
   type VolunteerNotification,
   type VolunteerOpportunity,
   type VolunteerProfile,
+  type VolunteerRoleSlot,
 } from '../../lib/volunteerFlow';
 
 type FormState = {
@@ -41,22 +41,6 @@ type FormState = {
   emergencyContact: string;
 };
 
-type AccountProfileResponse = {
-  user: {
-    displayName: string | null;
-    email: string | null;
-  } | null;
-  preferences?: {
-    phoneNumber: string | null;
-    smsEnabled: boolean;
-    alertNotifications: boolean;
-    replyNotifications: boolean;
-    agencyPingNotifications: boolean;
-    volunteerNotifications: boolean;
-  };
-  volunteerProfile?: VolunteerProfile | null;
-};
-
 const emptyForm: FormState = {
   name: '',
   phone: '',
@@ -68,12 +52,9 @@ const emptyForm: FormState = {
   emergencyContact: '',
 };
 
-const volunteerPromptDismissedKey = 'signal-volunteer-login-prompt-dismissed';
-
 export default function PublicVolunteer() {
   const [authenticated, setAuthenticated] = useState(true);
   const [profile, setProfile] = useState<VolunteerProfile | null>(null);
-  const [accountProfile, setAccountProfile] = useState<AccountProfileResponse | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [showProfileForm, setShowProfileForm] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
@@ -85,33 +66,22 @@ export default function PublicVolunteer() {
   const [slotTab, setSlotTab] = useState<'available' | 'unavailable'>('available');
   const [opportunities, setOpportunities] = useState<VolunteerOpportunity[]>(() => readVolunteerOpportunities());
   const [notifications, setNotifications] = useState<VolunteerNotification[]>(() => readVolunteerNotifications());
-  const [showVolunteerPrompt, setShowVolunteerPrompt] = useState(
-    () => localStorage.getItem(volunteerPromptDismissedKey) !== 'true',
-  );
-
-  const loadRemoteVolunteerProfile = (quiet = false) =>
-    fetch(apiUrl('/api/volunteers/profile'), { headers: authHeaders() })
-      .then((response) => {
-        if (!response.ok) throw new Error('Volunteer profile unavailable');
-        return response.json() as Promise<{ item: { userId: string; profile: VolunteerProfile } | null }>;
-      })
-      .then((data) => {
-        if (!data.item?.profile) return;
-        const merged = normalizeVolunteerProfile(data.item.profile, accountProfile);
-        saveVolunteerProfile(merged);
-        hydrateProfile(merged);
-        if (!quiet && (merged.assignments.some((assignment) => assignment.status === 'offered'))) {
-          setMessage('A new volunteer offer is available for your review.');
-        }
-      });
 
   const hydrateProfile = (nextProfile: VolunteerProfile) => {
     setProfile(nextProfile);
-    setForm(formFromProfile(nextProfile));
+    setForm({
+      name: nextProfile.name,
+      phone: nextProfile.phone,
+      email: nextProfile.email,
+      region: nextProfile.region,
+      skills: nextProfile.skills,
+      availability: nextProfile.availability,
+      certifications: nextProfile.certifications,
+      emergencyContact: nextProfile.emergencyContact,
+    });
   };
 
   const saveVolunteerRemote = async (nextProfile: VolunteerProfile) => {
-    await syncAccountDetails(nextProfile, accountProfile);
     const response = await fetch(apiUrl('/api/volunteers/profile'), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -133,58 +103,31 @@ export default function PublicVolunteer() {
   };
 
   useEffect(() => {
-    fetch(apiUrl('/api/auth/profile'), { headers: authHeaders() })
+    const saved = readVolunteerProfile();
+    if (saved) {
+      hydrateProfile(saved);
+    } else {
+      const demoProfile = { ...demoCitizenVolunteerProfile, assignments: [...demoCitizenVolunteerProfile.assignments] };
+      saveVolunteerProfile(demoProfile);
+      hydrateProfile(demoProfile);
+      setMessage('Demo returning volunteer loaded. You can apply, review pending applications, and check upcoming shifts.');
+    }
+
+    fetch(apiUrl('/api/volunteers/profile'), { headers: authHeaders() })
       .then((response) => {
-        if (!response.ok) throw new Error('Account profile unavailable');
-        return response.json() as Promise<AccountProfileResponse>;
+        if (!response.ok) throw new Error('Volunteer profile unavailable');
+        return response.json() as Promise<{ item: { userId: string; profile: VolunteerProfile } | null }>;
       })
       .then((data) => {
-        setAccountProfile(data);
-        const syncedVolunteer = normalizeVolunteerProfile(data.volunteerProfile ?? null, data);
-        if (syncedVolunteer) {
-          saveVolunteerProfile(syncedVolunteer);
-          hydrateProfile(syncedVolunteer);
-          return;
+        if (data.item?.profile) {
+          saveVolunteerProfile(data.item.profile);
+          hydrateProfile(data.item.profile);
         }
-
-        const saved = readVolunteerProfile();
-        if (saved) {
-          const merged = normalizeVolunteerProfile(saved, data);
-          saveVolunteerProfile(merged);
-          hydrateProfile(merged);
-          return;
-        }
-
-        const seeded = normalizeVolunteerProfile(
-          { ...demoCitizenVolunteerProfile, assignments: [...demoCitizenVolunteerProfile.assignments] },
-          data,
-        );
-        saveVolunteerProfile(seeded);
-        hydrateProfile(seeded);
-        setMessage('Demo returning volunteer loaded. You can apply, review pending applications, and check upcoming shifts.');
       })
       .catch(() => {
-        const saved = readVolunteerProfile();
-        if (saved) {
-          hydrateProfile(saved);
-        } else {
-          const demoProfile = { ...demoCitizenVolunteerProfile, assignments: [...demoCitizenVolunteerProfile.assignments] };
-          saveVolunteerProfile(demoProfile);
-          hydrateProfile(demoProfile);
-          setMessage('Demo returning volunteer loaded. You can apply, review pending applications, and check upcoming shifts.');
-        }
+        // Keep local fallback profile if backend is unavailable.
       });
   }, []);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      loadRemoteVolunteerProfile(true).catch(() => {
-        // Keep the latest local volunteer state when backend sync is temporarily unavailable.
-      });
-    }, API_REFRESH_INTERVAL_MS);
-
-    return () => window.clearInterval(timer);
-  }, [accountProfile]);
 
   useEffect(() => {
     const refreshProfile = () => {
@@ -261,7 +204,7 @@ export default function PublicVolunteer() {
       id: profile?.id ?? makeVolunteerId(),
       name: form.name.trim(),
       phone: form.phone.trim(),
-      email: accountProfile?.user?.email?.trim() || form.email.trim(),
+      email: form.email.trim(),
       region: form.region,
       skills: form.skills,
       availability: form.availability,
@@ -287,11 +230,16 @@ export default function PublicVolunteer() {
 
   const quickVerify = () => {
     if (!profile) return;
-    loadRemoteVolunteerProfile()
-      .then(() => {
-        const latest = readVolunteerProfile();
-        if (latest) {
-          setMessage(latest.status === 'verified' ? 'Your profile has been approved and is ready for matching.' : 'Your profile is still under review.');
+    fetch(apiUrl('/api/volunteers/profile'), { headers: authHeaders() })
+      .then((response) => {
+        if (!response.ok) throw new Error('Volunteer profile unavailable');
+        return response.json() as Promise<{ item: { userId: string; profile: VolunteerProfile } | null }>;
+      })
+      .then((data) => {
+        if (data.item?.profile) {
+          saveVolunteerProfile(data.item.profile);
+          hydrateProfile(data.item.profile);
+          setMessage(data.item.profile.status === 'verified' ? 'Your profile has been approved and is ready for matching.' : 'Your profile is still under review.');
           return;
         }
         setMessage('We could not find a synced volunteer profile yet.');
@@ -304,36 +252,37 @@ export default function PublicVolunteer() {
   const applyForOpportunity = (opportunityId: number) => {
     if (!profile) return;
     const opportunity = opportunities.find((item) => item.id === opportunityId);
-    const matchingRole = opportunity?.roleSlots.find((role) => (
-      role.requiredSkills.every((skill) => profile.skills.includes(skill)) && role.assigned < role.needed
-    ));
-    const nextAssignments = matchingRole
-      ? [
-          ...profile.assignments.filter((assignment) => assignment.opportunityId !== opportunityId),
-          {
-            id: `ASN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-            opportunityId,
-            roleId: matchingRole.id,
-            roleTitle: matchingRole.title,
-            status: 'accepted' as const,
-            assignedAt: new Date().toISOString(),
-            note: `Automatically accepted for ${matchingRole.title}. Report to ${opportunity?.reportingPoint ?? 'the stated reporting point'}`,
-          },
-        ]
-      : profile.assignments;
+    if (!opportunity) return;
+
+    const matchedRole = findImmediateMatch(profile, opportunity);
+    if (matchedRole) {
+      const nextAssignment: VolunteerAssignment = {
+        id: `ASN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        opportunityId: opportunity.id,
+        roleId: matchedRole.id,
+        roleTitle: matchedRole.title,
+        status: 'accepted',
+        assignedAt: new Date().toISOString(),
+        note: matchedRole.specialRequirements
+          ? `${matchedRole.specialRequirements}. Report to ${opportunity.reportingPoint}`
+          : `Report to ${opportunity.reportingPoint}`,
+      };
+      const nextProfile = {
+        ...profile,
+        status: 'assigned' as const,
+        appliedOpportunityIds: Array.from(new Set([...profile.appliedOpportunityIds, opportunityId])),
+        assignments: [...profile.assignments.filter((assignment) => assignment.opportunityId !== opportunity.id), nextAssignment],
+      };
+      persistVolunteerProfile(nextProfile, `Accepted immediately for ${matchedRole.title}. Your reporting details are ready.`);
+      return;
+    }
+
     const nextProfile = {
       ...profile,
       appliedOpportunityIds: Array.from(new Set([...profile.appliedOpportunityIds, opportunityId])),
-      assignments: nextAssignments,
-      status: matchingRole ? 'assigned' as const : profile.status,
     };
-    setWorkTab(matchingRole ? 'upcoming' : 'applications');
-    persistVolunteerProfile(
-      nextProfile,
-      matchingRole
-        ? `You were automatically accepted for ${matchingRole.title}.`
-        : 'Application sent to the coordinating agency for manual review.',
-    );
+    setWorkTab('applications');
+    persistVolunteerProfile(nextProfile, 'Application submitted. It will stay pending until the agency offers you a role.');
   };
 
   const updateAssignment = (assignmentId: string, status: VolunteerAssignment['status'], nextMessage: string) => {
@@ -364,7 +313,7 @@ export default function PublicVolunteer() {
       ...profile,
       name: form.name.trim(),
       phone: form.phone.trim(),
-      email: accountProfile?.user?.email?.trim() || form.email.trim(),
+      email: form.email.trim(),
       region: form.region,
       skills: form.skills,
       availability: form.availability,
@@ -392,11 +341,6 @@ export default function PublicVolunteer() {
     setSlotTab('available');
   };
 
-  const closeVolunteerPrompt = () => {
-    localStorage.setItem(volunteerPromptDismissedKey, 'true');
-    setShowVolunteerPrompt(false);
-  };
-
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -421,44 +365,6 @@ export default function PublicVolunteer() {
 
       {pageTab === 'volunteer' && (
         <>
-          {showVolunteerPrompt && (
-            <section data-tour="volunteer-entry" className="rounded-xl border border-blue-800 bg-blue-950/20 p-5">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex items-start gap-3">
-                  <div className="rounded-lg bg-blue-900/50 p-3">
-                    <Shield className="h-5 w-5 text-blue-300" />
-                  </div>
-                  <div>
-                    <h2 className="font-semibold text-zinc-100">Login as a volunteer</h2>
-                    <p className="mt-1 text-sm leading-6 text-zinc-300">
-                      Optional: sign in or continue with your saved volunteer profile to apply for opportunities.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAuthenticated(true);
-                      closeVolunteerPrompt();
-                    }}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                  >
-                    Login as Volunteer
-                  </button>
-                  <button
-                    type="button"
-                    onClick={closeVolunteerPrompt}
-                    className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-white"
-                    aria-label="Close volunteer login prompt"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            </section>
-          )}
-
           {!authenticated && (
             <section className="rounded-xl border border-blue-900/50 bg-blue-950/20 p-6">
               <div className="flex items-start gap-4">
@@ -478,7 +384,7 @@ export default function PublicVolunteer() {
           )}
 
           {authenticated && !profile && !showProfileForm && (
-            <section data-tour="volunteer-entry" className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+            <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
               <h2 className="mb-2 text-lg font-semibold">Volunteer Readiness Profile</h2>
               <p className="mb-4 text-sm text-zinc-400">First-time volunteers submit skills and availability once. Returning verified volunteers would be let into the opportunities page immediately.</p>
               <button onClick={() => setShowProfileForm(true)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-700">
@@ -487,7 +393,7 @@ export default function PublicVolunteer() {
             </section>
           )}
 
-          {authenticated && showProfileForm && (
+          {authenticated && showProfileForm && !profile && (
             <ProfileForm
               form={form}
               errors={errors}
@@ -500,8 +406,42 @@ export default function PublicVolunteer() {
             />
           )}
 
+          {authenticated && showProfileForm && profile && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm">
+              <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl">
+                <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-5 py-4">
+                  <div>
+                    <h2 className="text-lg font-semibold">Update Volunteer Details</h2>
+                    <p className="mt-1 text-sm text-zinc-500">Agencies will use your latest skills and availability for matching.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowProfileForm(false)}
+                    className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+                    aria-label="Close update details"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="p-5">
+                  <ProfileForm
+                    form={form}
+                    errors={errors}
+                    submitting={submitting}
+                    isUpdate={Boolean(profile)}
+                    onSubmit={submitRegistration}
+                    onCancel={() => setShowProfileForm(false)}
+                    onChange={setForm}
+                    onToggle={toggleValue}
+                    embedded
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {profile && (
-            <div data-tour="volunteer-entry" className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
               <section className="space-y-4">
                 <DashboardSummary pending={pendingApplications.length} offers={offers.length} upcoming={upcoming.length} completed={completed.length} onReset={resetDemoProfile} />
                 <NotificationPanel notifications={myNotifications} opportunities={opportunities} />
@@ -557,52 +497,12 @@ function formFromProfile(profile: VolunteerProfile): FormState {
   };
 }
 
-function normalizeVolunteerProfile(profile: VolunteerProfile | null, accountProfile: AccountProfileResponse | null) {
-  if (!profile) return null;
-  return {
-    ...profile,
-    name: accountProfile?.user?.displayName?.trim() || profile.name,
-    email: accountProfile?.user?.email?.trim() || profile.email,
-    phone: profile.phone || accountProfile?.preferences?.phoneNumber || '',
-  };
-}
-
-async function syncAccountDetails(profile: VolunteerProfile, accountProfile: AccountProfileResponse | null) {
-  const requests: Promise<Response>[] = [];
-  const displayName = profile.name.trim();
-  if (displayName && displayName !== (accountProfile?.user?.displayName ?? '')) {
-    requests.push(
-      fetch(apiUrl('/api/auth/profile/details'), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ displayName }),
-      }),
-    );
-  }
-
-  if (accountProfile?.preferences?.smsEnabled && profile.phone.trim() && profile.phone.trim() !== (accountProfile.preferences.phoneNumber ?? '')) {
-    requests.push(
-      fetch(apiUrl('/api/auth/profile/preferences'), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({
-          ...accountProfile.preferences,
-          phoneNumber: profile.phone.trim(),
-        }),
-      }),
-    );
-  }
-
-  if (requests.length) {
-    await Promise.all(requests);
-  }
-}
-
 function ProfileForm({
   form,
   errors,
   submitting,
   isUpdate,
+  embedded = false,
   onSubmit,
   onCancel,
   onChange,
@@ -612,18 +512,19 @@ function ProfileForm({
   errors: string[];
   submitting: boolean;
   isUpdate: boolean;
+  embedded?: boolean;
   onSubmit: () => void;
   onCancel: () => void;
   onChange: (form: FormState) => void;
   onToggle: (field: 'skills' | 'availability', value: string) => void;
 }) {
   return (
-    <section className="rounded-xl border border-zinc-800 bg-zinc-900">
-      <div className="border-b border-zinc-800 p-5">
+    <section className={embedded ? '' : 'rounded-xl border border-zinc-800 bg-zinc-900'}>
+      {!embedded && <div className="border-b border-zinc-800 p-5">
         <h2 className="flex items-center gap-2 text-lg font-semibold"><Users className="h-5 w-5 text-blue-400" />{isUpdate ? 'Update Volunteer Details' : 'Create Volunteer Profile'}</h2>
         <p className="mt-1 text-sm text-zinc-500">Skills are collected here only, not during every application.</p>
-      </div>
-      <div className="space-y-5 p-5">
+      </div>}
+      <div className={`space-y-5 ${embedded ? '' : 'p-5'}`}>
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Full Name" value={form.name} onChange={(value) => onChange({ ...form, name: value })} placeholder="As per NRIC" />
           <Field label="Contact Number" value={form.phone} onChange={(value) => onChange({ ...form, phone: value })} placeholder="+65 XXXX XXXX" />
@@ -731,8 +632,8 @@ function DashboardSummary({
           <div className="mt-1 text-xl font-bold">{offers}</div>
         </div>
         <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
-          <div className="text-xs text-zinc-500">Completed / Assigned</div>
-          <div className="mt-1 text-xl font-bold">{completed} / {upcoming}</div>
+          <div className="text-xs text-zinc-500">Assigned / Completed</div>
+          <div className="mt-1 text-xl font-bold">{upcoming} / {completed}</div>
         </div>
       </div>
     </div>
@@ -1019,4 +920,15 @@ function DonationPanel({ authenticated }: { authenticated: boolean }) {
       </div>
     </div>
   );
+}
+
+function findImmediateMatch(profile: VolunteerProfile, opportunity: VolunteerOpportunity): VolunteerRoleSlot | null {
+  if (profile.status === 'pending_review') return null;
+
+  return opportunity.roleSlots.find((role) => {
+    const slotOpen = role.assigned < role.needed;
+    const hasAllSkills = role.requiredSkills.every((skill) => profile.skills.includes(skill));
+    const strongOverallMatch = scoreVolunteerForOpportunity(profile, opportunity) >= 60;
+    return slotOpen && hasAllSkills && strongOverallMatch;
+  }) ?? null;
 }
