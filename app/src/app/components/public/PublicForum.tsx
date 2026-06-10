@@ -18,6 +18,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { API_REFRESH_INTERVAL_MS, apiUrl } from '../../lib/api';
 import { authHeaders } from '../../lib/auth';
+import { floodDemoUpdatedEvent } from '../FloodDemoController';
 
 type ForumReply = {
   id: string;
@@ -201,10 +202,12 @@ export default function PublicForum() {
 
     loadForumPosts();
     const timer = window.setInterval(loadForumPosts, API_REFRESH_INTERVAL_MS);
+    window.addEventListener(floodDemoUpdatedEvent, loadForumPosts);
 
     return () => {
       active = false;
       window.clearInterval(timer);
+      window.removeEventListener(floodDemoUpdatedEvent, loadForumPosts);
     };
   }, [viewerLocation]);
 

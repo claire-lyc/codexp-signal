@@ -15,6 +15,7 @@ import {
   moderateForumPost,
   reportForumPost,
 } from './forumRepository.js';
+import { advanceFloodDemo, getFloodDemoState, resetFloodDemo } from './floodDemoRepository.js';
 import {
   acceptUrgentVolunteerAlert,
   createUrgentVolunteerAlert,
@@ -169,6 +170,19 @@ app.get('/api/forum/posts', (request, response) => {
       longitude: numberBody(request.query.longitude),
     }),
   });
+});
+
+app.get('/api/demo/flood', authenticateJwt as express.RequestHandler, (_request, response) => {
+  response.json(getFloodDemoState());
+});
+
+app.post('/api/demo/flood/advance', authenticateJwt as express.RequestHandler, (_request, response) => {
+  const result = advanceFloodDemo();
+  response.status(result.accepted ? 202 : 409).json(result);
+});
+
+app.post('/api/demo/flood/reset', authenticateJwt as express.RequestHandler, (_request, response) => {
+  response.json({ accepted: true, state: resetFloodDemo() });
 });
 
 app.get('/api/forum/posts/by-report/:reportId', ...requireGovUser, (request, response) => {
