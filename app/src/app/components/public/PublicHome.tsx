@@ -46,6 +46,19 @@ type BroadcastAlert = {
   updates?: { id: string; body: string; time: string; createdAt: string }[];
 };
 
+type ForumCrisisPost = {
+  id: string;
+  author: string;
+  content: string;
+  category: string;
+  crisisTag?: string | null;
+  location?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  likes?: number;
+  reports?: number;
+};
+
 type CrisisCard = {
   id: string;
   title: string;
@@ -189,6 +202,7 @@ export default function PublicHome() {
   const { data: publicHome, loading, error } = useApi<PublicHomeData>('/api/citizen/home');
   const { data: citizenAlerts } = useApi<{ items: LiveCitizenAlert[] }>('/api/citizen/alerts');
   const [broadcasts, setBroadcasts] = useState<BroadcastAlert[]>([]);
+  const [forumCrisisPosts, setForumCrisisPosts] = useState<ForumCrisisPost[]>([]);
   const [selectedCrisisId, setSelectedCrisisId] = useState<string | null>(null);
   const situationMapRef = useRef<HTMLDivElement | null>(null);
   const liveAlerts = (citizenAlerts?.items ?? [])
@@ -208,11 +222,25 @@ export default function PublicHome() {
     : selectedCrisisId === 'air-quality'
       ? psiRiskLayer
       : undefined;
+  const crisisTagMarkers = useMemo<MapMarker[]>(() =>
+    forumCrisisPosts
+      .filter((post) => post.crisisTag && Number.isFinite(post.latitude) && Number.isFinite(post.longitude))
+      .map((post) => ({
+        id: `forum-crisis-${post.id}`,
+        name: post.location || post.crisisTag || 'Tagged crisis signal',
+        latitude: post.latitude as number,
+        longitude: post.longitude as number,
+        value: post.crisisTag || 'Crisis tag',
+        detail: `${post.category}: ${post.content}`,
+        severity: markerSeverityFromPost(post),
+      })),
+    [forumCrisisPosts],
+  );
   const overallSituation = visibleAlerts.some((alert) => alert.severity === 'critical' || alert.severity === 'high') || staticCrisisCards.some((card) => card.severity === 'high')
     ? 'Elevated'
     : 'Stable';
   const mapMarkers = useMemo<MapMarker[]>(() => {
-    if (!selectedCrisisId) return [];
+    if (!selectedCrisisId) return crisisTagMarkers;
     if (selectedCrisisId === 'covid-watch') return covidCaseMarkers;
     if (selectedHeatmapLayer) return [];
 
@@ -229,7 +257,7 @@ export default function PublicHome() {
     if (selectedCrisis) return crisisMarkers;
 
     return crisisMarkers;
-  }, [selectedCrisis, selectedCrisisId, selectedHeatmapLayer, visibleAlerts]);
+  }, [crisisTagMarkers, selectedCrisis, selectedCrisisId, selectedHeatmapLayer, visibleAlerts]);
 
   useEffect(() => {
     fetch(apiUrl('/api/citizen/broadcasts'))
@@ -239,6 +267,22 @@ export default function PublicHome() {
       })
       .then((data) => setBroadcasts(data.items))
       .catch(() => setBroadcasts([]));
+  }, []);
+
+  useEffect(() => {
+    const loadForumCrisisPosts = () => {
+      fetch(apiUrl('/api/forum/posts'))
+        .then((response) => {
+          if (!response.ok) throw new Error('Forum posts unavailable');
+          return response.json() as Promise<{ items: ForumCrisisPost[] }>;
+        })
+        .then((data) => setForumCrisisPosts(data.items))
+        .catch(() => setForumCrisisPosts([]));
+    };
+
+    loadForumCrisisPosts();
+    const timer = window.setInterval(loadForumCrisisPosts, 15000);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -372,12 +416,12 @@ export default function PublicHome() {
             </div>
           </div>
           <div className="h-[430px]">
-            {selectedCrisisId ? (
+            {selectedCrisisId || crisisTagMarkers.length ? (
               <SingaporeRegionMap
                 markers={mapMarkers}
                 heatmapLayer={selectedHeatmapLayer}
                 showMarkers={!selectedHeatmapLayer}
-                problemLabel={selectedHeatmapLayer ? selectedHeatmapLayer.label.toLowerCase() : selectedCrisisId === 'covid-watch' ? 'Covid-19 case clusters' : 'active signals'}
+                problemLabel={selectedHeatmapLayer ? selectedHeatmapLayer.label.toLowerCase() : selectedCrisisId === 'covid-watch' ? 'Covid-19 case clusters' : selectedCrisisId ? 'active signals' : 'community crisis tags'}
               />
             ) : (
               <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-950/60 p-6 text-center">
@@ -392,7 +436,11 @@ export default function PublicHome() {
             )}
           </div>
           <p className="text-xs text-zinc-500 mt-2">
-            {selectedCrisis ? `Showing ${selectedCrisis.title} on the map. Click outside this section or click the card again to reset.` : 'Select an active situation to display its static map layer.'}
+            {selectedCrisis
+              ? `Showing ${selectedCrisis.title} on the map. Click outside this section or click the card again to reset.`
+              : crisisTagMarkers.length
+              ? 'Showing citizen forum crisis tags that include a location. Tags without coordinates are hidden from the map.'
+              : 'Select an active situation to display its static map layer.'}
           </p>
         </section>
       </div>
@@ -480,4 +528,21 @@ function mapBroadcastToHomeAlert(broadcast: BroadcastAlert): HomeAlert {
     severity: broadcast.severity,
     region: broadcast.target || 'Nationwide',
   };
+}
+
+function markerSeverityFromPost(post: ForumCrisisPost): MapMarker['severity'] {
+  const content = `${post.crisisTag ?? ''} ${post.category} ${post.content}`.toLowerCase();
+  if (
+    content.includes('fire')
+    || content.includes('flood')
+    || content.includes('danger')
+    || content.includes('urgent')
+    || (post.reports ?? 0) >= 5
+  ) {
+    return 'high';
+  }
+  if ((post.likes ?? 0) >= 5 || content.includes('shortage') || content.includes('disruption')) {
+    return 'medium';
+  }
+  return 'low';
 }
