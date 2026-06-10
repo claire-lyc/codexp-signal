@@ -122,7 +122,7 @@ function agencyMapNote(layer: LayerKey, maxValue: number) {
       ? 'Measured rainfall intensity is interpolated between official reporting stations.'
       : 'No measurable rainfall is currently reported; the surface remains near the low end of the scale.';
   }
-  if (layer === 'Temperature') return 'Pulsing rings highlight warmer reporting stations over the interpolated temperature surface.';
+  if (layer === 'Temperature') return 'Station readings are interpolated into a detailed temperature surface across Singapore.';
   if (layer === 'Wind') return 'PSI conditions form the background surface while arrows show measured wind speed and direction at reporting stations.';
   return 'Soft haze bands follow the five regional PSI readings and intensify as air quality worsens.';
 }

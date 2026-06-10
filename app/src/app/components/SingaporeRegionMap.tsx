@@ -598,28 +598,6 @@ export default function SingaporeRegionMap({
                 );
               })}
 
-            {weatherOverlay.kind === 'temperature' &&
-              projectedWeatherPoints.slice(0, 14).map((point, index) => {
-                const [x, y] = point.coordinates;
-                const radius = clamp(5 + (point.value - 24) * 1.4, 5, 21);
-
-                return (
-                  <circle
-                    key={`heat-pulse-${point.id}`}
-                    cx={x}
-                    cy={y}
-                    r={radius}
-                    fill="none"
-                    stroke={point.value >= 32 ? '#fb7185' : '#fde047'}
-                    strokeWidth="1.5"
-                    opacity="0.6"
-                  >
-                    <animate attributeName="r" values={`${radius * 0.6};${radius};${radius * 0.6}`} dur={`${3 + (index % 3)}s`} repeatCount="indefinite" />
-                    <animate attributeName="opacity" values="0.2;0.7;0.2" dur={`${3 + (index % 3)}s`} repeatCount="indefinite" />
-                  </circle>
-                );
-              })}
-
             {weatherOverlay.kind === 'psi' && (
               <g filter="url(#singapore-weather-haze-blur)" opacity="0.3">
                 {projectedWeatherPoints.map((point, index) => {
