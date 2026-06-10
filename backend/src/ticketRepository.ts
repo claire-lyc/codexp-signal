@@ -36,6 +36,7 @@ export type Ticket = {
   message: string;
   location: string;
   crisisType: string;
+  specificCrisis: string | null;
   status: TicketStatus;
   assignedAgency: string;
   urgency: TicketUrgency;
@@ -905,6 +906,7 @@ async function hydrateTickets(reports: ReportRow[], options: { includeImages?: b
       message: report.description,
       location: report.location_text ?? 'Location not provided',
       crisisType: displayCrisisType(report.crisis_type),
+      specificCrisis: report.title,
       status: fromDbStatus(report.status),
       assignedAgency: report.assigned_agency_code ?? agencyFor(report.crisis_type).code,
       urgency: report.severity,

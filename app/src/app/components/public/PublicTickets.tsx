@@ -55,6 +55,7 @@ type TicketRecord = {
   message: string;
   location: string;
   crisisType: string;
+  specificCrisis?: string | null;
   status: string;
   assignedAgency: string;
   urgency: TicketUrgency;
@@ -74,6 +75,7 @@ type AuthUser = {
 
 type FieldErrors = {
   reportType?: string;
+  specificCrisis?: string;
   description?: string;
   location?: string;
   image?: string;
@@ -90,6 +92,16 @@ const ticketTags = [
   { value: 'other', label: 'Other', icon: 'O', agency: 'GOV-OPS' },
 ];
 
+const specificCrises: Record<string, string[]> = {
+  health: ['COVID-19', 'Hantavirus', 'Dengue', 'Other health issue'],
+  flood: ['Flash flooding', 'Drain overflow', 'Rising water level', 'Other flooding issue'],
+  supply: ['Medicine shortage', 'Food shortage', 'Essential goods shortage', 'Fuel shortage'],
+  infrastructure: ['Power outage', 'Water supply disruption', 'Building or road damage', 'Telecommunications outage'],
+  transport: ['Train disruption', 'Bus disruption', 'Traffic incident', 'Road obstruction'],
+  environment: ['Haze', 'Air pollution', 'Water pollution', 'Pest or animal issue'],
+  other: ['Community safety issue', 'Public facility issue', 'Noise or nuisance', 'Other issue'],
+};
+
 export default function PublicTickets() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -99,6 +111,7 @@ export default function PublicTickets() {
   const [loginBusy, setLoginBusy] = useState(false);
 
   const [reportType, setReportType] = useState('');
+  const [specificCrisis, setSpecificCrisis] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
   const [latitude, setLatitude] = useState<number | null>(null);
@@ -252,6 +265,7 @@ export default function PublicTickets() {
     const nextErrors: FieldErrors = {};
     if (!authUser) nextErrors.auth = 'Sign in before submitting a report.';
     if (!reportType) nextErrors.reportType = 'Choose a tag.';
+    if (reportType && !specificCrisis) nextErrors.specificCrisis = 'Choose the specific problem.';
     if (!description.trim()) nextErrors.description = 'Describe what happened.';
     if (files.some((file) => file.size > 5 * 1024 * 1024)) nextErrors.image = 'Each image must be 5 MB or smaller.';
     setFieldErrors(nextErrors);
@@ -270,6 +284,7 @@ export default function PublicTickets() {
     const formData = new FormData();
     formData.append('reportType', reportType);
     formData.append('crisisType', reportType);
+    formData.append('title', specificCrisis);
     formData.append('description', description.trim());
     formData.append('locationText', location.trim());
     if (latitude !== null) formData.append('latitude', String(latitude));
@@ -285,11 +300,18 @@ export default function PublicTickets() {
       });
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
       const data = (await response.json()) as CreatedTicket;
-      const item = data.item ?? ticketFromCreated(data, { reportType, description, location, hasImage: files.length > 0 });
+      const item = data.item ?? ticketFromCreated(data, {
+        reportType,
+        specificCrisis,
+        description,
+        location,
+        hasImage: files.length > 0,
+      });
       setCreatedTicket(data);
       setTickets((current) => [item, ...current.filter((ticket) => ticket.id !== item.id)]);
       setSelectedTicket(item);
       setDescription('');
+      setSpecificCrisis('');
       setLocation('');
       setLatitude(null);
       setLongitude(null);
@@ -463,7 +485,12 @@ export default function PublicTickets() {
                     type="button"
                     onClick={() => {
                       setReportType(item.value);
-                      setFieldErrors((current) => ({ ...current, reportType: undefined }));
+                      setSpecificCrisis('');
+                      setFieldErrors((current) => ({
+                        ...current,
+                        reportType: undefined,
+                        specificCrisis: undefined,
+                      }));
                     }}
                     className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
                       reportType === item.value
@@ -487,6 +514,29 @@ export default function PublicTickets() {
                 )}
               </div>
               {fieldErrors.reportType && <ErrorLine text={fieldErrors.reportType} />}
+
+              {reportType ? (
+                <div>
+                  <label htmlFor="specific-crisis" className="mb-1.5 block text-sm font-medium text-zinc-300">
+                    Specific problem
+                  </label>
+                  <select
+                    id="specific-crisis"
+                    value={specificCrisis}
+                    onChange={(event) => {
+                      setSpecificCrisis(event.target.value);
+                      setFieldErrors((current) => ({ ...current, specificCrisis: undefined }));
+                    }}
+                    className={inputClass(Boolean(fieldErrors.specificCrisis))}
+                  >
+                    <option value="">Select a specific problem</option>
+                    {(specificCrises[reportType] ?? []).map((crisis) => (
+                      <option key={crisis} value={crisis}>{crisis}</option>
+                    ))}
+                  </select>
+                  {fieldErrors.specificCrisis && <ErrorLine text={fieldErrors.specificCrisis} />}
+                </div>
+              ) : null}
 
               <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
                 <div>
@@ -654,6 +704,7 @@ function TicketCard({ ticket, selected, onClick }: { ticket: TicketRecord; selec
     >
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Badge icon={<Tag className="h-3.5 w-3.5" />} text={ticket.crisisType} blue={selected && !resolved} green={selected && resolved} />
+        {ticket.specificCrisis ? <Badge icon={<AlertCircle className="h-3.5 w-3.5" />} text={ticket.specificCrisis} /> : null}
         <Badge icon={<Shield className="h-3.5 w-3.5" />} text={ticket.assignedAgency} />
         {ticket.hasImage && <Badge icon={<ImageIcon className="h-3.5 w-3.5" />} text="Photo" />}
         <span className="ml-auto font-mono text-xs text-zinc-500">{ticket.id}</span>
@@ -708,6 +759,7 @@ function DiscussionPanel({
         <div>
           <div className="mb-2 flex flex-wrap gap-2">
             <Badge icon={<Tag className="h-3.5 w-3.5" />} text={ticket.crisisType} blue={!resolved} green={resolved} />
+            {ticket.specificCrisis ? <Badge icon={<AlertCircle className="h-3.5 w-3.5" />} text={ticket.specificCrisis} /> : null}
             <Badge icon={<MapPin className="h-3.5 w-3.5" />} text={ticket.location} />
             {ticket.hasImage && <Badge icon={<ImageIcon className="h-3.5 w-3.5" />} text={`${ticket.images?.length || 1} photo`} />}
           </div>
@@ -828,13 +880,20 @@ function inputClass(error: boolean, extra = '') {
   return `w-full rounded-lg border bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 ${error ? 'border-red-700 focus:ring-red-600' : 'border-zinc-700 focus:ring-blue-600'} ${extra}`;
 }
 
-function ticketFromCreated(data: CreatedTicket, input: { reportType: string; description: string; location: string; hasImage: boolean }): TicketRecord {
+function ticketFromCreated(data: CreatedTicket, input: {
+  reportType: string;
+  specificCrisis: string;
+  description: string;
+  location: string;
+  hasImage: boolean;
+}): TicketRecord {
   return {
     id: data.publicReportId,
     reporter: 'You',
     message: input.description.trim(),
     location: input.location.trim() || 'Location not provided',
     crisisType: labelForReportType(input.reportType),
+    specificCrisis: input.specificCrisis,
     status: data.status,
     assignedAgency: data.assignedAgency,
     urgency: urgencyFor(input.reportType, input.description),
