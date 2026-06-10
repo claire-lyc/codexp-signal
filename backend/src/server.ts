@@ -240,6 +240,7 @@ app.post('/api/forum/posts', authenticateJwt as express.RequestHandler, async (r
       latitude,
       longitude,
       sourceReportId: linkedTicket?.id ?? null,
+      crisisTag: linkedTicket ? forumCrisisTag(linkedTicket) : null,
       images: parseImageMetadata(request.body?.images).map((image) => ({
         filename: image.originalFilename,
         mimeType: image.mimeType,
@@ -661,6 +662,7 @@ app.post(
             latitude: numberBody(request.body?.latitude),
             longitude: numberBody(request.body?.longitude),
             sourceReportId: ticket.id,
+            crisisTag: forumCrisisTag(ticket),
             aiFlag: await detectPotentialMisinformation(message),
             images: [...uploadedImages, ...bodyImages].map((image) => ({
               filename: image.originalFilename,
@@ -1283,4 +1285,11 @@ function forumCategory(crisisType: string) {
   if (normalized === 'supply') return 'Supply';
   if (normalized === 'infrastructure' || normalized === 'transport') return 'Infrastructure';
   return 'Community';
+}
+
+function forumCrisisTag(ticket: Ticket) {
+  const broadType = ticket.crisisType.trim();
+  const specificIssue = ticket.subjectTag?.label?.trim() || ticket.specificCrisis?.trim();
+  if (!specificIssue || specificIssue.toLowerCase().startsWith('other')) return broadType;
+  return `${broadType} / ${specificIssue}`;
 }

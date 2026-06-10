@@ -51,6 +51,8 @@ type ForumPost = {
   replies: ForumReply[];
   images?: ForumImage[];
   category: string;
+  crisisTag?: string | null;
+  topicTag?: string | null;
   location?: string | null;
   latitude?: number | null;
   longitude?: number | null;
@@ -167,6 +169,7 @@ export default function PublicForum() {
   const [category, setCategory] = useState('Community');
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
+  const [activeTopic, setActiveTopic] = useState('All');
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [replyText, setReplyText] = useState('');
@@ -256,13 +259,18 @@ export default function PublicForum() {
 
     return posts.filter((post) => {
       const categoryMatch = activeCategory === 'All' || post.category === activeCategory;
+      const topicMatch = activeTopic === 'All' || post.topicTag === activeTopic;
       const textMatch =
         !normalizedQuery ||
         post.content.toLowerCase().includes(normalizedQuery) ||
         post.author.toLowerCase().includes(normalizedQuery);
-      return categoryMatch && textMatch;
+      return categoryMatch && topicMatch && textMatch;
     });
-  }, [activeCategory, posts, query]);
+  }, [activeCategory, activeTopic, posts, query]);
+  const topicTags = useMemo(
+    () => [...new Set(posts.map((post) => post.topicTag).filter((tag): tag is string => Boolean(tag)))].sort(),
+    [posts],
+  );
   const selectedPost = filteredPosts.find((post) => post.id === expandedPostId) ?? null;
 
   const postCooldownSeconds = Math.max(0, Math.ceil((postCooldownUntil - now) / 1000));
@@ -719,8 +727,39 @@ export default function PublicForum() {
           ))}
         </div>
 
-        <div className="grid min-h-[560px] gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(420px,1.25fr)]">
-          <div className="space-y-3 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+        {topicTags.length > 0 ? (
+          <div className="mb-4 flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-3">
+            <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">Topics</span>
+            <button
+              type="button"
+              onClick={() => setActiveTopic('All')}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                activeTopic === 'All'
+                  ? 'border-violet-500 bg-violet-600 text-white'
+                  : 'border-zinc-700 bg-zinc-900 text-zinc-400 hover:bg-zinc-800'
+              }`}
+            >
+              All topics
+            </button>
+            {topicTags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => setActiveTopic(tag)}
+                className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                  activeTopic === tag
+                    ? 'border-violet-500 bg-violet-600 text-white'
+                    : 'border-violet-900/70 bg-violet-950/30 text-violet-300 hover:bg-violet-950/60'
+                }`}
+              >
+                #{tag}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="grid min-h-[560px] gap-4 lg:h-[min(72vh,720px)] lg:grid-cols-[minmax(0,0.95fr)_minmax(420px,1.25fr)]">
+          <div className="min-h-0 space-y-3 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 [scrollbar-color:#3f3f46_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700/70">
             {filteredPosts.length === 0 && (
               <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
                 No posts match this filter.
@@ -751,6 +790,8 @@ export default function PublicForum() {
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                         <span className="rounded bg-zinc-800 px-2 py-0.5">{post.category}</span>
+                        {post.topicTag ? <TopicTag text={post.topicTag} /> : null}
+                        {post.crisisTag ? <CrisisTag text={post.crisisTag} compact /> : null}
                         <span>{relativeTime(post.createdAt)}</span>
                         {post.distanceKm != null && <span>{post.distanceKm.toFixed(1)} km away</span>}
                       </div>
@@ -780,7 +821,7 @@ export default function PublicForum() {
             })}
           </div>
 
-          <aside className="hidden min-h-[560px] rounded-lg border border-zinc-800 bg-zinc-950 lg:block">
+          <aside className="hidden min-h-0 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 lg:block">
             {selectedPost ? (
               <div className="flex h-full flex-col">
                 <div className="border-b border-zinc-800 px-5 py-4">
@@ -788,6 +829,8 @@ export default function PublicForum() {
                     <div className="min-w-0">
                       <div className="mb-2 flex flex-wrap items-center gap-2">
                         <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">{selectedPost.category}</span>
+                        {selectedPost.topicTag ? <TopicTag text={selectedPost.topicTag} /> : null}
+                        {selectedPost.crisisTag ? <CrisisTag text={selectedPost.crisisTag} /> : null}
                         {selectedPost.verified && (
                           <span className="inline-flex items-center gap-1 rounded bg-green-950 px-2 py-0.5 text-xs text-green-400">
                             <CheckCircle className="h-3 w-3" />
@@ -954,6 +997,8 @@ export default function PublicForum() {
                   <div className="min-w-0">
                     <div className="mb-2 flex flex-wrap items-center gap-2">
                       <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">{selectedPost.category}</span>
+                      {selectedPost.topicTag ? <TopicTag text={selectedPost.topicTag} /> : null}
+                      {selectedPost.crisisTag ? <CrisisTag text={selectedPost.crisisTag} /> : null}
                       {selectedPost.verified && (
                         <span className="inline-flex items-center gap-1 rounded bg-green-950 px-2 py-0.5 text-xs text-green-400">
                           <CheckCircle className="h-3 w-3" />
@@ -1236,6 +1281,22 @@ function TicketBadge({ ticketId, compact = false }: { ticketId: string; compact?
   return (
     <span className={`mt-2 inline-flex rounded-md border border-blue-900 bg-blue-950/40 font-mono text-blue-300 ${compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs'}`}>
       Ticket {ticketId}
+    </span>
+  );
+}
+
+function CrisisTag({ text, compact = false }: { text: string; compact?: boolean }) {
+  return (
+    <span className={`inline-flex rounded-md border border-red-900/70 bg-red-950/40 font-medium text-red-200 ${compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs'}`}>
+      Crisis: {text}
+    </span>
+  );
+}
+
+function TopicTag({ text }: { text: string }) {
+  return (
+    <span className="inline-flex rounded-md border border-violet-900/70 bg-violet-950/30 px-1.5 py-0.5 text-[10px] font-medium text-violet-300">
+      #{text}
     </span>
   );
 }

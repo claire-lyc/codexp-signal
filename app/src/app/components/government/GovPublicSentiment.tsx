@@ -50,6 +50,8 @@ type ForumPost = {
   replies: ForumReply[];
   images?: ForumImage[];
   category: string;
+  crisisTag?: string | null;
+  topicTag?: string | null;
   similarReports?: number;
   sourceReportId?: string | null;
 };
@@ -484,8 +486,8 @@ export default function GovPublicSentiment() {
               </div>
             </div>
 
-            <div className="grid min-h-[660px] lg:grid-cols-[minmax(360px,0.9fr)_minmax(520px,1.2fr)]">
-              <div className="space-y-3 overflow-y-auto border-r border-zinc-800 bg-zinc-950/40 p-3">
+            <div className="grid min-h-[620px] lg:h-[min(74vh,760px)] lg:grid-cols-[minmax(360px,0.9fr)_minmax(520px,1.2fr)]">
+              <div className="min-h-0 space-y-3 overflow-y-auto border-r border-zinc-800 bg-zinc-950/40 p-3 [scrollbar-color:#3f3f46_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700/70">
                 {filteredPosts.length === 0 && (
                   <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
                     No forum posts match these filters.
@@ -501,7 +503,7 @@ export default function GovPublicSentiment() {
                 ))}
               </div>
 
-              <aside className="min-h-[660px] bg-zinc-950">
+              <aside className="min-h-0 overflow-hidden bg-zinc-950">
                 {selectedPost ? (
                   <div className="flex h-full flex-col">
                     <div className="border-b border-zinc-800 px-5 py-4">
@@ -514,6 +516,8 @@ export default function GovPublicSentiment() {
                         <div className="min-w-0">
                           <div className="mb-2 flex flex-wrap items-center gap-2">
                             <Badge text={selectedPost.category} icon={<MessageSquare className="h-3.5 w-3.5" />} />
+                            {selectedPost.topicTag ? <TopicTag text={selectedPost.topicTag} /> : null}
+                            {selectedPost.crisisTag ? <CrisisTag text={selectedPost.crisisTag} /> : null}
                             <ModerationBadges post={selectedPost} />
                           </div>
                           <h2 className="text-xl font-semibold leading-7">{threadTitle(selectedPost.content)}</h2>
@@ -826,6 +830,8 @@ function ForumPostButton({ post, selected, onClick }: { post: ForumPost; selecte
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
             <span className="rounded bg-zinc-800 px-2 py-0.5">{post.category}</span>
+            {post.topicTag ? <TopicTag text={post.topicTag} /> : null}
+            {post.crisisTag ? <CrisisTag text={post.crisisTag} compact /> : null}
             <span>{relativeTime(post.createdAt)}</span>
           </div>
         </div>
@@ -876,6 +882,22 @@ function TicketBadge({ ticketId, compact = false }: { ticketId: string; compact?
   return (
     <span className={`mt-2 inline-flex rounded-md border border-blue-900 bg-blue-950/40 font-mono text-blue-300 ${compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs'}`}>
       Ticket {ticketId}
+    </span>
+  );
+}
+
+function CrisisTag({ text, compact = false }: { text: string; compact?: boolean }) {
+  return (
+    <span className={`inline-flex rounded-md border border-red-900/70 bg-red-950/40 font-medium text-red-200 ${compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs'}`}>
+      Crisis: {text}
+    </span>
+  );
+}
+
+function TopicTag({ text }: { text: string }) {
+  return (
+    <span className="inline-flex rounded-md border border-violet-900/70 bg-violet-950/30 px-1.5 py-0.5 text-[10px] font-medium text-violet-300">
+      #{text}
     </span>
   );
 }

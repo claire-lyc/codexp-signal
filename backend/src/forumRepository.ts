@@ -33,6 +33,8 @@ export type ForumPost = {
   replies: ForumReply[];
   images: ForumImage[];
   category: string;
+  crisisTag: string | null;
+  topicTag: string | null;
   location: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -71,6 +73,8 @@ const forumPosts: ForumPost[] = [
       },
     ],
     category: 'Health',
+    crisisTag: null,
+    topicTag: 'mask',
     location: 'Tampines',
     latitude: 1.3521,
     longitude: 103.9442,
@@ -91,6 +95,8 @@ const forumPosts: ForumPost[] = [
     images: [],
     replies: [],
     category: 'Weather',
+    crisisTag: null,
+    topicTag: 'flood',
     location: 'East Coast',
     latitude: 1.3008,
     longitude: 103.9122,
@@ -111,6 +117,8 @@ const forumPosts: ForumPost[] = [
     images: [],
     replies: [],
     category: 'Health',
+    crisisTag: null,
+    topicTag: 'hospital',
     location: null,
     latitude: null,
     longitude: null,
@@ -128,6 +136,7 @@ export function listForumPosts(options: {
   latitude?: number | null;
   longitude?: number | null;
 } = {}) {
+  consolidateExactDuplicateThreads();
   return [...forumPosts].filter((post) => {
     if (options.includeHidden) return true;
     return post.moderationState !== 'hidden' && post.moderationState !== 'misleading' && !bannedForumAuthors.has(normalizeAuthor(post.author));
@@ -139,6 +148,8 @@ export function createForumPost(input: {
   author?: string;
   content: string;
   category?: string;
+  crisisTag?: string | null;
+  topicTag?: string | null;
   aiFlag?: boolean;
   verified?: boolean;
   moderationState?: ForumModerationState;
@@ -176,6 +187,8 @@ export function createForumPost(input: {
         previewUrl: image.previewUrl as string,
       })),
     category: input.category?.trim() || inferCategory(content),
+    crisisTag: input.crisisTag?.trim() || null,
+    topicTag: input.topicTag?.trim().toLowerCase() || inferTopicTag(content, input.crisisTag, input.location),
     location: input.location?.trim() || null,
     latitude: input.latitude ?? null,
     longitude: input.longitude ?? null,
@@ -200,6 +213,12 @@ export function createOrMergeForumPost(input: Parameters<typeof createForumPost>
     similarReport: true,
     sourceReportId: input.sourceReportId?.trim() || null,
   });
+  if (!match.post.crisisTag && input.crisisTag?.trim()) {
+    match.post.crisisTag = input.crisisTag.trim();
+  }
+  if (!match.post.topicTag) {
+    match.post.topicTag = input.topicTag?.trim().toLowerCase() || inferTopicTag(input.content, input.crisisTag, input.location);
+  }
   match.post.similarReports += 1;
   likeForumPost(match.post.id, `similar:${normalizeAuthor(input.author ?? 'anonymous')}`);
   return { post: match.post, merged: true, similarityScore: match.score };
@@ -393,10 +412,17 @@ function findSimilarForumPost(input: Parameters<typeof createForumPost>[0]) {
   const inputTokens = normalizedTokens(input.content);
   const normalizedInput = normalizeContent(input.content);
   const inputLocation = normalizeLocation(input.location);
+  const inputTopicTag = input.topicTag?.trim().toLowerCase() || inferTopicTag(input.content, input.crisisTag, input.location);
+  const inputTopicFamily = inferBaseTopic(input.content, input.crisisTag);
 
   return forumPosts
     .filter((post) => new Date(post.createdAt).getTime() >= cutoff)
     .map((post) => {
+      const postTopicTag = locationQualifiedTopic(post);
+      const postTopicFamily = inferBaseTopic(post.content, post.crisisTag);
+      if (inputTopicFamily && inputTopicFamily === postTopicFamily && inputTopicTag && postTopicTag && inputTopicTag !== postTopicTag) {
+        return { post, score: -1 };
+      }
       const postTokens = normalizedTokens(post.content);
       const shared = [...inputTokens].filter((token) => postTokens.has(token)).length;
       const union = new Set([...inputTokens, ...postTokens]).size || 1;
@@ -410,6 +436,9 @@ function findSimilarForumPost(input: Parameters<typeof createForumPost>[0]) {
       if (post.category === inputCategory) {
         score += 0.08;
       }
+      if (inputTopicTag && postTopicTag === inputTopicTag) {
+        score += 0.2;
+      }
       const postLocation = normalizeLocation(post.location);
       if (inputLocation && postLocation && (inputLocation.includes(postLocation) || postLocation.includes(inputLocation))) {
         score += 0.25;
@@ -420,6 +449,42 @@ function findSimilarForumPost(input: Parameters<typeof createForumPost>[0]) {
     .sort((left, right) =>
       new Date(left.post.createdAt).getTime() - new Date(right.post.createdAt).getTime() || right.score - left.score,
     )[0] ?? null;
+}
+
+function consolidateExactDuplicateThreads() {
+  const ordered = [...forumPosts].sort(
+    (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
+  );
+  const originals = new Map<string, ForumPost>();
+
+  for (const post of ordered) {
+    const topic = locationQualifiedTopic(post) ?? '';
+    post.topicTag = topic || null;
+    const key = `${topic}:${normalizeContent(post.content)}`;
+    const original = originals.get(key);
+    if (!original) {
+      originals.set(key, post);
+      continue;
+    }
+
+    original.replies.push({
+      id: randomUUID(),
+      author: post.author,
+      content: post.content,
+      createdAt: post.createdAt,
+      similarReport: true,
+      sourceReportId: post.sourceReportId,
+    }, ...post.replies);
+    original.likes += post.likes;
+    original.dislikes += post.dislikes;
+    original.reports += post.reports;
+    original.similarReports += post.similarReports + 1;
+    original.crisisTag ||= post.crisisTag;
+    original.topicTag ||= post.topicTag;
+
+    const duplicateIndex = forumPosts.findIndex((item) => item.id === post.id);
+    if (duplicateIndex >= 0) forumPosts.splice(duplicateIndex, 1);
+  }
 }
 
 function normalizedTokens(value: string) {
@@ -435,6 +500,63 @@ function normalizedTokens(value: string) {
 function normalizeContent(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
+
+function inferTopicTag(content: string, crisisTag?: string | null, location?: string | null) {
+  const baseTopic = inferBaseTopic(content, crisisTag);
+  if (!baseTopic) return null;
+
+  const area = inferAreaTag(location);
+  return area ? `${baseTopic}-${area}` : baseTopic;
+}
+
+function inferBaseTopic(content: string, crisisTag?: string | null) {
+  const specificTag = crisisTag?.split('/').at(-1)?.trim().toLowerCase();
+  const normalized = normalizeContent(content);
+  const topics: Array<[string, string[]]> = [
+    ['flood', ['flood', 'flooding', 'flash flood', 'rising water', 'drain overflow']],
+    ['ebola', ['ebola']],
+    ['dengue', ['dengue']],
+    ['haze', ['haze', 'smoke', 'air pollution']],
+    ['fire', ['fire', 'burning', 'on fire']],
+    ['power-outage', ['power outage', 'blackout', 'electricity outage']],
+    ['water-outage', ['water outage', 'water disruption', 'no water']],
+    ['train-disruption', ['train disruption', 'mrt disruption', 'mrt delay']],
+    ['medicine-shortage', ['medicine shortage', 'medication shortage']],
+  ];
+  const baseTopic = specificTag && !specificTag.startsWith('other')
+    ? slugTopic(specificTag)
+    : topics.find(([, phrases]) => phrases.some((phrase) => normalized.includes(phrase)))?.[0] ?? null;
+  return baseTopic;
+}
+
+function slugTopic(value: string) {
+  return value.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function locationQualifiedTopic(post: ForumPost) {
+  const inferred = inferTopicTag(post.content, post.crisisTag, post.location);
+  if (!post.topicTag) return inferred;
+  if (inferred && inferBaseTopic(post.content, post.crisisTag)) return inferred;
+  return post.topicTag;
+}
+
+function inferAreaTag(location?: string | null) {
+  const firstLocationPart = (location ?? '').split(',')[0] ?? '';
+  const tokens = normalizeContent(firstLocationPart)
+    .split(' ')
+    .filter(Boolean)
+    .filter((token) => !/^\d+[a-z]?$/.test(token))
+    .filter((token) => !locationNoiseWords.has(token));
+  if (!tokens.length) return null;
+  return slugTopic(tokens.slice(0, 4).join(' '));
+}
+
+const locationNoiseWords = new Set([
+  'blk', 'block', 'building', 'centre', 'center', 'community', 'near', 'opposite',
+  'road', 'rd', 'street', 'st', 'avenue', 'ave', 'drive', 'dr', 'lane', 'ln',
+  'walk', 'way', 'close', 'crescent', 'place', 'plaza', 'mall', 'station', 'mrt',
+  'singapore',
+]);
 
 function normalizeLocation(value: string | null | undefined) {
   return (value ?? '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
