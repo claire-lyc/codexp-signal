@@ -23,6 +23,8 @@ type ForumReply = {
   content: string;
   createdAt: string;
   official?: boolean;
+  similarReport?: boolean;
+  sourceReportId?: string | null;
 };
 
 type ForumImage = {
@@ -49,6 +51,7 @@ type ForumPost = {
   images?: ForumImage[];
   category: string;
   similarReports?: number;
+  sourceReportId?: string | null;
 };
 
 type SentimentPayload = {
@@ -70,13 +73,15 @@ const moderationFilters = ['All', 'Reported', 'AI Flagged', 'Under Review', 'Hid
 
 export default function GovPublicSentiment() {
   const location = useLocation();
+  const linkedPostId = new URLSearchParams(location.search).get('post');
+  const linkedTicketId = new URLSearchParams(location.search).get('ticket');
   const { data: sentimentData } = useApi<SentimentPayload>('/api/gov/sentiment');
   const [activeTab, setActiveTab] = useState<'overview' | 'forum'>(location.pathname.endsWith('/forum') ? 'forum' : 'overview');
   const [forumPosts, setForumPosts] = useState<ForumPost[]>([]);
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [activeModeration, setActiveModeration] = useState('All');
-  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(linkedPostId);
   const [selectedImageOpen, setSelectedImageOpen] = useState(true);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [status, setStatus] = useState('');
@@ -88,6 +93,16 @@ export default function GovPublicSentiment() {
   useEffect(() => {
     setActiveTab(location.pathname.endsWith('/forum') ? 'forum' : 'overview');
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (linkedPostId) {
+      setActiveTab('forum');
+      setSelectedPostId(linkedPostId);
+      setActiveCategory('All');
+      setActiveModeration('All');
+      setQuery('');
+    }
+  }, [linkedPostId]);
 
   useEffect(() => {
     setSelectedImageOpen(true);
@@ -144,7 +159,7 @@ export default function GovPublicSentiment() {
     if (!selectedPostId && filteredPosts[0]) {
       setSelectedPostId(filteredPosts[0].id);
     }
-    if (selectedPostId && !filteredPosts.some((post) => post.id === selectedPostId)) {
+    if (selectedPostId && filteredPosts.length > 0 && !filteredPosts.some((post) => post.id === selectedPostId)) {
       setSelectedPostId(filteredPosts[0]?.id ?? null);
     }
   }, [filteredPosts, selectedPostId]);
@@ -490,6 +505,11 @@ export default function GovPublicSentiment() {
                 {selectedPost ? (
                   <div className="flex h-full flex-col">
                     <div className="border-b border-zinc-800 px-5 py-4">
+                      {linkedTicketId && selectedPost.id === linkedPostId ? (
+                        <div className="mb-3 rounded-lg border border-blue-800 bg-blue-950/30 px-3 py-2 text-xs text-blue-200">
+                          Opened from ticket <span className="font-mono font-semibold">{linkedTicketId}</span>. This ticket is grouped under this forum thread.
+                        </div>
+                      ) : null}
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
                           <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -515,10 +535,11 @@ export default function GovPublicSentiment() {
                     <div className="flex-1 space-y-4 overflow-y-auto p-5">
                       <div className={`rounded-lg border p-4 ${selectedPost.aiFlag ? 'border-red-900/70 bg-red-950/20' : 'border-zinc-800 bg-zinc-900'}`}>
                         <div className="mb-2 flex items-center justify-between gap-3">
-                          <span className="font-medium">{selectedPost.author}</span>
+                          <span className="text-xs font-medium text-zinc-500">{selectedPost.author}</span>
                           <span className="text-xs text-zinc-600">{new Date(selectedPost.createdAt).toLocaleString()}</span>
                         </div>
-                        <p className="whitespace-pre-wrap text-sm leading-6 text-zinc-300">{selectedPost.content}</p>
+                        <p className="whitespace-pre-wrap text-base font-medium leading-7 text-zinc-100">{selectedPost.content}</p>
+                        {selectedPost.sourceReportId ? <TicketBadge ticketId={selectedPost.sourceReportId} /> : null}
                       </div>
 
                       {selectedPost.images?.length ? (
@@ -594,10 +615,13 @@ export default function GovPublicSentiment() {
                         {selectedPost.replies.map((reply) => (
                           <div key={reply.id} className={`rounded-lg p-3 ${reply.official ? 'border border-blue-800 bg-blue-950/30' : 'bg-zinc-900/70'}`}>
                             <div className="mb-1 flex items-center justify-between gap-3">
-                              <span className={`text-sm font-medium ${reply.official ? 'text-blue-300' : ''}`}>{reply.author}</span>
+                              <span className={`text-xs font-medium ${reply.official ? 'text-blue-300' : 'text-zinc-500'}`}>{reply.author}</span>
                               <span className="text-xs text-zinc-600">{relativeTime(reply.createdAt)}</span>
                             </div>
-                            <p className="text-sm leading-6 text-zinc-300">{reply.content}</p>
+                            <p className="text-base font-medium leading-7 text-zinc-100">{reply.content}</p>
+                            {reply.sourceReportId || reply.similarReport ? (
+                              <GroupedEntryBadge ticketId={reply.sourceReportId} entryId={reply.id} />
+                            ) : null}
                           </div>
                         ))}
                       </div>
@@ -797,7 +821,7 @@ function ForumPostButton({ post, selected, onClick }: { post: ForumPost; selecte
       <div className="mb-2 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium text-zinc-100">{post.author}</span>
+            <span className="text-xs font-medium text-zinc-500">{post.author}</span>
             <ModerationBadges post={post} compact />
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
@@ -810,7 +834,8 @@ function ForumPostButton({ post, selected, onClick }: { post: ForumPost; selecte
           {post.replies.length}
         </div>
       </div>
-      <p className="line-clamp-2 text-sm leading-6 text-zinc-300">{post.content}</p>
+      <p className="line-clamp-2 text-base font-medium leading-6 text-zinc-100">{post.content}</p>
+      {post.sourceReportId ? <TicketBadge ticketId={post.sourceReportId} compact /> : null}
       {post.images?.[0] ? (
         <div className="mt-3 h-20 w-20 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800">
           <img src={post.images[0].previewUrl} alt={post.images[0].filename ?? 'Forum attachment'} className="h-full w-full object-cover" />
@@ -845,6 +870,27 @@ function MiniStat({ label, value }: { label: string; value: string }) {
       <div className="text-[11px] text-zinc-500">{label}</div>
     </div>
   );
+}
+
+function TicketBadge({ ticketId, compact = false }: { ticketId: string; compact?: boolean }) {
+  return (
+    <span className={`mt-2 inline-flex rounded-md border border-blue-900 bg-blue-950/40 font-mono text-blue-300 ${compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs'}`}>
+      Ticket {ticketId}
+    </span>
+  );
+}
+
+function GroupedEntryBadge({ ticketId, entryId }: { ticketId?: string | null; entryId: string }) {
+  if (ticketId) return <TicketBadge ticketId={ticketId} />;
+  return (
+    <span className="mt-2 inline-flex rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 font-mono text-xs text-zinc-400">
+      Ticket {fallbackTicketId(entryId)}
+    </span>
+  );
+}
+
+function fallbackTicketId(value: string) {
+  return `TKT-${value.replace(/[^a-z0-9]/gi, '').slice(0, 8).toUpperCase()}`;
 }
 
 function Badge({

@@ -554,6 +554,22 @@ export default function GovFormHandling() {
     selectTicket(ticket.id);
   };
 
+  const openLinkedForum = async (ticket: Ticket) => {
+    try {
+      const response = await fetch(apiUrl(`/api/forum/posts/by-report/${encodeURIComponent(ticket.id)}`), {
+        headers: authHeaders(),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error ?? 'This ticket is not linked to a forum thread.');
+      }
+      const data = await response.json() as { item: { id: string } };
+      navigate(`/gov/forum?post=${encodeURIComponent(data.item.id)}&ticket=${encodeURIComponent(ticket.id)}`);
+    } catch (caught) {
+      setNotice(caught instanceof Error ? caught.message : 'Unable to open the linked forum thread.');
+    }
+  };
+
   const sendTicketToBroadcast = (ticket: Ticket) => {
     const region = ticket.location.split(',').at(-1)?.trim();
     const draft = {
@@ -1319,6 +1335,11 @@ export default function GovFormHandling() {
                         key={caseTicket.id}
                         type="button"
                         onClick={() => openNavigatorTicket(caseTicket)}
+                        onContextMenu={(event) => {
+                          event.preventDefault();
+                          void openLinkedForum(caseTicket);
+                        }}
+                        title={`Open ${caseTicket.id}. Right-click to open its linked forum thread.`}
                         className={`w-full rounded-md border px-2.5 py-2 text-left transition-colors ${
                           selectedTicket.id === caseTicket.id
                             ? 'border-blue-700 bg-blue-950/40 text-blue-100'
@@ -1331,6 +1352,7 @@ export default function GovFormHandling() {
                         </div>
                         <div className="mt-1 truncate text-xs font-medium text-zinc-200">{caseTicket.location}</div>
                         <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{caseTicket.message}</div>
+                        <div className="mt-1.5 text-[10px] text-blue-400/80">Right-click for linked forum</div>
                       </button>
                     ))}
                   </div>

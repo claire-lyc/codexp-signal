@@ -7,6 +7,7 @@ export type ForumReply = {
   createdAt: string;
   official?: boolean;
   similarReport?: boolean;
+  sourceReportId?: string | null;
 };
 
 export type ForumImage = {
@@ -197,9 +198,10 @@ export function createOrMergeForumPost(input: Parameters<typeof createForumPost>
     content: input.content.trim(),
     createdAt: new Date().toISOString(),
     similarReport: true,
+    sourceReportId: input.sourceReportId?.trim() || null,
   });
   match.post.similarReports += 1;
-  likeForumPost(match.post.id, `similar:${normalizeAuthor(input.author ?? 'anonymous')}:${match.post.similarReports}`);
+  likeForumPost(match.post.id, `similar:${normalizeAuthor(input.author ?? 'anonymous')}`);
   return { post: match.post, merged: true, similarityScore: match.score };
 }
 
@@ -262,6 +264,15 @@ export function createForumReply(id: string, input: { author?: string; content: 
   };
   post.replies.push(reply);
   return post;
+}
+
+export function findForumPostByReportId(reportId: string) {
+  const normalizedReportId = reportId.trim().toLowerCase();
+  if (!normalizedReportId) return null;
+  return forumPosts.find((post) =>
+    post.sourceReportId?.toLowerCase() === normalizedReportId
+    || post.replies.some((reply) => reply.sourceReportId?.toLowerCase() === normalizedReportId),
+  ) ?? null;
 }
 
 export function moderateForumPost(
@@ -380,22 +391,32 @@ function findSimilarForumPost(input: Parameters<typeof createForumPost>[0]) {
   const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const inputCategory = input.category?.trim() || inferCategory(input.content);
   const inputTokens = normalizedTokens(input.content);
+  const normalizedInput = normalizeContent(input.content);
   const inputLocation = normalizeLocation(input.location);
 
   return forumPosts
-    .filter((post) => new Date(post.createdAt).getTime() >= cutoff && post.category === inputCategory)
+    .filter((post) => new Date(post.createdAt).getTime() >= cutoff)
     .map((post) => {
       const postTokens = normalizedTokens(post.content);
       const shared = [...inputTokens].filter((token) => postTokens.has(token)).length;
       const union = new Set([...inputTokens, ...postTokens]).size || 1;
       let score = shared / union;
+      const normalizedPost = normalizeContent(post.content);
+      if (normalizedInput === normalizedPost) {
+        score = 1;
+      } else if (normalizedInput.includes(normalizedPost) || normalizedPost.includes(normalizedInput)) {
+        score = Math.max(score, 0.82);
+      }
+      if (post.category === inputCategory) {
+        score += 0.08;
+      }
       const postLocation = normalizeLocation(post.location);
       if (inputLocation && postLocation && (inputLocation.includes(postLocation) || postLocation.includes(inputLocation))) {
         score += 0.25;
       }
       return { post, score };
     })
-    .filter((item) => item.score >= 0.42)
+    .filter((item) => item.score >= 0.5)
     .sort((left, right) =>
       new Date(left.post.createdAt).getTime() - new Date(right.post.createdAt).getTime() || right.score - left.score,
     )[0] ?? null;
@@ -409,6 +430,10 @@ function normalizedTokens(value: string) {
       .split(/\s+/)
       .filter((token) => token.length > 3 && !stopwords.has(token)),
   );
+}
+
+function normalizeContent(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function normalizeLocation(value: string | null | undefined) {

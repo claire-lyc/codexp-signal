@@ -3,12 +3,13 @@ import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
 import multer from 'multer';
-import { authenticateJwt, optionalAuthenticateJwt, requireActor, type AuthenticatedRequest } from './authMiddleware.js';
+import { authenticateJwt, requireActor, type AuthenticatedRequest } from './authMiddleware.js';
 import { createAuthRouter } from './authRoutes.js';
 import {
   createForumPost,
   createOrMergeForumPost,
   createForumReply,
+  findForumPostByReportId,
   likeForumPost,
   listForumPosts,
   moderateForumPost,
@@ -170,14 +171,23 @@ app.get('/api/forum/posts', (request, response) => {
   });
 });
 
-app.post('/api/forum/posts', optionalAuthenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
+app.get('/api/forum/posts/by-report/:reportId', ...requireGovUser, (request, response) => {
+  const post = findForumPostByReportId(request.params.reportId);
+  if (!post) {
+    response.status(404).json({ error: 'This ticket is not linked to a forum thread.' });
+    return;
+  }
+  response.json({ item: post });
+});
+
+app.post('/api/forum/posts', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
   const content = stringBody(request.body?.content);
   if (!content) {
     response.status(400).json({ error: 'Post content is required' });
     return;
   }
 
-  const author = stringBody(request.body?.author);
+  const author = forumAuthor(request);
   const cooldownKey = forumCooldownKey(request, author);
   const cooldown = forumCooldownRemaining(cooldownKey);
   if (cooldown > 0) {
@@ -197,12 +207,8 @@ app.post('/api/forum/posts', optionalAuthenticateJwt as express.RequestHandler, 
     const longitude = numberBody(request.body?.longitude);
     let linkedTicket: Ticket | null = null;
     if (request.body?.createReport === true) {
-      if (!request.user?.id) {
-        response.status(401).json({ error: 'Sign in before sending a forum post as a report.' });
-        return;
-      }
       linkedTicket = await createCitizenTicket({
-        reporterUserId: request.user.id,
+        reporterUserId: request.user!.id,
         reporter: author,
         title: stringBody(request.body?.title),
         message: content,
@@ -270,7 +276,7 @@ app.post('/api/forum/posts/:id/report', (request, response) => {
   response.json({ item: post });
 });
 
-app.post('/api/forum/posts/:id/replies', (request, response) => {
+app.post('/api/forum/posts/:id/replies', authenticateJwt as express.RequestHandler, (request: AuthenticatedRequest, response) => {
   const content = stringBody(request.body?.content);
   if (!content) {
     response.status(400).json({ error: 'Reply content is required' });
@@ -278,7 +284,7 @@ app.post('/api/forum/posts/:id/replies', (request, response) => {
   }
 
   const post = createForumReply(request.params.id, {
-    author: stringBody(request.body?.author),
+    author: forumAuthor(request),
     content,
   });
   if (!post) {
@@ -624,7 +630,7 @@ app.post(
       const urgency = await detectTicketUrgency(crisisType, message);
       const ticket = await createCitizenTicket({
         reporterUserId: request.user?.id ?? null,
-        reporter: stringBody(request.body?.reporter),
+        reporter: forumAuthor(request),
         title: stringBody(request.body?.title),
         message,
         location: stringBody(request.body?.locationText) ?? stringBody(request.body?.location),
@@ -648,10 +654,7 @@ app.post(
       const postToForum = request.body?.postToForum === 'true' || request.body?.postToForum === true;
       const forumResult = postToForum && ticket.status !== 'spam'
         ? createOrMergeForumPost({
-            author: stringBody(request.body?.reporter)
-              ?? request.user?.display_name
-              ?? request.user?.username
-              ?? 'Citizen',
+            author: forumAuthor(request),
             content: message,
             category: forumCategory(crisisType),
             location: stringBody(request.body?.locationText) ?? stringBody(request.body?.location),
@@ -1251,6 +1254,13 @@ function forumCooldownKey(request: express.Request, author?: string) {
   const forwardedFor = stringParam(request.headers['x-forwarded-for']);
   const clientIp = forwardedFor?.split(',')[0]?.trim() || request.ip || request.socket.remoteAddress || 'unknown';
   return `${clientIp}:${(author ?? 'Anonymous User').trim().toLowerCase()}`;
+}
+
+function forumAuthor(request: AuthenticatedRequest) {
+  return request.user?.username
+    ?? request.user?.display_name
+    ?? request.user?.email
+    ?? 'Citizen';
 }
 
 function forumCooldownRemaining(key: string) {

@@ -25,6 +25,8 @@ type ForumReply = {
   content: string;
   createdAt: string;
   official?: boolean;
+  similarReport?: boolean;
+  sourceReportId?: string | null;
 };
 
 type ForumImage = {
@@ -55,6 +57,12 @@ type ForumPost = {
   sourceReportId?: string | null;
   similarReports?: number;
   distanceKm?: number | null;
+};
+
+type AuthUser = {
+  displayName: string | null;
+  email: string | null;
+  username: string | null;
 };
 
 const storageKey = 'signal-forum-posts';
@@ -153,7 +161,7 @@ const seedPosts: ForumPost[] = [
 
 export default function PublicForum() {
   const [posts, setPosts] = useState<ForumPost[]>(() => loadLocalPosts());
-  const [author, setAuthor] = useState('');
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [newPost, setNewPost] = useState('');
   const [postImages, setPostImages] = useState<ForumImage[]>([]);
   const [category, setCategory] = useState('Community');
@@ -176,6 +184,17 @@ export default function PublicForum() {
   const [specificIssue, setSpecificIssue] = useState('Other issue');
   const [viewerLocation, setViewerLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const communityUpdatesRef = useRef<HTMLDivElement | null>(null);
+  const author = authUser?.username ?? authUser?.displayName ?? authUser?.email ?? 'Citizen';
+
+  useEffect(() => {
+    fetch(apiUrl('/api/auth/me'), { headers: authHeaders() })
+      .then((response) => {
+        if (!response.ok) throw new Error('Unable to load signed-in user');
+        return response.json() as Promise<{ user: AuthUser }>;
+      })
+      .then((data) => setAuthUser(data.user))
+      .catch(() => setAuthUser(null));
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -313,7 +332,7 @@ export default function PublicForum() {
     startPostCooldown(forumCooldownMs, setPostCooldownUntil);
 
     const optimisticPost = createLocalPost({
-      author: author.trim() || 'Anonymous User',
+      author,
       content,
       category,
       images: postImages,
@@ -325,7 +344,6 @@ export default function PublicForum() {
         merged?: boolean;
         linkedReportId?: string | null;
       }>('/api/forum/posts', {
-        author: optimisticPost.author,
         content,
         category,
         images: postImages,
@@ -460,7 +478,6 @@ export default function PublicForum() {
 
     try {
       const data = await postJson<{ item: ForumPost }>(`/api/forum/posts/${postId}/replies`, {
-        author: author.trim() || 'Anonymous User',
         content,
       });
       replacePost(data.item);
@@ -469,7 +486,7 @@ export default function PublicForum() {
       setUsingBackend(false);
       const reply: ForumReply = {
         id: crypto.randomUUID(),
-        author: author.trim() || 'Anonymous User',
+        author,
         content,
         createdAt: new Date().toISOString(),
       };
@@ -553,12 +570,9 @@ export default function PublicForum() {
             </div>
 
             <div className="grid gap-3 md:grid-cols-[1fr_180px]">
-              <input
-                value={author}
-                onChange={(event) => setAuthor(event.target.value)}
-                placeholder="Your name, optional"
-                className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
-              />
+              <div className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-300">
+                Posting as <span className="font-semibold text-zinc-100">{author}</span>
+              </div>
               <select
                 value={category}
                 onChange={(event) => setCategory(event.target.value)}
@@ -731,7 +745,7 @@ export default function PublicForum() {
                   <div className="mb-2 flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-zinc-100">{post.author}</span>
+                        <span className="text-xs font-medium text-zinc-500">{post.author}</span>
                         {post.verified && <CheckCircle className="h-3.5 w-3.5 text-green-400" />}
                         {post.aiFlag && <AlertTriangle className="h-3.5 w-3.5 text-red-400" />}
                       </div>
@@ -746,9 +760,10 @@ export default function PublicForum() {
                       {post.replies.length}
                     </div>
                   </div>
-                  <p className={`line-clamp-2 text-sm leading-6 ${post.aiFlag ? 'text-red-200/70 blur-[2px]' : 'text-zinc-300'}`}>
+                  <p className={`line-clamp-2 text-base font-medium leading-6 ${post.aiFlag ? 'text-red-200/70 blur-[2px]' : 'text-zinc-100'}`}>
                     {post.content}
                   </p>
+                  {post.sourceReportId ? <TicketBadge ticketId={post.sourceReportId} compact /> : null}
                   {post.images?.[0] && (
                     <div className="mt-3 h-20 w-20 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-800">
                       <img src={post.images[0].previewUrl} alt={post.images[0].filename ?? 'Forum attachment'} className="h-full w-full object-cover" />
@@ -829,12 +844,13 @@ export default function PublicForum() {
                 <div className="flex-1 space-y-4 overflow-y-auto p-5">
                   <div className={`rounded-lg border p-4 ${selectedPost.aiFlag ? 'border-red-900/70 bg-red-950/20' : 'border-zinc-800 bg-zinc-900'}`}>
                     <div className="mb-2 flex items-center justify-between gap-3">
-                      <span className="font-medium">{selectedPost.author}</span>
+                      <span className="text-xs font-medium text-zinc-500">{selectedPost.author}</span>
                       <span className="text-xs text-zinc-600">{new Date(selectedPost.createdAt).toLocaleString()}</span>
                     </div>
-                    <p className={`whitespace-pre-wrap text-sm leading-6 ${selectedPost.aiFlag ? 'select-none blur-sm' : 'text-zinc-300'}`}>
+                    <p className={`whitespace-pre-wrap text-base font-medium leading-7 ${selectedPost.aiFlag ? 'select-none blur-sm' : 'text-zinc-100'}`}>
                       {selectedPost.content}
                     </p>
+                    {selectedPost.sourceReportId ? <TicketBadge ticketId={selectedPost.sourceReportId} /> : null}
                   </div>
 
                   {selectedPost.images?.length ? (
@@ -892,10 +908,13 @@ export default function PublicForum() {
                     {selectedPost.replies.map((reply) => (
                       <div key={reply.id} className={`rounded-lg p-3 ${reply.official ? 'border border-blue-800 bg-blue-950/30' : 'bg-zinc-900/70'}`}>
                         <div className="mb-1 flex items-center justify-between gap-3">
-                          <span className={`text-sm font-medium ${reply.official ? 'text-blue-300' : ''}`}>{reply.author}</span>
+                          <span className={`text-xs font-medium ${reply.official ? 'text-blue-300' : 'text-zinc-500'}`}>{reply.author}</span>
                           <span className="text-xs text-zinc-600">{relativeTime(reply.createdAt)}</span>
                         </div>
-                        <p className="text-sm leading-6 text-zinc-300">{reply.content}</p>
+                        <p className="text-base font-medium leading-7 text-zinc-100">{reply.content}</p>
+                        {reply.sourceReportId || reply.similarReport ? (
+                          <GroupedEntryBadge ticketId={reply.sourceReportId} entryId={reply.id} />
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -999,12 +1018,13 @@ export default function PublicForum() {
               <div className="flex-1 space-y-4 overflow-y-auto p-4">
                 <div className={`rounded-lg border p-4 ${selectedPost.aiFlag ? 'border-red-900/70 bg-red-950/20' : 'border-zinc-800 bg-zinc-900'}`}>
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-medium">{selectedPost.author}</span>
+                    <span className="text-xs font-medium text-zinc-500">{selectedPost.author}</span>
                     <span className="text-xs text-zinc-600">{new Date(selectedPost.createdAt).toLocaleString()}</span>
                   </div>
-                  <p className={`whitespace-pre-wrap text-sm leading-6 ${selectedPost.aiFlag ? 'select-none blur-sm' : 'text-zinc-300'}`}>
+                  <p className={`whitespace-pre-wrap text-base font-medium leading-7 ${selectedPost.aiFlag ? 'select-none blur-sm' : 'text-zinc-100'}`}>
                     {selectedPost.content}
                   </p>
+                  {selectedPost.sourceReportId ? <TicketBadge ticketId={selectedPost.sourceReportId} /> : null}
                 </div>
 
                 {selectedPost.aiFlag && (
@@ -1037,10 +1057,13 @@ export default function PublicForum() {
                   {selectedPost.replies.map((reply) => (
                     <div key={reply.id} className={`rounded-lg p-3 ${reply.official ? 'border border-blue-800 bg-blue-950/30' : 'bg-zinc-900/70'}`}>
                       <div className="mb-1 flex items-center justify-between gap-3">
-                        <span className={`text-sm font-medium ${reply.official ? 'text-blue-300' : ''}`}>{reply.author}</span>
+                        <span className={`text-xs font-medium ${reply.official ? 'text-blue-300' : 'text-zinc-500'}`}>{reply.author}</span>
                         <span className="text-xs text-zinc-600">{relativeTime(reply.createdAt)}</span>
                       </div>
-                      <p className="text-sm leading-6 text-zinc-300">{reply.content}</p>
+                      <p className="text-base font-medium leading-7 text-zinc-100">{reply.content}</p>
+                      {reply.sourceReportId || reply.similarReport ? (
+                        <GroupedEntryBadge ticketId={reply.sourceReportId} entryId={reply.id} />
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -1207,6 +1230,27 @@ function shouldFlag(content: string) {
   return ['breaking:', 'all hospitals', 'secret', 'cover up', 'confirmed cure', '!!!'].some((term) =>
     normalized.includes(term),
   );
+}
+
+function TicketBadge({ ticketId, compact = false }: { ticketId: string; compact?: boolean }) {
+  return (
+    <span className={`mt-2 inline-flex rounded-md border border-blue-900 bg-blue-950/40 font-mono text-blue-300 ${compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs'}`}>
+      Ticket {ticketId}
+    </span>
+  );
+}
+
+function GroupedEntryBadge({ ticketId, entryId }: { ticketId?: string | null; entryId: string }) {
+  if (ticketId) return <TicketBadge ticketId={ticketId} />;
+  return (
+    <span className="mt-2 inline-flex rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1 font-mono text-xs text-zinc-400">
+      Ticket {fallbackTicketId(entryId)}
+    </span>
+  );
+}
+
+function fallbackTicketId(value: string) {
+  return `TKT-${value.replace(/[^a-z0-9]/gi, '').slice(0, 8).toUpperCase()}`;
 }
 
 function relativeTime(timestamp: string) {
