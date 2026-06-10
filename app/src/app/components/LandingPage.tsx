@@ -2,7 +2,6 @@ import { Link } from 'react-router';
 import {
   Shield,
   Users,
-  AlertTriangle,
   Activity,
   Building2,
   CloudRain,
@@ -45,8 +44,8 @@ export default function LandingPage() {
 
         <main className="grid flex-1 items-center gap-12 py-14 lg:grid-cols-[1.05fr_0.95fr]">
           <section>
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-red-500/30 bg-red-950/50 px-4 py-2 text-sm font-medium text-red-200">
-              <AlertTriangle className="h-4 w-4" />
+            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900/80 px-4 py-2 text-sm font-medium text-zinc-300 shadow-sm">
+              <Activity className="h-4 w-4 text-emerald-400" />
               Mission: faster, smarter disaster and health emergency response
             </div>
 

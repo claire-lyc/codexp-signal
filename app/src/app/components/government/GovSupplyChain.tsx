@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   AlertCircle,
   BarChart3,
-  ChevronDown,
   Clock,
   Database,
   MapPin,
@@ -20,8 +19,8 @@ type SupplyViewId = 'panadol' | 'general';
 type Severity = 'high' | 'medium' | 'low';
 
 const supplyViews = [
-  { id: 'panadol' as const, label: 'Panadol Menstrual Shortage', severity: 'medium', badge: 'bg-yellow-900 text-yellow-400', border: 'border-yellow-700' },
-  { id: 'general' as const, label: 'General Supply Overview', severity: 'low', badge: 'bg-blue-900 text-blue-400', border: 'border-blue-700' },
+  { id: 'general' as const, label: 'General Supply', severity: 'low', color: 'text-blue-400', badge: 'bg-blue-900 text-blue-400' },
+  { id: 'panadol' as const, label: 'Panadol Shortage', severity: 'medium', color: 'text-yellow-400', badge: 'bg-yellow-900 text-yellow-400' },
 ];
 
 const panadolData = {
@@ -33,12 +32,12 @@ const panadolData = {
     { label: 'Alt. Suppliers Found', value: '2', delta: '+2', iconClass: 'bg-blue-950 text-blue-500' },
   ],
   affectedLocations: [
-    { name: 'Jurong West Cluster', stores: 18, region: 'West', severity: 'high' as Severity },
-    { name: 'Tampines Hub Area', stores: 15, region: 'East', severity: 'high' as Severity },
-    { name: 'Ang Mo Kio Hub', stores: 12, region: 'North', severity: 'medium' as Severity },
-    { name: 'Orchard / Dhoby', stores: 22, region: 'Central', severity: 'medium' as Severity },
-    { name: 'Woodlands Crescent', stores: 10, region: 'North', severity: 'low' as Severity },
-    { name: 'Toa Payoh Central', stores: 10, region: 'Central', severity: 'low' as Severity },
+    { name: 'Jurong West Cluster', stores: 18, region: 'West', severity: 'high' as Severity, latitude: 1.3404, longitude: 103.7090 },
+    { name: 'Tampines Hub Area', stores: 15, region: 'East', severity: 'high' as Severity, latitude: 1.3521, longitude: 103.9398 },
+    { name: 'Ang Mo Kio Hub', stores: 12, region: 'North', severity: 'medium' as Severity, latitude: 1.3691, longitude: 103.8454 },
+    { name: 'Orchard / Dhoby', stores: 22, region: 'Central', severity: 'medium' as Severity, latitude: 1.3007, longitude: 103.8398 },
+    { name: 'Woodlands Crescent', stores: 10, region: 'North', severity: 'low' as Severity, latitude: 1.4382, longitude: 103.8015 },
+    { name: 'Toa Payoh Central', stores: 10, region: 'Central', severity: 'low' as Severity, latitude: 1.3323, longitude: 103.8492 },
   ],
   response: [
     { action: 'Contact Haleon alternate supplier in Malaysia', status: 'done' },
@@ -47,20 +46,6 @@ const panadolData = {
     { action: 'Issue public advisory on alternatives', status: 'pending' },
     { action: 'Coordinate distribution to priority outlets', status: 'pending' },
   ],
-  pins: [
-    { label: 'Jurong West', x: 18, y: 50, severity: 'high' as Severity },
-    { label: 'Tampines', x: 73, y: 43, severity: 'high' as Severity },
-    { label: 'Ang Mo Kio', x: 48, y: 28, severity: 'medium' as Severity },
-    { label: 'Orchard', x: 43, y: 42, severity: 'medium' as Severity },
-    { label: 'Woodlands', x: 38, y: 12, severity: 'low' as Severity },
-    { label: 'Toa Payoh', x: 47, y: 35, severity: 'low' as Severity },
-  ],
-};
-
-const pinColors: Record<Severity, string> = {
-  high: 'bg-red-500',
-  medium: 'bg-yellow-500',
-  low: 'bg-blue-500',
 };
 
 const statusColors: Record<'done' | 'pending', string> = {
@@ -176,6 +161,16 @@ function GeneralSupplyView() {
 }
 
 function PanadolSupplyView() {
+  const markers: MapMarker[] = panadolData.affectedLocations.map((location, index) => ({
+    id: `panadol-${index}`,
+    name: location.name,
+    latitude: location.latitude,
+    longitude: location.longitude,
+    value: `${location.stores} outlets affected`,
+    detail: `${location.region} region shortage cluster`,
+    severity: location.severity,
+  }));
+
   return (
     <>
       <div className="rounded-xl border border-yellow-700 bg-yellow-950/30 p-5">
@@ -215,20 +210,18 @@ function PanadolSupplyView() {
             <span className="flex items-center gap-1"><div className="h-3 w-3 rounded-full bg-blue-500" />Minor</span>
           </div>
         </div>
-        <div className="relative overflow-hidden rounded-lg bg-zinc-800" style={{ paddingBottom: '46%' }}>
-          <div className="absolute inset-0">
-            <svg viewBox="0 0 100 46" className="h-full w-full opacity-10" fill="none">
-              <path d="M5,18 Q15,8 30,6 Q50,3 70,10 Q85,14 95,18 Q90,30 80,36 Q65,42 50,42 Q35,42 20,36 Q8,28 5,18Z" fill="#eab308" />
-            </svg>
-            {panadolData.pins.map((pin) => (
-              <div key={pin.label} className="group absolute" style={{ left: `${pin.x}%`, top: `${pin.y}%`, transform: 'translate(-50%,-50%)' }}>
-                <div className={`h-5 w-5 cursor-pointer rounded-full border-2 border-white/30 ${pinColors[pin.severity]} animate-pulse`} />
-                <div className="absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 group-hover:block">
-                  <div className="whitespace-nowrap rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs">{pin.label}</div>
-                </div>
-              </div>
-            ))}
-          </div>
+        <div className="h-[500px]">
+          <SingaporeRegionMap
+            markers={markers}
+            emptyTitle="Panadol Menstrual shortage clusters"
+            emptyDetail="Hover a marker for affected outlet details"
+            problemLabel="shortage clusters"
+          />
+        </div>
+        <div className="mt-3 flex gap-4 text-xs text-zinc-500">
+          <span><i className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full bg-red-500" />High impact</span>
+          <span><i className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full bg-yellow-500" />Medium impact</span>
+          <span><i className="mr-1.5 inline-block h-2.5 w-2.5 rounded-full bg-blue-500" />Low impact</span>
         </div>
       </div>
 
@@ -302,43 +295,32 @@ function PanadolSupplyView() {
 
 export default function GovSupplyChain() {
   const [selectedView, setSelectedView] = useState<SupplyViewId>('general');
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const currentView = supplyViews.find((view) => view.id === selectedView)!;
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="mb-2 text-3xl font-bold">Supply Chain Monitoring</h1>
-          <p className="text-zinc-400">Critical resource tracking, shortage alerts, and import dependency analysis</p>
-        </div>
-        <div className="relative">
+      <div>
+        <h1 className="mb-2 text-3xl font-bold">Supply Chain Monitoring</h1>
+        <p className="text-zinc-400">Critical resource tracking, shortage alerts, and import dependency analysis</p>
+      </div>
+
+      <div className="flex overflow-x-auto border-b border-zinc-800" role="tablist" aria-label="Supply chain dashboards">
+        {supplyViews.map((view) => (
           <button
-            onClick={() => setDropdownOpen((open) => !open)}
-            className={`flex items-center gap-2 rounded-lg border ${currentView.border} bg-zinc-800 px-4 py-2 text-sm transition-colors hover:bg-zinc-700`}
+            key={view.id}
+            type="button"
+            role="tab"
+            aria-selected={selectedView === view.id}
+            onClick={() => setSelectedView(view.id)}
+            className={`flex min-w-max items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
+              selectedView === view.id
+                ? `${view.color} border-current`
+                : 'border-transparent text-zinc-500 hover:text-zinc-200'
+            }`}
           >
-            <span className="text-white">{currentView.label}</span>
-            <span className={`rounded px-1.5 py-0.5 text-xs ${currentView.badge}`}>{currentView.severity.toUpperCase()}</span>
-            <ChevronDown className="h-4 w-4 text-zinc-400" />
+            {view.label}
+            <span className={`rounded px-1.5 py-0.5 text-[10px] ${view.badge}`}>{view.severity.toUpperCase()}</span>
           </button>
-          {dropdownOpen ? (
-            <div className="absolute right-0 z-20 mt-1 w-64 rounded-lg border border-zinc-700 bg-zinc-800 shadow-xl">
-              {supplyViews.map((view) => (
-                <button
-                  key={view.id}
-                  onClick={() => {
-                    setSelectedView(view.id);
-                    setDropdownOpen(false);
-                  }}
-                  className={`flex w-full items-center justify-between px-4 py-2.5 text-sm transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-zinc-700 ${selectedView === view.id ? 'bg-zinc-700' : ''}`}
-                >
-                  <span>{view.label}</span>
-                  <span className={`rounded px-1.5 py-0.5 text-xs ${view.badge}`}>{view.severity.toUpperCase()}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
+        ))}
       </div>
 
       {selectedView === 'panadol' ? <PanadolSupplyView /> : <GeneralSupplyView />}
