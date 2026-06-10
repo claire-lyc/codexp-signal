@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import mapData from '../../data/singapore-planning-areas.json';
-import roadData from '../../data/singapore-roads.json';
 
 type RiskLevel = 'critical' | 'high' | 'medium' | 'low';
 type Point = [number, number];
@@ -83,7 +82,28 @@ type MarkerCluster = {
   severity: RiskLevel | null;
 };
 
+type MapBounds = {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+};
+
 const planningAreas = mapData.planningAreas as PlanningArea[];
+const planningAreaBounds = new Map(
+  planningAreas.map((area) => {
+    const points = area.polygons.flat(2);
+    return [
+      area.id,
+      {
+        minX: Math.min(...points.map(([x]) => x)),
+        maxX: Math.max(...points.map(([x]) => x)),
+        minY: Math.min(...points.map(([, y]) => y)),
+        maxY: Math.max(...points.map(([, y]) => y)),
+      },
+    ] as const;
+  }),
+);
 const initialViewport: Viewport = {
   x: 0,
   y: 0,
@@ -91,7 +111,6 @@ const initialViewport: Viewport = {
   height: mapData.height,
 };
 const maxZoom = 16;
-const roadPaths = roadData.paths as Record<'expressway' | 'major' | 'arterial' | 'local', string>;
 
 const labelOffsets: Record<string, Point> = {
   'Bukit Merah': [-18, 18],
@@ -117,13 +136,6 @@ const riskStyles: Record<RiskLevel, { dot: string; label: string; hover: string 
 
 const neutralStyle = { dot: '#71717a', label: 'No reported data', hover: '#3f3f46' };
 const severityRank: Record<RiskLevel, number> = { low: 1, medium: 2, high: 3, critical: 4 };
-const neutralRegionFills: Record<string, string> = {
-  'Central Region': '#fffdf4',
-  'East Region': '#fffbea',
-  'North Region': '#fdf8e5',
-  'North-East Region': '#fff9e8',
-  'West Region': '#fffbed',
-};
 const heatmapPalettes: Record<HeatmapPalette, string[]> = {
   temperature: ['#38bdf8', '#22c55e', '#facc15', '#f97316', '#ef4444'],
   rainfall: ['#1e3a8a', '#2563eb', '#06b6d4', '#facc15', '#ef4444'],
@@ -241,6 +253,24 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
+function boundsIntersectViewport(bounds: MapBounds, viewport: Viewport, margin = 0) {
+  return (
+    bounds.maxX >= viewport.x - margin &&
+    bounds.minX <= viewport.x + viewport.width + margin &&
+    bounds.maxY >= viewport.y - margin &&
+    bounds.minY <= viewport.y + viewport.height + margin
+  );
+}
+
+function pointIsInViewport([x, y]: Point, viewport: Viewport, margin = 0) {
+  return (
+    x >= viewport.x - margin &&
+    x <= viewport.x + viewport.width + margin &&
+    y >= viewport.y - margin &&
+    y <= viewport.y + viewport.height + margin
+  );
+}
+
 function normalizeRiskLevel(value: string | null | undefined): RiskLevel | null {
   if (value === 'critical' || value === 'high' || value === 'medium' || value === 'low') return value;
   return null;
@@ -329,12 +359,15 @@ export default function SingaporeRegionMap({
   showMarkers = true,
 }: SingaporeRegionMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapSvgRef = useRef<SVGSVGElement>(null);
   const [activeAreaId, setActiveAreaId] = useState<string | null>(null);
   const [activeMarkerId, setActiveMarkerId] = useState<string | null>(null);
   const [activeClusterId, setActiveClusterId] = useState<string | null>(null);
   const [viewport, setViewport] = useState(initialViewport);
   const [isPanning, setIsPanning] = useState(false);
   const dragStart = useRef<{ pointer: Point; viewport: Viewport } | null>(null);
+  const liveViewport = useRef(initialViewport);
+  const viewportCommitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const zoom = mapData.width / viewport.width;
   const areaStatuses = useMemo(
     () =>
@@ -369,6 +402,18 @@ export default function SingaporeRegionMap({
   const markerClusters = useMemo(
     () => clusterMarkers(projectedMarkers, zoom),
     [projectedMarkers, zoom],
+  );
+  const visiblePlanningAreas = useMemo(
+    () =>
+      planningAreas.filter((area) => {
+        const bounds = planningAreaBounds.get(area.id);
+        return bounds ? boundsIntersectViewport(bounds, viewport, 18 / zoom) : true;
+      }),
+    [viewport, zoom],
+  );
+  const visibleMarkerClusters = useMemo(
+    () => markerClusters.filter((cluster) => pointIsInViewport(cluster.coordinates, viewport, 30 / zoom)),
+    [markerClusters, viewport, zoom],
   );
   const activeCluster = markerClusters.find((cluster) => cluster.id === activeClusterId);
   const projectedHeatPoints = useMemo(() => {
@@ -459,6 +504,34 @@ export default function SingaporeRegionMap({
 
     return cells;
   }, [heatmapLayer, heatBounds, projectedHeatPoints]);
+  const visibleHeatCells = useMemo(
+    () =>
+      heatCells.filter((cell) =>
+        boundsIntersectViewport(
+          {
+            minX: cell.x,
+            maxX: cell.x + cell.size,
+            minY: cell.y,
+            maxY: cell.y + cell.size,
+          },
+          viewport,
+          cell.size,
+        ),
+      ),
+    [heatCells, viewport],
+  );
+  const visibleHeatPoints = useMemo(
+    () => projectedHeatPoints.filter((point) => pointIsInViewport(point.coordinates, viewport, 80 / zoom)),
+    [projectedHeatPoints, viewport, zoom],
+  );
+  const visibleWeatherPoints = useMemo(
+    () => projectedWeatherPoints.filter((point) => pointIsInViewport(point.coordinates, viewport, 70 / zoom)),
+    [projectedWeatherPoints, viewport, zoom],
+  );
+  const visibleWindFieldPoints = useMemo(
+    () => windFieldPoints.filter((point) => pointIsInViewport(point.coordinates, viewport, 30 / zoom)),
+    [windFieldPoints, viewport, zoom],
+  );
   const activeHeatStats = useMemo(() => {
     if (!activeArea || !heatmapLayer || projectedHeatPoints.length === 0) return null;
     const areaPoints = heatmapLayer.points.filter((point) =>
@@ -481,28 +554,49 @@ export default function SingaporeRegionMap({
     y: Math.min(Math.max(next.y, 0), mapData.height - next.height),
   });
 
+  const showViewportImmediately = (next: Viewport) => {
+    liveViewport.current = next;
+    mapSvgRef.current?.setAttribute(
+      'viewBox',
+      `${next.x} ${next.y} ${next.width} ${next.height}`,
+    );
+  };
+
+  const commitLiveViewport = () => {
+    if (viewportCommitTimer.current) {
+      clearTimeout(viewportCommitTimer.current);
+      viewportCommitTimer.current = null;
+    }
+    setViewport(liveViewport.current);
+  };
+
+  useEffect(() => {
+    liveViewport.current = viewport;
+  }, [viewport]);
+
   const zoomAt = (nextZoom: number, anchorX = 0.5, anchorY = 0.5) => {
     const clampedZoom = Math.min(Math.max(nextZoom, 1), maxZoom);
-
-    setViewport((current) => {
-      const nextWidth = mapData.width / clampedZoom;
-      const nextHeight = mapData.height / clampedZoom;
-      const mapAnchorX = current.x + current.width * anchorX;
-      const mapAnchorY = current.y + current.height * anchorY;
-
-      return clampViewport({
-        x: mapAnchorX - nextWidth * anchorX,
-        y: mapAnchorY - nextHeight * anchorY,
-        width: nextWidth,
-        height: nextHeight,
-      });
+    const current = liveViewport.current;
+    const nextWidth = mapData.width / clampedZoom;
+    const nextHeight = mapData.height / clampedZoom;
+    const mapAnchorX = current.x + current.width * anchorX;
+    const mapAnchorY = current.y + current.height * anchorY;
+    const nextViewport = clampViewport({
+      x: mapAnchorX - nextWidth * anchorX,
+      y: mapAnchorY - nextHeight * anchorY,
+      width: nextWidth,
+      height: nextHeight,
     });
+
+    liveViewport.current = nextViewport;
+    setViewport(nextViewport);
   };
 
   const zoomToCluster = (cluster: MarkerCluster) => {
     const [x, y] = cluster.coordinates;
-    const anchorX = clamp((x - viewport.x) / viewport.width, 0, 1);
-    const anchorY = clamp((y - viewport.y) / viewport.height, 0, 1);
+    const current = liveViewport.current;
+    const anchorX = clamp((x - current.x) / current.width, 0, 1);
+    const anchorY = clamp((y - current.y) / current.height, 0, 1);
     setActiveClusterId(null);
     zoomAt(Math.min(maxZoom, Math.max(zoom * 2, 2)), anchorX, anchorY);
   };
@@ -522,21 +616,23 @@ export default function SingaporeRegionMap({
       const anchorY = Math.min(Math.max((event.clientY - bounds.top) / bounds.height, 0), 1);
       const zoomFactor = Math.exp(-event.deltaY * 0.01);
 
-      setViewport((current) => {
-        const currentZoom = mapData.width / current.width;
-        const nextZoom = Math.min(Math.max(currentZoom * zoomFactor, 1), maxZoom);
-        const nextWidth = mapData.width / nextZoom;
-        const nextHeight = mapData.height / nextZoom;
-        const mapAnchorX = current.x + current.width * anchorX;
-        const mapAnchorY = current.y + current.height * anchorY;
-
-        return clampViewport({
-          x: mapAnchorX - nextWidth * anchorX,
-          y: mapAnchorY - nextHeight * anchorY,
-          width: nextWidth,
-          height: nextHeight,
-        });
+      const current = liveViewport.current;
+      const currentZoom = mapData.width / current.width;
+      const nextZoom = Math.min(Math.max(currentZoom * zoomFactor, 1), maxZoom);
+      const nextWidth = mapData.width / nextZoom;
+      const nextHeight = mapData.height / nextZoom;
+      const mapAnchorX = current.x + current.width * anchorX;
+      const mapAnchorY = current.y + current.height * anchorY;
+      const nextViewport = clampViewport({
+        x: mapAnchorX - nextWidth * anchorX,
+        y: mapAnchorY - nextHeight * anchorY,
+        width: nextWidth,
+        height: nextHeight,
       });
+
+      showViewportImmediately(nextViewport);
+      if (viewportCommitTimer.current) clearTimeout(viewportCommitTimer.current);
+      viewportCommitTimer.current = setTimeout(commitLiveViewport, 90);
     };
 
     const preventBrowserGesture = (event: Event) => {
@@ -554,6 +650,7 @@ export default function SingaporeRegionMap({
       mapContainer.removeEventListener('gesturestart', preventBrowserGesture);
       mapContainer.removeEventListener('gesturechange', preventBrowserGesture);
       mapContainer.removeEventListener('gestureend', preventBrowserGesture);
+      if (viewportCommitTimer.current) clearTimeout(viewportCommitTimer.current);
     };
   }, []);
 
@@ -562,7 +659,7 @@ export default function SingaporeRegionMap({
     event.currentTarget.setPointerCapture(event.pointerId);
     dragStart.current = {
       pointer: [event.clientX, event.clientY],
-      viewport,
+      viewport: liveViewport.current,
     };
     setIsPanning(true);
   };
@@ -571,16 +668,18 @@ export default function SingaporeRegionMap({
     if (!dragStart.current) return;
 
     const bounds = event.currentTarget.getBoundingClientRect();
-    const deltaX = ((event.clientX - dragStart.current.pointer[0]) / bounds.width) * viewport.width;
-    const deltaY = ((event.clientY - dragStart.current.pointer[1]) / bounds.height) * viewport.height;
+    const deltaX =
+      ((event.clientX - dragStart.current.pointer[0]) / bounds.width) *
+      dragStart.current.viewport.width;
+    const deltaY =
+      ((event.clientY - dragStart.current.pointer[1]) / bounds.height) *
+      dragStart.current.viewport.height;
 
-    setViewport(
-      clampViewport({
-        ...dragStart.current.viewport,
-        x: dragStart.current.viewport.x - deltaX,
-        y: dragStart.current.viewport.y - deltaY,
-      }),
-    );
+    showViewportImmediately(clampViewport({
+      ...dragStart.current.viewport,
+      x: dragStart.current.viewport.x - deltaX,
+      y: dragStart.current.viewport.y - deltaY,
+    }));
   };
 
   const stopPanning = (event: ReactPointerEvent<SVGSVGElement>) => {
@@ -588,6 +687,7 @@ export default function SingaporeRegionMap({
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     dragStart.current = null;
+    commitLiveViewport();
     setIsPanning(false);
   };
 
@@ -603,8 +703,11 @@ export default function SingaporeRegionMap({
       }`} />
 
       <svg
+        ref={mapSvgRef}
         viewBox={`${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`}
-        className={`relative h-full w-full select-none ${isPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
+        className={`relative h-full w-full select-none ${
+          isPanning ? 'cursor-grabbing [&_*]:pointer-events-none' : 'cursor-grab'
+        }`}
         style={{ touchAction: 'none' }}
         role="img"
         aria-label="Interactive map of Singapore's 55 planning areas"
@@ -638,10 +741,51 @@ export default function SingaporeRegionMap({
           </marker>
         </defs>
 
+        {isNeutralMap && (
+          <g className="pointer-events-none">
+            <image
+              href="/maps/singapore-base.svg"
+              x="0"
+              y="0"
+              width={mapData.width}
+              height={mapData.height}
+              preserveAspectRatio="none"
+            />
+            <image
+              href="/maps/singapore-roads-main.svg"
+              x="0"
+              y="0"
+              width={mapData.width}
+              height={mapData.height}
+              preserveAspectRatio="none"
+            />
+            {zoom >= 2.25 && (
+              <image
+                href="/maps/singapore-roads-arterial.svg"
+                x="0"
+                y="0"
+                width={mapData.width}
+                height={mapData.height}
+                preserveAspectRatio="none"
+              />
+            )}
+            {zoom >= 4 && (
+              <image
+                href="/maps/singapore-roads-local.svg"
+                x="0"
+                y="0"
+                width={mapData.width}
+                height={mapData.height}
+                preserveAspectRatio="none"
+              />
+            )}
+          </g>
+        )}
+
         {heatmapLayer && heatBounds && (
           <g clipPath="url(#singapore-map-land-clip)" className="pointer-events-none">
             <g filter="url(#singapore-map-surface-blur)" opacity={heatmapLayer.opacity ?? 0.96}>
-              {heatCells.map((cell) => (
+              {visibleHeatCells.map((cell) => (
                 <rect
                   key={cell.id}
                   x={cell.x}
@@ -653,7 +797,7 @@ export default function SingaporeRegionMap({
               ))}
             </g>
             <g filter="url(#singapore-map-heat-blur)" opacity="0.22">
-              {projectedHeatPoints.map((point) => {
+              {visibleHeatPoints.map((point) => {
                 const [x, y] = point.coordinates;
                 const color = heatColor(heatmapLayer.palette, point.value, heatBounds.min, heatBounds.max);
                 const radius = heatmapLayer.radius ?? 54;
@@ -667,7 +811,7 @@ export default function SingaporeRegionMap({
         {weatherOverlay && (
           <g clipPath="url(#singapore-map-land-clip)" className="pointer-events-none">
             {weatherOverlay.kind === 'wind' &&
-              windFieldPoints.map((point) => {
+              visibleWindFieldPoints.map((point) => {
                 const [x, y] = point.coordinates;
                 const length = clamp(10 + point.value * 0.42, 12, 23);
                 const direction = Number.isFinite(point.direction) ? Number(point.direction) : 90;
@@ -705,7 +849,7 @@ export default function SingaporeRegionMap({
 
             {weatherOverlay.kind === 'psi' && (
               <g filter="url(#singapore-weather-haze-blur)" opacity="0.3">
-                {projectedWeatherPoints.map((point, index) => {
+                {visibleWeatherPoints.map((point, index) => {
                   const [x, y] = point.coordinates;
                   return (
                     <path
@@ -728,20 +872,19 @@ export default function SingaporeRegionMap({
             const isActive = activeAreaId === area.id;
             const status = areaStatuses.get(area.id);
             const style = riskStyleFor(status?.severity);
-            const fillOpacity = isNeutralMap ? (isActive ? 0.92 : 0.86) : heatmapLayer ? (isActive ? 0.2 : 0.03) : 1;
-            const neutralFill = isActive ? '#dbeafe' : neutralRegionFills[area.region] ?? '#f8fafc';
+            const fillOpacity = isNeutralMap ? (isActive ? 0.32 : 0.001) : heatmapLayer ? (isActive ? 0.2 : 0.03) : 1;
 
             return (
               <path
                 key={area.id}
                 d={polygonPath(area.polygons)}
-                fill={isNeutralMap ? neutralFill : isActive ? style.hover : '#52525b'}
+                fill={isNeutralMap ? '#3b82f6' : isActive ? style.hover : '#52525b'}
                 fillOpacity={fillOpacity}
                 fillRule="evenodd"
                 clipRule="evenodd"
-                stroke={isNeutralMap ? (isActive ? '#3b82f6' : '#93a4b8') : heatmapLayer ? '#0b1120' : '#18181b'}
+                stroke={isNeutralMap ? (isActive ? '#2563eb' : 'transparent') : heatmapLayer ? '#0b1120' : '#18181b'}
                 strokeOpacity={heatmapLayer ? 0.72 : 1}
-                strokeWidth={isNeutralMap ? (isActive ? '2' : '1.1') : heatmapLayer ? '1.05' : '1.35'}
+                strokeWidth={isNeutralMap ? (isActive ? '2' : '0') : heatmapLayer ? '1.05' : '1.35'}
                 strokeLinejoin="round"
                 vectorEffect="non-scaling-stroke"
                 className="outline-none transition-colors duration-150"
@@ -756,19 +899,6 @@ export default function SingaporeRegionMap({
             );
           })}
         </g>
-
-        {isNeutralMap && (
-          <g clipPath="url(#singapore-map-land-clip)" className="pointer-events-none">
-            <path d={roadPaths.local} fill="none" stroke="#c6d0df" strokeWidth="2.2" vectorEffect="non-scaling-stroke" opacity={zoom >= 2.5 ? 0.9 : 0} />
-            <path d={roadPaths.local} fill="none" stroke="#ffffff" strokeWidth="1.15" vectorEffect="non-scaling-stroke" opacity={zoom >= 2.5 ? 1 : 0} />
-            <path d={roadPaths.arterial} fill="none" stroke="#9eacc4" strokeWidth="3.2" vectorEffect="non-scaling-stroke" opacity={zoom >= 1.4 ? 1 : 0} />
-            <path d={roadPaths.arterial} fill="none" stroke="#ffffff" strokeWidth="1.8" vectorEffect="non-scaling-stroke" opacity={zoom >= 1.4 ? 1 : 0} />
-            <path d={roadPaths.major} fill="none" stroke="#899dbd" strokeWidth="4.2" vectorEffect="non-scaling-stroke" />
-            <path d={roadPaths.major} fill="none" stroke="#f8fafc" strokeWidth="2.35" vectorEffect="non-scaling-stroke" />
-            <path d={roadPaths.expressway} fill="none" stroke="#718aae" strokeWidth="5.4" vectorEffect="non-scaling-stroke" />
-            <path d={roadPaths.expressway} fill="none" stroke="#f8d66d" strokeWidth="3.1" vectorEffect="non-scaling-stroke" />
-          </g>
-        )}
 
         {activeArea && activeStatus && (
           <path
@@ -786,7 +916,7 @@ export default function SingaporeRegionMap({
         )}
 
         {showMarkers && <g>
-          {markerClusters.map((cluster) => {
+          {visibleMarkerClusters.map((cluster) => {
             const [x, y] = cluster.coordinates;
             const marker = cluster.markers[0];
             const isGrouped = cluster.markers.length > 1;
@@ -887,7 +1017,7 @@ export default function SingaporeRegionMap({
         </g>}
 
         {showAreaLabels && <g className="pointer-events-none">
-          {planningAreas.map((area) => {
+          {visiblePlanningAreas.map((area) => {
             const status = areaStatuses.get(area.id);
             const style = riskStyleFor(status?.severity);
             const [dotX, dotY] = area.label;
