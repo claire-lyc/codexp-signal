@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import mapData from '../../data/singapore-planning-areas.json';
+import roadData from '../../data/singapore-roads.json';
 
 type RiskLevel = 'critical' | 'high' | 'medium' | 'low';
 type Point = [number, number];
@@ -71,6 +72,17 @@ type Viewport = {
   height: number;
 };
 
+type ProjectedMarker = MapMarker & {
+  coordinates: Point;
+};
+
+type MarkerCluster = {
+  id: string;
+  coordinates: Point;
+  markers: ProjectedMarker[];
+  severity: RiskLevel | null;
+};
+
 const planningAreas = mapData.planningAreas as PlanningArea[];
 const initialViewport: Viewport = {
   x: 0,
@@ -78,7 +90,8 @@ const initialViewport: Viewport = {
   width: mapData.width,
   height: mapData.height,
 };
-const maxZoom = 4;
+const maxZoom = 16;
+const roadPaths = roadData.paths as Record<'expressway' | 'major' | 'arterial' | 'local', string>;
 
 const labelOffsets: Record<string, Point> = {
   'Bukit Merah': [-18, 18],
@@ -104,6 +117,13 @@ const riskStyles: Record<RiskLevel, { dot: string; label: string; hover: string 
 
 const neutralStyle = { dot: '#71717a', label: 'No reported data', hover: '#3f3f46' };
 const severityRank: Record<RiskLevel, number> = { low: 1, medium: 2, high: 3, critical: 4 };
+const neutralRegionFills: Record<string, string> = {
+  'Central Region': '#fffdf4',
+  'East Region': '#fffbea',
+  'North Region': '#fdf8e5',
+  'North-East Region': '#fff9e8',
+  'West Region': '#fffbed',
+};
 const heatmapPalettes: Record<HeatmapPalette, string[]> = {
   temperature: ['#38bdf8', '#22c55e', '#facc15', '#f97316', '#ef4444'],
   rainfall: ['#1e3a8a', '#2563eb', '#06b6d4', '#facc15', '#ef4444'],
@@ -120,6 +140,66 @@ function polygonPath(polygons: Point[][][]) {
       ),
     )
     .join('');
+}
+
+function clusterMarkers(markers: ProjectedMarker[], zoom: number): MarkerCluster[] {
+  if (zoom >= 6) {
+    return markers.map((marker) => ({
+      id: marker.id,
+      coordinates: marker.coordinates,
+      markers: [marker],
+      severity: normalizeRiskLevel(marker.severity),
+    }));
+  }
+
+  const clusterDistance = 46 / Math.max(zoom, 1);
+  const remaining = new Set(markers.map((marker) => marker.id));
+  const markerById = new Map(markers.map((marker) => [marker.id, marker]));
+  const clusters: MarkerCluster[] = [];
+
+  for (const marker of markers) {
+    if (!remaining.has(marker.id)) continue;
+
+    const memberIds = [marker.id];
+    remaining.delete(marker.id);
+
+    for (let index = 0; index < memberIds.length; index += 1) {
+      const member = markerById.get(memberIds[index]);
+      if (!member) continue;
+
+      for (const candidateId of [...remaining]) {
+        const candidate = markerById.get(candidateId);
+        if (!candidate) continue;
+        if (Math.hypot(
+          member.coordinates[0] - candidate.coordinates[0],
+          member.coordinates[1] - candidate.coordinates[1],
+        ) <= clusterDistance) {
+          memberIds.push(candidateId);
+          remaining.delete(candidateId);
+        }
+      }
+    }
+
+    const members = memberIds.map((id) => markerById.get(id)).filter((item): item is ProjectedMarker => Boolean(item));
+    const coordinates: Point = [
+      members.reduce((sum, item) => sum + item.coordinates[0], 0) / members.length,
+      members.reduce((sum, item) => sum + item.coordinates[1], 0) / members.length,
+    ];
+    const severity = members.reduce<RiskLevel | null>((highest, item) => {
+      const current = normalizeRiskLevel(item.severity);
+      if (!current) return highest;
+      return !highest || severityRank[current] > severityRank[highest] ? current : highest;
+    }, null);
+
+    clusters.push({
+      id: members.map((item) => item.id).sort().join('|'),
+      coordinates,
+      markers: members,
+      severity,
+    });
+  }
+
+  return clusters;
 }
 
 function labelFontSize(name: string) {
@@ -251,9 +331,11 @@ export default function SingaporeRegionMap({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [activeAreaId, setActiveAreaId] = useState<string | null>(null);
   const [activeMarkerId, setActiveMarkerId] = useState<string | null>(null);
+  const [activeClusterId, setActiveClusterId] = useState<string | null>(null);
   const [viewport, setViewport] = useState(initialViewport);
   const [isPanning, setIsPanning] = useState(false);
   const dragStart = useRef<{ pointer: Point; viewport: Viewport } | null>(null);
+  const zoom = mapData.width / viewport.width;
   const areaStatuses = useMemo(
     () =>
       new Map(
@@ -274,8 +356,21 @@ export default function SingaporeRegionMap({
   );
   const activeArea = planningAreas.find((area) => area.id === activeAreaId);
   const isTemperatureHeatmap = heatmapLayer?.palette === 'temperature';
+  const isNeutralMap = !heatmapLayer && !weatherOverlay;
   const activeStatus = activeArea ? areaStatuses.get(activeArea.id) : null;
   const activeMarker = markers.find((marker) => marker.id === activeMarkerId);
+  const projectedMarkers = useMemo<ProjectedMarker[]>(
+    () => markers.map((marker) => ({
+      ...marker,
+      coordinates: projectCoordinates(marker.latitude, marker.longitude),
+    })),
+    [markers],
+  );
+  const markerClusters = useMemo(
+    () => clusterMarkers(projectedMarkers, zoom),
+    [projectedMarkers, zoom],
+  );
+  const activeCluster = markerClusters.find((cluster) => cluster.id === activeClusterId);
   const projectedHeatPoints = useMemo(() => {
     if (!heatmapLayer) return [];
 
@@ -380,8 +475,6 @@ export default function SingaporeRegionMap({
 
     return { count: areaPoints.length, average, peak, estimated: false };
   }, [activeArea, heatmapLayer, projectedHeatPoints]);
-  const zoom = mapData.width / viewport.width;
-
   const clampViewport = (next: Viewport): Viewport => ({
     ...next,
     x: Math.min(Math.max(next.x, 0), mapData.width - next.width),
@@ -404,6 +497,14 @@ export default function SingaporeRegionMap({
         height: nextHeight,
       });
     });
+  };
+
+  const zoomToCluster = (cluster: MarkerCluster) => {
+    const [x, y] = cluster.coordinates;
+    const anchorX = clamp((x - viewport.x) / viewport.width, 0, 1);
+    const anchorY = clamp((y - viewport.y) / viewport.height, 0, 1);
+    setActiveClusterId(null);
+    zoomAt(Math.min(maxZoom, Math.max(zoom * 2, 2)), anchorX, anchorY);
   };
 
   useEffect(() => {
@@ -493,9 +594,13 @@ export default function SingaporeRegionMap({
   return (
     <div
       ref={mapContainerRef}
-      className="relative h-full min-h-[280px] overflow-hidden rounded-lg bg-zinc-800"
+      className={`relative h-full min-h-[280px] overflow-hidden rounded-lg ${isNeutralMap ? 'bg-[#8bd5e8]' : 'bg-zinc-800'}`}
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,rgba(82,82,91,0.38),transparent_70%)]" />
+      <div className={`pointer-events-none absolute inset-0 ${
+        isNeutralMap
+          ? 'bg-[#8bd5e8]'
+          : 'bg-[radial-gradient(circle_at_50%_42%,rgba(82,82,91,0.38),transparent_70%)]'
+      }`} />
 
       <svg
         viewBox={`${viewport.x} ${viewport.y} ${viewport.width} ${viewport.height}`}
@@ -623,19 +728,20 @@ export default function SingaporeRegionMap({
             const isActive = activeAreaId === area.id;
             const status = areaStatuses.get(area.id);
             const style = riskStyleFor(status?.severity);
-            const fillOpacity = heatmapLayer ? (isActive ? 0.2 : 0.03) : 1;
+            const fillOpacity = isNeutralMap ? (isActive ? 0.92 : 0.86) : heatmapLayer ? (isActive ? 0.2 : 0.03) : 1;
+            const neutralFill = isActive ? '#dbeafe' : neutralRegionFills[area.region] ?? '#f8fafc';
 
             return (
               <path
                 key={area.id}
                 d={polygonPath(area.polygons)}
-                fill={isActive ? style.hover : '#52525b'}
+                fill={isNeutralMap ? neutralFill : isActive ? style.hover : '#52525b'}
                 fillOpacity={fillOpacity}
                 fillRule="evenodd"
                 clipRule="evenodd"
-                stroke={heatmapLayer ? '#0b1120' : '#18181b'}
+                stroke={isNeutralMap ? (isActive ? '#3b82f6' : '#93a4b8') : heatmapLayer ? '#0b1120' : '#18181b'}
                 strokeOpacity={heatmapLayer ? 0.72 : 1}
-                strokeWidth={heatmapLayer ? '1.05' : '1.35'}
+                strokeWidth={isNeutralMap ? (isActive ? '2' : '1.1') : heatmapLayer ? '1.05' : '1.35'}
                 strokeLinejoin="round"
                 vectorEffect="non-scaling-stroke"
                 className="outline-none transition-colors duration-150"
@@ -651,58 +757,121 @@ export default function SingaporeRegionMap({
           })}
         </g>
 
+        {isNeutralMap && (
+          <g clipPath="url(#singapore-map-land-clip)" className="pointer-events-none">
+            <path d={roadPaths.local} fill="none" stroke="#c6d0df" strokeWidth="2.2" vectorEffect="non-scaling-stroke" opacity={zoom >= 2.5 ? 0.9 : 0} />
+            <path d={roadPaths.local} fill="none" stroke="#ffffff" strokeWidth="1.15" vectorEffect="non-scaling-stroke" opacity={zoom >= 2.5 ? 1 : 0} />
+            <path d={roadPaths.arterial} fill="none" stroke="#9eacc4" strokeWidth="3.2" vectorEffect="non-scaling-stroke" opacity={zoom >= 1.4 ? 1 : 0} />
+            <path d={roadPaths.arterial} fill="none" stroke="#ffffff" strokeWidth="1.8" vectorEffect="non-scaling-stroke" opacity={zoom >= 1.4 ? 1 : 0} />
+            <path d={roadPaths.major} fill="none" stroke="#899dbd" strokeWidth="4.2" vectorEffect="non-scaling-stroke" />
+            <path d={roadPaths.major} fill="none" stroke="#f8fafc" strokeWidth="2.35" vectorEffect="non-scaling-stroke" />
+            <path d={roadPaths.expressway} fill="none" stroke="#718aae" strokeWidth="5.4" vectorEffect="non-scaling-stroke" />
+            <path d={roadPaths.expressway} fill="none" stroke="#f8d66d" strokeWidth="3.1" vectorEffect="non-scaling-stroke" />
+          </g>
+        )}
+
         {activeArea && activeStatus && (
           <path
             d={polygonPath(activeArea.polygons)}
             fill="none"
             fillRule="evenodd"
             clipRule="evenodd"
-            stroke="#fafafa"
+            stroke={isNeutralMap ? '#2563eb' : '#fafafa'}
             strokeWidth="2.75"
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
             className="pointer-events-none"
-            style={{
-              filter: `drop-shadow(0 0 4px ${
-                riskStyleFor(activeStatus.severity).dot
-              })`,
-            }}
+            style={{ filter: isNeutralMap ? 'drop-shadow(0 1px 2px rgba(37,99,235,0.3))' : `drop-shadow(0 0 4px ${riskStyleFor(activeStatus.severity).dot})` }}
           />
         )}
 
         {showMarkers && <g>
-          {markers.map((marker) => {
-            const [x, y] = projectCoordinates(marker.latitude, marker.longitude);
-            const isActive = activeMarkerId === marker.id;
-            const style = riskStyleFor(marker.severity);
+          {markerClusters.map((cluster) => {
+            const [x, y] = cluster.coordinates;
+            const marker = cluster.markers[0];
+            const isGrouped = cluster.markers.length > 1;
+            const isActive = isGrouped ? activeClusterId === cluster.id : activeMarkerId === marker.id;
+            const style = riskStyleFor(cluster.severity ?? marker.severity);
+            const clusterRadius = clamp(13 + Math.log2(cluster.markers.length) * 2.5, 14, 22);
+
+            if (isGrouped) {
+              return (
+                <g
+                  key={cluster.id}
+                  transform={`translate(${x} ${y}) scale(${1 / zoom})`}
+                  className="cursor-zoom-in outline-none"
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`${cluster.markers.length} nearby ${problemLabel}. Activate to zoom in.`}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => zoomToCluster(cluster)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      zoomToCluster(cluster);
+                    }
+                  }}
+                  onMouseEnter={() => setActiveClusterId(cluster.id)}
+                  onMouseLeave={() => setActiveClusterId(null)}
+                  onFocus={() => setActiveClusterId(cluster.id)}
+                  onBlur={() => setActiveClusterId(null)}
+                >
+                  <circle
+                    r={clusterRadius + 5}
+                    fill={style.dot}
+                    fillOpacity="0.2"
+                    stroke={style.dot}
+                    strokeWidth="1.5"
+                  />
+                  <circle
+                    r={clusterRadius}
+                    fill={style.dot}
+                    fillOpacity={isActive ? 1 : 0.9}
+                    stroke="#fafafa"
+                    strokeWidth={isActive ? 3 : 2}
+                    style={{ filter: isActive ? `drop-shadow(0 0 6px ${style.dot})` : 'none' }}
+                  />
+                  <text
+                    y="4"
+                    textAnchor="middle"
+                    fill="#ffffff"
+                    fontSize="12"
+                    fontWeight="800"
+                    className="pointer-events-none"
+                    style={{ paintOrder: 'stroke', stroke: '#18181b', strokeWidth: 2 }}
+                  >
+                    {cluster.markers.length}
+                  </text>
+                </g>
+              );
+            }
 
             return (
               <g
                 key={marker.id}
+                transform={`translate(${x} ${y}) scale(${1 / zoom})`}
                 className="cursor-pointer outline-none"
                 tabIndex={0}
                 role="button"
                 aria-label={`${marker.name}: ${marker.value}. ${marker.detail}`}
+                onPointerDown={(event) => event.stopPropagation()}
                 onMouseEnter={() => setActiveMarkerId(marker.id)}
                 onMouseLeave={() => setActiveMarkerId(null)}
                 onFocus={() => setActiveMarkerId(marker.id)}
                 onBlur={() => setActiveMarkerId(null)}
               >
                 <circle
-                  cx={x}
-                  cy={y}
                   r={isActive ? 9 : 6}
                   fill={style.dot}
                   fillOpacity={isActive ? 1 : 0.82}
                   stroke="#fafafa"
                   strokeWidth={isActive ? 2.5 : 1.5}
-                  vectorEffect="non-scaling-stroke"
                   style={{ filter: isActive ? `drop-shadow(0 0 5px ${style.dot})` : 'none' }}
                 />
                 {isActive && (
                   <text
-                    x={x + 12}
-                    y={y + 4}
+                    x="12"
+                    y="4"
                     fill="#ffffff"
                     fontSize="11"
                     fontWeight="700"
@@ -729,33 +898,44 @@ export default function SingaporeRegionMap({
             const isActive = activeAreaId === area.id;
 
             return (
-              <g key={`${area.id}-label`} opacity={activeAreaId && !isActive ? 0.38 : 1}>
+              <g
+                key={`${area.id}-label`}
+                opacity={isActive ? 1 : activeAreaId ? 0.3 : 0.58}
+                className="transition-opacity duration-150"
+              >
                 {moved && (
                   <line
                     x1={dotX}
                     y1={dotY}
                     x2={labelX}
                     y2={labelY}
-                    stroke={isActive ? '#ffffff' : '#a1a1aa'}
+                    stroke={isNeutralMap ? (isActive ? '#2563eb' : '#94a3b8') : isActive ? '#ffffff' : '#a1a1aa'}
                     strokeWidth="0.8"
                     strokeDasharray="2 2"
                   />
                 )}
-                <circle
-                  cx={dotX}
-                  cy={dotY}
-                  r={isActive ? 4.3 : 3}
-                  fill={style.dot}
-                  stroke="#18181b"
-                  strokeWidth="1.2"
-                />
+                {!isNeutralMap && (
+                  <circle
+                    cx={dotX}
+                    cy={dotY}
+                    r={isActive ? 4.3 : 3}
+                    fill={style.dot}
+                    stroke="#18181b"
+                    strokeWidth="1.2"
+                  />
+                )}
                 <text
-                  x={labelX + 5}
+                  x={labelX + (isNeutralMap ? 0 : 5)}
                   y={labelY + 3}
-                  fill={isActive ? '#ffffff' : '#e4e4e7'}
+                  fill={isNeutralMap ? (isActive ? '#1d4ed8' : '#334155') : isActive ? '#ffffff' : '#e4e4e7'}
                   fontSize={isActive ? labelFontSize(area.name) + 1.5 : labelFontSize(area.name)}
                   fontWeight={isActive ? 700 : 500}
-                  style={{ paintOrder: 'stroke', stroke: '#27272a', strokeWidth: 2.5, strokeLinejoin: 'round' }}
+                  style={{
+                    paintOrder: 'stroke',
+                    stroke: isNeutralMap ? 'rgba(255,255,255,0.95)' : '#27272a',
+                    strokeWidth: isNeutralMap ? 3.5 : 2.5,
+                    strokeLinejoin: 'round',
+                  }}
                 >
                   {area.name}
                 </text>
@@ -765,12 +945,18 @@ export default function SingaporeRegionMap({
         </g>}
       </svg>
 
-      <div className="absolute right-3 top-3 flex items-center overflow-hidden rounded-lg border border-zinc-700 bg-zinc-950/95 shadow-xl backdrop-blur">
+      <div className={`absolute right-3 top-3 flex items-center overflow-hidden rounded-lg shadow-xl ${
+        isNeutralMap ? 'border border-slate-300 bg-white/95' : 'border border-zinc-700 bg-zinc-950/95 backdrop-blur'
+      }`}>
         <button
           type="button"
           onClick={() => zoomAt(zoom / 1.35)}
           disabled={zoom <= 1.01}
-          className="grid h-9 w-9 place-items-center border-r border-zinc-700 text-lg text-zinc-200 transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:text-zinc-600"
+          className={`grid h-9 w-9 place-items-center border-r text-lg transition-colors disabled:cursor-not-allowed ${
+            isNeutralMap
+              ? 'border-slate-300 text-slate-700 hover:bg-slate-100 disabled:text-slate-300'
+              : 'border-zinc-700 text-zinc-200 hover:bg-zinc-800 disabled:text-zinc-600'
+          }`}
           aria-label="Zoom out"
         >
           -
@@ -778,7 +964,9 @@ export default function SingaporeRegionMap({
         <button
           type="button"
           onClick={() => setViewport(initialViewport)}
-          className="h-9 min-w-16 border-r border-zinc-700 px-2 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-800"
+          className={`h-9 min-w-16 border-r px-2 text-xs font-medium transition-colors ${
+            isNeutralMap ? 'border-slate-300 text-slate-600 hover:bg-slate-100' : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800'
+          }`}
           aria-label="Reset map zoom"
         >
           {Math.round(zoom * 100)}%
@@ -787,16 +975,31 @@ export default function SingaporeRegionMap({
           type="button"
           onClick={() => zoomAt(zoom * 1.35)}
           disabled={zoom >= maxZoom - 0.01}
-          className="grid h-9 w-9 place-items-center text-lg text-zinc-200 transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:text-zinc-600"
+          className={`grid h-9 w-9 place-items-center text-lg transition-colors disabled:cursor-not-allowed ${
+            isNeutralMap ? 'text-slate-700 hover:bg-slate-100 disabled:text-slate-300' : 'text-zinc-200 hover:bg-zinc-800 disabled:text-zinc-600'
+          }`}
           aria-label="Zoom in"
         >
           +
         </button>
       </div>
 
-      <div className="pointer-events-none absolute bottom-3 right-3 rounded-md border border-zinc-700 bg-zinc-950/85 px-2 py-1 text-[10px] text-zinc-400 backdrop-blur">
-        Pinch to zoom - Drag to move
+      <div className={`pointer-events-none absolute bottom-3 right-3 rounded-md px-2 py-1 text-[10px] ${
+        isNeutralMap ? 'border border-slate-300 bg-white/90 text-slate-500' : 'border border-zinc-700 bg-zinc-950/85 text-zinc-400 backdrop-blur'
+      }`}>
+        Pinch to zoom - Drag to move - Select clusters to expand
       </div>
+
+      {isNeutralMap && (
+        <a
+          href="https://www.openstreetmap.org/copyright"
+          target="_blank"
+          rel="noopener"
+          className="absolute bottom-3 left-3 rounded border border-slate-300 bg-white/90 px-2 py-1 text-[10px] text-slate-600 shadow-sm hover:text-blue-700"
+        >
+          © OpenStreetMap contributors
+        </a>
+      )}
 
       {heatmapLayer && heatBounds && (
         <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 rounded-lg border border-zinc-700 bg-zinc-950/90 p-2 shadow-xl backdrop-blur">
@@ -813,22 +1016,39 @@ export default function SingaporeRegionMap({
         </div>
       )}
 
-      <div className={`pointer-events-none absolute ${heatmapLayer ? 'left-3 top-[calc(50%-13rem)]' : 'left-3 top-3'} max-w-[240px] rounded-lg border border-zinc-700 bg-zinc-950/95 px-3 py-2 shadow-xl backdrop-blur`}>
-        {activeMarker ? (
+      <div className={`pointer-events-none absolute ${heatmapLayer ? 'left-3 top-[calc(50%-13rem)]' : 'left-3 top-3'} max-w-[240px] rounded-lg px-3 py-2 shadow-xl ${
+        isNeutralMap ? 'border border-slate-300 bg-white/95' : 'border border-zinc-700 bg-zinc-950/95 backdrop-blur'
+      }`}>
+        {activeCluster ? (
           <>
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+            <div className={`flex items-center gap-2 text-sm font-semibold ${isNeutralMap ? 'text-slate-900' : 'text-white'}`}>
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: riskStyleFor(activeCluster.severity).dot }}
+              />
+              {activeCluster.markers.length} nearby locations
+            </div>
+            <div className={`mt-1 text-xs ${isNeutralMap ? 'text-slate-700' : 'text-zinc-300'}`}>
+              {activeCluster.markers.slice(0, 3).map((marker) => marker.name).join(', ')}
+              {activeCluster.markers.length > 3 ? ` and ${activeCluster.markers.length - 3} more` : ''}
+            </div>
+            <div className={`mt-1 text-[11px] ${isNeutralMap ? 'text-slate-500' : 'text-zinc-500'}`}>Select the cluster to zoom in and separate its locations.</div>
+          </>
+        ) : activeMarker ? (
+          <>
+            <div className={`flex items-center gap-2 text-sm font-semibold ${isNeutralMap ? 'text-slate-900' : 'text-white'}`}>
               <span
                 className="h-2 w-2 shrink-0 rounded-full"
                 style={{ backgroundColor: riskStyleFor(activeMarker.severity).dot }}
               />
               {activeMarker.name}
             </div>
-            <div className="mt-1 text-sm font-semibold text-zinc-100">{activeMarker.value}</div>
-            <div className="mt-0.5 text-xs text-zinc-300">{activeMarker.detail}</div>
+            <div className={`mt-1 text-sm font-semibold ${isNeutralMap ? 'text-slate-800' : 'text-zinc-100'}`}>{activeMarker.value}</div>
+            <div className={`mt-0.5 text-xs ${isNeutralMap ? 'text-slate-600' : 'text-zinc-300'}`}>{activeMarker.detail}</div>
           </>
         ) : activeArea && activeStatus ? (
           <>
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+            <div className={`flex items-center gap-2 text-sm font-semibold ${isNeutralMap ? 'text-slate-900' : 'text-white'}`}>
               <span
                 className="h-2 w-2 shrink-0 rounded-full"
                 style={{
@@ -839,8 +1059,8 @@ export default function SingaporeRegionMap({
               />
               {activeArea.name}
             </div>
-            <div className="mt-0.5 text-[11px] text-zinc-500">{activeArea.region}</div>
-            <div className="mt-1 text-xs text-zinc-300">
+            <div className={`mt-0.5 text-[11px] ${isNeutralMap ? 'text-slate-500' : 'text-zinc-500'}`}>{activeArea.region}</div>
+            <div className={`mt-1 text-xs ${isNeutralMap ? 'text-slate-700' : 'text-zinc-300'}`}>
               {activeHeatStats && heatmapLayer ? (
                 <>
                   {activeHeatStats.estimated
@@ -864,8 +1084,8 @@ export default function SingaporeRegionMap({
           </>
         ) : (
           <>
-            <div className="text-xs font-medium text-zinc-300">{emptyTitle}</div>
-            <div className="mt-0.5 text-[11px] text-zinc-500">{emptyDetail}</div>
+            <div className={`text-xs font-medium ${isNeutralMap ? 'text-slate-700' : 'text-zinc-300'}`}>{emptyTitle}</div>
+            <div className={`mt-0.5 text-[11px] ${isNeutralMap ? 'text-slate-500' : 'text-zinc-500'}`}>{emptyDetail}</div>
           </>
         )}
       </div>

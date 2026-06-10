@@ -44,7 +44,7 @@ const severitySpark: Record<string, string> = {
 };
 
 const fallbackCrisisCards: CrisisCard[] = [
-  { id: 'covid', label: 'Covid-19', type: 'Health', severity: 'medium', path: '/gov/pandemic?disease=covid', stats: [{ label: 'Archived cluster map', value: '2020', delta: 'MOH' }, { label: 'Current status', value: 'Archive', delta: '' }], icon: 'Activity' },
+  { id: 'covid', label: 'Covid-19', type: 'Health', severity: 'medium', path: '/gov/pandemic?disease=covid', stats: [{ label: 'MOH cluster archive', value: 'Apr 2020', delta: '' }, { label: 'Current status', value: 'Archive', delta: '' }], icon: 'Activity' },
   { id: 'dengue', label: 'Dengue', type: 'Health', severity: 'high', path: '/gov/pandemic?disease=dengue', stats: [{ label: 'Red zone clusters', value: '14', delta: '+3' }, { label: 'Cases this week', value: '212', delta: '+8%' }], icon: 'Activity' },
   { id: 'flood', label: 'Flash Flood Risk', type: 'Weather', severity: 'high', path: '/gov/weather', stats: [{ label: 'High-risk zones', value: '6', delta: '' }, { label: 'Peak rainfall (1h)', value: '45mm', delta: 'Alert' }], icon: 'Cloud' },
   { id: 'panadol', label: 'Panadol Shortage', type: 'Supply Chain', severity: 'medium', path: '/gov/supply-chain', stats: [{ label: 'Affected outlets', value: '87', delta: '' }, { label: 'Est. restock', value: '4 days', delta: '' }], icon: 'Package' },
