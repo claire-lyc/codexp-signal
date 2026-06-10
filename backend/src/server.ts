@@ -68,6 +68,7 @@ import {
 } from './notificationRepository.js';
 import { detectPotentialMisinformation } from './misinformationDetector.js';
 import { detectTicketUrgency } from './severityDetector.js';
+import { answerCrisisQuestion } from './crisisAssistant.js';
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
@@ -125,6 +126,30 @@ app.patch('/api/notifications/:id/read', authenticateJwt as express.RequestHandl
       return;
     }
     response.json({ item });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/citizen/assistant', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
+  try {
+    const messages = Array.isArray(request.body?.messages)
+      ? request.body.messages
+        .filter((message: unknown) => message && typeof message === 'object')
+        .map((message: Record<string, unknown>) => ({
+          role: message.role === 'assistant' ? 'assistant' as const : 'user' as const,
+          content: stringBody(message.content)?.slice(0, 1200) ?? '',
+        }))
+        .filter((message: { content: string }) => message.content)
+        .slice(-10)
+      : [];
+
+    if (!messages.length || messages.at(-1)?.role !== 'user') {
+      response.status(400).json({ error: 'A user question is required' });
+      return;
+    }
+
+    response.json({ reply: await answerCrisisQuestion(messages) });
   } catch (error) {
     next(error);
   }
