@@ -26,6 +26,8 @@ type CreatedTicket = {
   status: string;
   assignedAgency: string;
   item?: TicketRecord;
+  forumMerged?: boolean;
+  forumSuppressed?: boolean;
 };
 
 type TicketUrgency = 'critical' | 'high' | 'medium' | 'low';
@@ -135,6 +137,7 @@ export default function PublicTickets() {
   const [locating, setLocating] = useState(false);
   const [reportComposerOpen, setReportComposerOpen] = useState(false);
   const [subjectTags, setSubjectTags] = useState<SubjectTag[]>([]);
+  const [postToForum, setPostToForum] = useState(true);
 
   const visibleTags = showAllTags ? ticketTags : ticketTags.slice(0, 5);
   const imagePreviews = useMemo(() => files.map((file) => ({ file, url: URL.createObjectURL(file) })), [files]);
@@ -323,6 +326,7 @@ export default function PublicTickets() {
     formData.append('locationText', location.trim());
     if (latitude !== null) formData.append('latitude', String(latitude));
     if (longitude !== null) formData.append('longitude', String(longitude));
+    formData.append('postToForum', String(postToForum));
     files.forEach((file) => formData.append('images', file));
 
     setSubmitState('submitting');
@@ -354,7 +358,14 @@ export default function PublicTickets() {
       setFiles([]);
       setFieldErrors({});
       setSubmitState('success');
-      setSubmitMessage(`Report ${data.publicReportId} submitted and sent to ${data.assignedAgency}.`);
+      const forumMessage = postToForum
+        ? (data.forumSuppressed
+            ? ' It was not posted publicly because report triage placed it in the government spam queue.'
+            : data.forumMerged
+              ? ' Your update matched a recent forum thread and was added beneath the original.'
+              : ' It was also posted to the community forum.')
+        : '';
+      setSubmitMessage(`Report ${data.publicReportId} submitted and sent to ${data.assignedAgency}.${forumMessage}`);
       setReportComposerOpen(false);
       loadMyTickets(true);
     } catch {
@@ -633,6 +644,19 @@ export default function PublicTickets() {
                   ))}
                 </div>
               )}
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-blue-900/60 bg-blue-950/20 p-4">
+                <input
+                  type="checkbox"
+                  checked={postToForum}
+                  onChange={(event) => setPostToForum(event.target.checked)}
+                  className="mt-1 h-4 w-4 accent-blue-600"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-zinc-200">Also post this report to the community forum</span>
+                  <span className="mt-1 block text-xs text-zinc-500">Similar recent updates are grouped beneath the earliest thread and count as an automatic upvote.</span>
+                </span>
+              </label>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <button

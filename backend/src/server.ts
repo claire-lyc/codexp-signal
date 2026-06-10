@@ -3,10 +3,11 @@ import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
 import multer from 'multer';
-import { authenticateJwt, requireActor, type AuthenticatedRequest } from './authMiddleware.js';
+import { authenticateJwt, optionalAuthenticateJwt, requireActor, type AuthenticatedRequest } from './authMiddleware.js';
 import { createAuthRouter } from './authRoutes.js';
 import {
   createForumPost,
+  createOrMergeForumPost,
   createForumReply,
   likeForumPost,
   listForumPosts,
@@ -160,11 +161,16 @@ app.post('/api/citizen/assistant', authenticateJwt as express.RequestHandler, as
   }
 });
 
-app.get('/api/forum/posts', (_request, response) => {
-  response.json({ items: listForumPosts() });
+app.get('/api/forum/posts', (request, response) => {
+  response.json({
+    items: listForumPosts({
+      latitude: numberBody(request.query.latitude),
+      longitude: numberBody(request.query.longitude),
+    }),
+  });
 });
 
-app.post('/api/forum/posts', async (request, response, next) => {
+app.post('/api/forum/posts', optionalAuthenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
   const content = stringBody(request.body?.content);
   if (!content) {
     response.status(400).json({ error: 'Post content is required' });
@@ -186,14 +192,61 @@ app.post('/api/forum/posts', async (request, response, next) => {
 
   try {
     const aiFlag = await detectPotentialMisinformation(content);
-    const post = createForumPost({
+    const location = stringBody(request.body?.location);
+    const latitude = numberBody(request.body?.latitude);
+    const longitude = numberBody(request.body?.longitude);
+    let linkedTicket: Ticket | null = null;
+    if (request.body?.createReport === true) {
+      if (!request.user?.id) {
+        response.status(401).json({ error: 'Sign in before sending a forum post as a report.' });
+        return;
+      }
+      linkedTicket = await createCitizenTicket({
+        reporterUserId: request.user.id,
+        reporter: author,
+        title: stringBody(request.body?.title),
+        message: content,
+        location,
+        latitude,
+        longitude,
+        crisisType: stringBody(request.body?.reportType) ?? stringBody(request.body?.category) ?? 'general',
+        reportType: stringBody(request.body?.reportType) ?? stringBody(request.body?.category),
+        urgency: await detectTicketUrgency(
+          stringBody(request.body?.reportType) ?? stringBody(request.body?.category) ?? 'general',
+          content,
+        ),
+        images: parseImageMetadata(request.body?.images),
+      });
+      if (linkedTicket?.status === 'spam') {
+        response.status(422).json({
+          error: `Report ${linkedTicket.id} was saved to the government spam queue and was not posted publicly.`,
+          linkedReportId: linkedTicket.id,
+        });
+        return;
+      }
+    }
+    const result = createOrMergeForumPost({
       author,
       content,
       category: stringBody(request.body?.category),
       aiFlag,
+      location,
+      latitude,
+      longitude,
+      sourceReportId: linkedTicket?.id ?? null,
+      images: parseImageMetadata(request.body?.images).map((image) => ({
+        filename: image.originalFilename,
+        mimeType: image.mimeType,
+        previewUrl: image.previewUrl,
+      })),
     });
     forumPostCooldowns.set(cooldownKey, Date.now() + forumPostCooldownMs);
-    response.status(201).json({ item: post });
+    response.status(201).json({
+      item: result.post,
+      merged: result.merged,
+      similarityScore: result.similarityScore,
+      linkedReportId: linkedTicket?.id ?? null,
+    });
   } catch (error) {
     next(error);
   }
@@ -557,6 +610,13 @@ app.post(
 
       const files = Array.isArray(request.files) ? request.files : [];
       const bodyImages = parseImageMetadata(request.body?.images);
+      const uploadedImages = files.map((file) => ({
+        originalFilename: file.originalname,
+        mimeType: file.mimetype,
+        byteSize: file.size,
+        storageKey: `uploads/${Date.now()}-${file.originalname}`,
+        previewUrl: `data:${file.mimetype};base64,${file.buffer.toString('base64')}`,
+      }));
       const urgency = await detectTicketUrgency(crisisType, message);
       const ticket = await createCitizenTicket({
         reporterUserId: request.user?.id ?? null,
@@ -571,13 +631,7 @@ app.post(
         reportType: stringBody(request.body?.reportType),
         subjectTagId: stringBody(request.body?.subjectTagId) ?? null,
         images: [
-          ...files.map((file) => ({
-            originalFilename: file.originalname,
-            mimeType: file.mimetype,
-            byteSize: file.size,
-            storageKey: `uploads/${Date.now()}-${file.originalname}`,
-            previewUrl: `data:${file.mimetype};base64,${file.buffer.toString('base64')}`,
-          })),
+          ...uploadedImages,
           ...bodyImages,
         ],
       });
@@ -587,6 +641,28 @@ app.post(
         return;
       }
 
+      const postToForum = request.body?.postToForum === 'true' || request.body?.postToForum === true;
+      const forumResult = postToForum && ticket.status !== 'spam'
+        ? createOrMergeForumPost({
+            author: stringBody(request.body?.reporter)
+              ?? request.user?.display_name
+              ?? request.user?.username
+              ?? 'Citizen',
+            content: message,
+            category: forumCategory(crisisType),
+            location: stringBody(request.body?.locationText) ?? stringBody(request.body?.location),
+            latitude: numberBody(request.body?.latitude),
+            longitude: numberBody(request.body?.longitude),
+            sourceReportId: ticket.id,
+            aiFlag: await detectPotentialMisinformation(message),
+            images: [...uploadedImages, ...bodyImages].map((image) => ({
+              filename: image.originalFilename,
+              mimeType: image.mimeType,
+              previewUrl: image.previewUrl,
+            })),
+          })
+        : null;
+
       response.status(201).json({
         id: ticket.id,
         publicReportId: ticket.id,
@@ -594,6 +670,9 @@ app.post(
         assignedAgency: ticket.assignedAgency,
         createdAt: new Date().toISOString(),
         item: redactInternalTicket(ticket),
+        forumPost: forumResult?.post ?? null,
+        forumMerged: forumResult?.merged ?? false,
+        forumSuppressed: postToForum && ticket.status === 'spam',
       });
     } catch (error) {
       next(error);
@@ -1181,4 +1260,13 @@ function forumCooldownRemaining(key: string) {
   }
 
   return remaining;
+}
+
+function forumCategory(crisisType: string) {
+  const normalized = crisisType.toLowerCase();
+  if (normalized === 'health') return 'Health';
+  if (normalized === 'flood' || normalized === 'environment') return 'Weather';
+  if (normalized === 'supply') return 'Supply';
+  if (normalized === 'infrastructure' || normalized === 'transport') return 'Infrastructure';
+  return 'Community';
 }
