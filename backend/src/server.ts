@@ -14,7 +14,11 @@ import {
   reportForumPost,
 } from './forumRepository.js';
 import {
+  acceptUrgentVolunteerAlert,
+  createUrgentVolunteerAlert,
   getVolunteerProfile,
+  listUrgentVolunteerAlerts,
+  listUrgentVolunteerAlertsForVolunteer,
   listVolunteerProfiles,
   patchVolunteerProfile,
   upsertVolunteerProfile,
@@ -318,6 +322,35 @@ app.get('/api/volunteers/profile', authenticateJwt as express.RequestHandler, as
   }
 });
 
+app.get('/api/volunteers/urgent-alerts', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
+  try {
+    if (!request.user?.id) {
+      response.status(401).json({ error: 'Bearer token is required' });
+      return;
+    }
+    response.json({ items: await listUrgentVolunteerAlertsForVolunteer(request.user.id) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/volunteers/urgent-alerts/:id/accept', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
+  try {
+    if (!request.user?.id) {
+      response.status(401).json({ error: 'Bearer token is required' });
+      return;
+    }
+    const item = await acceptUrgentVolunteerAlert(request.params.id, request.user.id);
+    if (!item) {
+      response.status(404).json({ error: 'Urgent volunteer alert not found' });
+      return;
+    }
+    response.json({ item });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.put('/api/volunteers/profile', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
   try {
     if (!request.user?.id) {
@@ -367,6 +400,42 @@ app.patch('/api/gov/volunteers/profiles/:userId', ...requireGovUser, async (requ
       return;
     }
     response.json({ item: { userId: item.user_id, profile: item.profile } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/gov/volunteers/urgent-alerts', ...requireGovUser, async (_request, response, next) => {
+  try {
+    response.json({ items: await listUrgentVolunteerAlerts() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/gov/volunteers/urgent-alerts', ...requireGovUser, async (request: AuthenticatedRequest, response, next) => {
+  try {
+    const title = stringBody(request.body?.title);
+    const message = stringBody(request.body?.message);
+    const location = stringBody(request.body?.location);
+    const region = stringBody(request.body?.region);
+    const agency = stringBody(request.body?.agency) ?? request.user?.username ?? request.user?.display_name ?? 'Government';
+    const needed = numberBody(request.body?.needed) ?? 1;
+
+    if (!title || !message || !location || !region) {
+      response.status(400).json({ error: 'Title, message, location, and region are required' });
+      return;
+    }
+
+    const item = await createUrgentVolunteerAlert({
+      title,
+      message,
+      location,
+      region,
+      agency,
+      needed,
+    });
+    response.status(201).json({ item });
   } catch (error) {
     next(error);
   }

@@ -19,6 +19,7 @@ import {
   statusLabel,
   volunteerNeedsStorageKey,
   volunteerSkills,
+  type UrgentVolunteerAlert,
   type VolunteerAssignment,
   type VolunteerOpportunity,
   type VolunteerProfile,
@@ -53,6 +54,14 @@ type NeedRoleForm = {
   specialRequirements: string;
 };
 
+type UrgentAlertForm = {
+  title: string;
+  message: string;
+  location: string;
+  region: string;
+  needed: number;
+};
+
 const agencies = ['All agencies', 'LTA', 'MOH', 'PUB', 'SCDF', 'SPF', 'NEA', 'Enterprise SG', 'MSF'];
 
 const emptyNeedForm: NeedForm = {
@@ -73,6 +82,14 @@ const emptyNeedForm: NeedForm = {
       specialRequirements: '',
     },
   ],
+};
+
+const emptyUrgentAlertForm: UrgentAlertForm = {
+  title: 'Immediate nearby support needed',
+  message: 'Need nearby registered volunteers to report immediately for urgent ground support.',
+  location: 'Bugis',
+  region: 'Central',
+  needed: 6,
 };
 
 const urgencyColors: Record<string, string> = {
@@ -154,9 +171,12 @@ export default function GovVolunteers() {
   const [remoteProfiles, setRemoteProfiles] = useState<RemoteVolunteerProfile[]>([]);
   const [demoProfiles, setDemoProfiles] = useState<VolunteerProfile[]>(demoVolunteerProfiles);
   const [customNeeds, setCustomNeeds] = useState<VolunteerOpportunity[]>(() => readCustomNeeds());
+  const [urgentAlerts, setUrgentAlerts] = useState<UrgentVolunteerAlert[]>([]);
   const [expandedId, setExpandedId] = useState<number | null>(1);
   const [showNeedForm, setShowNeedForm] = useState(false);
   const [needForm, setNeedForm] = useState<NeedForm>(emptyNeedForm);
+  const [showUrgentAlertForm, setShowUrgentAlertForm] = useState(false);
+  const [urgentAlertForm, setUrgentAlertForm] = useState<UrgentAlertForm>(emptyUrgentAlertForm);
   const [allocateModal, setAllocateModal] = useState<VolunteerOpportunity | null>(null);
   const [additionalSlots, setAdditionalSlots] = useState(5);
   const [activityLog, setActivityLog] = useState<string[]>([]);
@@ -185,11 +205,28 @@ export default function GovVolunteers() {
         setRemoteProfiles([]);
       });
 
+  const loadUrgentAlerts = () =>
+    fetch(apiUrl('/api/gov/volunteers/urgent-alerts'), { headers: authHeaders() })
+      .then((response) => {
+        if (!response.ok) throw new Error('Urgent alerts unavailable');
+        return response.json() as Promise<{ items: UrgentVolunteerAlert[] }>;
+      })
+      .then((data) => {
+        setUrgentAlerts(data.items);
+      })
+      .catch(() => {
+        setUrgentAlerts([]);
+      });
+
   useEffect(() => {
     loadCitizenProfile();
     loadRemoteProfiles();
+    loadUrgentAlerts();
     const refreshNeeds = () => setCustomNeeds(readCustomNeeds());
-    const timer = window.setInterval(loadRemoteProfiles, API_REFRESH_INTERVAL_MS);
+    const timer = window.setInterval(() => {
+      loadRemoteProfiles();
+      loadUrgentAlerts();
+    }, API_REFRESH_INTERVAL_MS);
     window.addEventListener('storage', loadCitizenProfile);
     window.addEventListener('storage', refreshNeeds);
     window.addEventListener('signal-volunteer-updated', loadCitizenProfile);
@@ -210,10 +247,7 @@ export default function GovVolunteers() {
       ...remoteProfiles,
       ...(citizenProfile ? [citizenProfile] : []),
       ...demoProfiles,
-    ].map((profile) => profile.status === 'pending_review'
-      ? { ...profile, status: 'verified' as const }
-      : profile
-    ).filter((profile) => {
+    ].filter((profile) => {
       const key = volunteerIdentity(profile);
       if (seen.has(key)) return false;
       seen.add(key);
@@ -264,6 +298,13 @@ export default function GovVolunteers() {
       .length
   ), 0), [agencyOpportunities, rawApplicants]);
 
+  const skillVerificationProfiles = useMemo(() => (
+    rawApplicants
+      .filter((profile) => profile.status === 'pending_review')
+      .filter((profile) => currentAgency === 'All agencies' || agencyOpportunities.some((opportunity) => hasSkillOverlap(profile, opportunity)))
+      .sort((a, b) => a.registeredAt.localeCompare(b.registeredAt))
+  ), [agencyOpportunities, currentAgency, rawApplicants]);
+
   const openOpportunities = opportunities.filter((opportunity) => opportunity.filled < opportunity.needed);
   const fullOpportunities = opportunities.filter((opportunity) => opportunity.filled >= opportunity.needed);
   const visibleOpportunities = boardTab === 'open' ? openOpportunities : fullOpportunities;
@@ -290,7 +331,7 @@ export default function GovVolunteers() {
         return opportunity && (assignment.status === 'accepted' || assignment.status === 'checked_in' || assignment.status === 'completed');
       }).length
     ), 0),
-    registered: rawApplicants.length,
+    pendingSkills: skillVerificationProfiles.length,
   };
 
   const verifyVolunteer = (profile: VolunteerProfile) => {
@@ -298,7 +339,7 @@ export default function GovVolunteers() {
     pushActivity(`${profile.name} verified`);
   };
 
-  const makeAssignment = (opportunity: VolunteerOpportunity, role: VolunteerRoleSlot, status: VolunteerAssignment['status'] = 'offered'): VolunteerAssignment => ({
+  const makeAssignment = (opportunity: VolunteerOpportunity, role: VolunteerRoleSlot, status: VolunteerAssignment['status'] = 'accepted'): VolunteerAssignment => ({
     id: `ASN-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     opportunityId: opportunity.id,
     roleId: role.id,
@@ -326,7 +367,7 @@ export default function GovVolunteers() {
       appliedOpportunityIds: Array.from(new Set([...profile.appliedOpportunityIds, opportunity.id])),
       assignments: [...profile.assignments.filter((item) => item.opportunityId !== opportunity.id), assignment],
     });
-    pushActivity(`${profile.name} accepted for ${role.title}`);
+    pushActivity(`${profile.name} assigned to ${role.title}`);
   };
 
   const rejectVolunteer = (profile: VolunteerProfile, opportunity: VolunteerOpportunity, role: VolunteerRoleSlot) => {
@@ -441,6 +482,31 @@ export default function GovVolunteers() {
     pushActivity(`${agency} added ${newNeed.title}`);
   };
 
+  const sendUrgentAlert = () => {
+    const agency = currentAgency === 'All agencies' ? 'Government' : currentAgency;
+    fetch(apiUrl('/api/gov/volunteers/urgent-alerts'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({
+        ...urgentAlertForm,
+        agency,
+      }),
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error('Unable to send urgent alert');
+        return response.json() as Promise<{ item: UrgentVolunteerAlert }>;
+      })
+      .then((data) => {
+        setUrgentAlerts((current) => [data.item, ...current]);
+        setUrgentAlertForm(emptyUrgentAlertForm);
+        setShowUrgentAlertForm(false);
+        pushActivity(`${agency} alerted nearby volunteers for ${data.item.location}`);
+      })
+      .catch(() => {
+        pushActivity('Urgent nearby alert failed to send');
+      });
+  };
+
   const handleAllocate = (opportunity: VolunteerOpportunity) => {
     pushActivity(`${additionalSlots} standby slots opened for ${opportunity.title}`);
     setAllocateModal(null);
@@ -488,9 +554,13 @@ export default function GovVolunteers() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Volunteers & Resources</h1>
-          <p className="text-zinc-400">Review volunteer profiles, create needs, notify suitable volunteers, and assign accepted roles.</p>
+          <p className="text-zinc-400">Review volunteer profiles, create needs, alert nearby volunteers, and assign approved roles.</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
+          <button onClick={() => setShowUrgentAlertForm((value) => !value)} className="inline-flex items-center gap-2 rounded-lg border border-red-800 bg-red-950/40 px-4 py-2 text-sm font-medium text-red-100 hover:bg-red-950/60">
+            <AlertCircle className="h-4 w-4" />
+            Alert Nearby Volunteers
+          </button>
           <button onClick={() => setShowNeedForm(true)} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-700">
             <Plus className="h-4 w-4" />
             New
@@ -507,15 +577,83 @@ export default function GovVolunteers() {
       <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
         <Metric icon={<MapPin className="h-5 w-5 text-blue-500" />} label="Open Needs" value={agencyStats.needs} badge="Events" />
         <Metric icon={<Users className="h-5 w-5 text-orange-500" />} label="Manual Approvals" value={agencyStats.applications} badge="Review" />
-        <Metric icon={<AlertCircle className="h-5 w-5 text-yellow-500" />} label="Registered Volunteers" value={agencyStats.registered} badge="Ready" />
-        <Metric icon={<ShieldCheck className="h-5 w-5 text-green-500" />} label="Accepted" value={agencyStats.accepted} badge="Assigned" />
+        <Metric icon={<AlertCircle className="h-5 w-5 text-yellow-500" />} label="Pending Verification" value={agencyStats.pendingSkills} badge="Review" />
+        <Metric icon={<ShieldCheck className="h-5 w-5 text-green-500" />} label="Assigned" value={agencyStats.accepted} badge="Active" />
         <Metric icon={<UserCheck className="h-5 w-5 text-purple-500" />} label="Deployed" value={stats.deployed} badge="Live" />
       </div>
+
+      {showUrgentAlertForm && (
+        <section className="rounded-xl border border-red-900/70 bg-red-950/10 p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold text-red-100">Urgent Nearby Volunteer Alert</h2>
+              <p className="text-sm text-red-200/70">This sends a rapid nearby-response request to registered volunteers in the selected region. They can accept in one tap.</p>
+            </div>
+            <button onClick={() => setShowUrgentAlertForm(false)} className="rounded-lg bg-zinc-900 p-2 text-zinc-300 hover:bg-zinc-800">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Alert title" value={urgentAlertForm.title} onChange={(value) => setUrgentAlertForm((current) => ({ ...current, title: value }))} />
+            <Field label="Location" value={urgentAlertForm.location} onChange={(value) => setUrgentAlertForm((current) => ({ ...current, location: value }))} />
+            <SelectField label="Region" value={urgentAlertForm.region} values={['Central', 'North', 'South', 'East', 'West', 'Islandwide']} onChange={(value) => setUrgentAlertForm((current) => ({ ...current, region: value }))} />
+            <label className="block">
+              <div className="mb-2 text-sm font-medium">Volunteers needed</div>
+              <input type="number" min={1} value={urgentAlertForm.needed} onChange={(event) => setUrgentAlertForm((current) => ({ ...current, needed: Math.max(1, Number(event.target.value) || 1) }))} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-600" />
+            </label>
+            <label className="block md:col-span-2">
+              <div className="mb-2 text-sm font-medium">Urgent message</div>
+              <textarea value={urgentAlertForm.message} onChange={(event) => setUrgentAlertForm((current) => ({ ...current, message: event.target.value }))} rows={3} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-600" />
+            </label>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button onClick={sendUrgentAlert} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
+              Send urgent alert
+            </button>
+          </div>
+        </section>
+      )}
 
       <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-1">
         <button onClick={() => setPageMode('assignment')} className={`rounded-md px-3 py-1.5 text-sm ${pageMode === 'assignment' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'}`}>Opportunity Assignment</button>
         <button onClick={() => setPageMode('profiles')} className={`rounded-md px-3 py-1.5 text-sm ${pageMode === 'profiles' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}>Volunteer Profiles & Certs</button>
       </div>
+
+      {urgentAlerts.length > 0 && (
+        <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Nearby Volunteer Alerts</h2>
+              <p className="text-sm text-zinc-500">Live urgent-call responses from registered volunteers.</p>
+            </div>
+            <span className="rounded bg-zinc-800 px-2.5 py-1 text-xs text-zinc-300">{urgentAlerts.filter((alert) => alert.status === 'active').length} active</span>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {urgentAlerts.slice(0, 4).map((alert) => (
+              <div key={alert.id} className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium">{alert.title}</div>
+                    <div className="mt-1 text-sm text-zinc-400">{alert.location} • {alert.region}</div>
+                  </div>
+                  <span className={`rounded px-2 py-1 text-xs ${alert.status === 'active' ? 'bg-red-950 text-red-300' : 'bg-zinc-800 text-zinc-300'}`}>{alert.status}</span>
+                </div>
+                <div className="mt-2 text-sm text-zinc-300">{alert.message}</div>
+                <div className="mt-3 text-xs text-zinc-500">{alert.acceptedCount}/{alert.needed} accepted • {alert.agency}</div>
+                {alert.responders.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {alert.responders.slice(0, 3).map((responder) => (
+                      <div key={`${alert.id}-${responder.volunteerId}`} className="rounded bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
+                        <span className="font-medium">{responder.name}</span> • {responder.phone} • {responder.region}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {showNeedForm && (
       <section className="rounded-xl border border-zinc-800 bg-zinc-900">
@@ -674,16 +812,25 @@ export default function GovVolunteers() {
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-4">
           <ActionSection
-            title="Registered volunteers"
-            description="Everyone who signs up is immediately available for skills-based matching and opportunity assignment."
-            emptyMessage="No volunteer profiles have registered yet."
+            title="Volunteer Verification"
+            description="Review volunteer skills, certification notes, contact details, and profile readiness in one place."
+            emptyMessage="No volunteer profiles are awaiting approval."
           >
-            {applicants.map((profile) => (
-              <VolunteerProfileCard key={profile.id} profile={profile} />
+            {skillVerificationProfiles.map((profile) => (
+              <SkillVerificationCard key={profile.id} profile={profile} canVerify onVerify={verifyVolunteer} />
             ))}
           </ActionSection>
         </div>
         <aside className="space-y-4">
+          <ActionSection
+            title="Verified volunteers"
+            description="Approved volunteers stay searchable here even when they are not currently on the waiting list."
+            emptyMessage="No verified volunteer profiles yet."
+          >
+            {readyPool.concat(deployed).slice(0, 8).map((profile) => (
+              <VolunteerProfileCard key={profile.id} profile={profile} />
+            ))}
+          </ActionSection>
           <RecentActivity items={activityLog} />
         </aside>
       </section>
@@ -898,7 +1045,7 @@ function ApplicantCard({
       ) : (
         <div className="grid gap-2 sm:grid-cols-2">
           <button onClick={() => onOffer(profile, opportunity)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700">
-            Offer Role
+            Assign Role
           </button>
           <button onClick={() => onReject(profile, opportunity)} className="rounded-lg bg-zinc-700 px-3 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-600">
             Reject
@@ -1093,15 +1240,15 @@ function CandidateRow({
               <span className="text-xs font-medium text-zinc-300">{role.title}</span>
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => onAssign(profile, opportunity, role, 'accepted')} disabled={!roleHasCapacity} className="rounded bg-blue-600 px-2.5 py-1 text-xs hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
-                  Accept volunteer
+                  Assign volunteer
                 </button>
                 <button onClick={() => onReject(profile, opportunity, role)} className="rounded bg-zinc-700 px-2.5 py-1 text-xs text-zinc-200 hover:bg-zinc-600">Not selected</button>
               </div>
             </div>
             <div className="text-xs text-zinc-500">
               {roleMatchesAllSkills(profile, role)
-                ? 'This volunteer meets the listed role skills.'
-                : 'This volunteer does not meet every listed role skill, so acceptance here is a manual override.'}
+                ? 'This volunteer meets the listed role skills and can be assigned directly if slots remain.'
+                : 'This volunteer applied for this role but does not meet every listed skill, so assigning here is a manual override.'}
             </div>
           </div>
           {!roleHasCapacity && <span className="text-xs text-zinc-500">All role slots are filled.</span>}

@@ -468,7 +468,13 @@ export default function GovFormHandling() {
   const showTicketNavigator = detailNavigatorTickets.length > 0 && (filterSubjectId !== 'All Subjects' || detailNavigatorTickets.length > 1);
 
   const syncTicket = (updated: Ticket) => {
-    setTickets((current) => current.map((ticket) => (ticket.id === updated.id ? updated : ticket)));
+    setTickets((current) => {
+      const existingIndex = current.findIndex((ticket) => ticket.id === updated.id);
+      if (existingIndex === -1) {
+        return [...current, updated];
+      }
+      return current.map((ticket) => (ticket.id === updated.id ? updated : ticket));
+    });
   };
 
   const fetchTicketDetails = async (ticketId: string) => {
@@ -477,6 +483,29 @@ export default function GovFormHandling() {
       if (!response.ok) throw new Error('Ticket detail unavailable');
       const data = await response.json() as { item: Ticket };
       syncTicket(data.item);
+      const missingRelatedTicketIds = data.item.relatedTickets.filter(
+        (relatedTicketId) => !tickets.some((ticket) => ticket.id === relatedTicketId),
+      );
+
+      if (missingRelatedTicketIds.length > 0) {
+        const relatedResponses = await Promise.allSettled(
+          missingRelatedTicketIds.map(async (relatedTicketId) => {
+            const relatedResponse = await fetch(apiUrl(`/api/tickets/${relatedTicketId}`), { headers: authHeaders() });
+            if (!relatedResponse.ok) {
+              throw new Error(`Related ticket ${relatedTicketId} unavailable`);
+            }
+            const relatedData = await relatedResponse.json() as { item: Ticket };
+            return relatedData.item;
+          }),
+        );
+
+        relatedResponses.forEach((result) => {
+          if (result.status === 'fulfilled') {
+            syncTicket(result.value);
+          }
+        });
+      }
+
       setUsingBackend(true);
     } catch {
       // Keep the lightweight list item selected if detail fetch fails.

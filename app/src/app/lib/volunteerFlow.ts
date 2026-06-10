@@ -1,7 +1,8 @@
 export type VolunteerUrgency = 'high' | 'medium' | 'low';
 export type VolunteerStatus = 'draft' | 'pending_review' | 'verified' | 'assigned' | 'checked_in' | 'completed';
-export type AssignmentStatus = 'offered' | 'accepted' | 'checked_in' | 'completed' | 'declined';
+export type AssignmentStatus = 'accepted' | 'checked_in' | 'completed' | 'declined';
 export type VolunteerNotificationStatus = 'sent' | 'read';
+export type UrgentVolunteerAlertStatus = 'active' | 'resolved';
 
 export type VolunteerOpportunity = {
   id: number;
@@ -40,6 +41,31 @@ export type VolunteerNotification = {
   message: string;
   status: VolunteerNotificationStatus;
   createdAt: string;
+};
+
+export type UrgentVolunteerAlertResponder = {
+  volunteerId: string;
+  name: string;
+  phone: string;
+  email: string;
+  region: string;
+  skills: string[];
+  acceptedAt: string;
+};
+
+export type UrgentVolunteerAlert = {
+  id: string;
+  title: string;
+  message: string;
+  location: string;
+  region: string;
+  agency: string;
+  needed: number;
+  status: UrgentVolunteerAlertStatus;
+  createdAt: string;
+  acceptedCount: number;
+  responded: boolean;
+  responders: UrgentVolunteerAlertResponder[];
 };
 
 export type VolunteerRoleSlot = {

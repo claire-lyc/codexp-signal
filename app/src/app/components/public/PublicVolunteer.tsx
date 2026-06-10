@@ -10,7 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { apiUrl } from '../../lib/api';
+import { API_REFRESH_INTERVAL_MS, apiUrl } from '../../lib/api';
 import { authHeaders } from '../../lib/auth';
 import {
   clearVolunteerProfile,
@@ -29,6 +29,7 @@ import {
   type VolunteerOpportunity,
   type VolunteerProfile,
   type VolunteerRoleSlot,
+  type UrgentVolunteerAlert,
 } from '../../lib/volunteerFlow';
 
 type FormState = {
@@ -67,6 +68,7 @@ export default function PublicVolunteer() {
   const [slotTab, setSlotTab] = useState<'available' | 'unavailable'>('available');
   const [opportunities, setOpportunities] = useState<VolunteerOpportunity[]>(() => readVolunteerOpportunities());
   const [notifications, setNotifications] = useState<VolunteerNotification[]>(() => readVolunteerNotifications());
+  const [urgentAlerts, setUrgentAlerts] = useState<UrgentVolunteerAlert[]>([]);
 
   const hydrateProfile = (nextProfile: VolunteerProfile) => {
     setProfile(nextProfile);
@@ -108,26 +110,45 @@ export default function PublicVolunteer() {
     if (saved) {
       hydrateProfile(saved);
     }
+    const syncVolunteerState = () => {
+      fetch(apiUrl('/api/volunteers/profile'), { headers: authHeaders() })
+        .then((response) => {
+          if (!response.ok) throw new Error('Volunteer profile unavailable');
+          return response.json() as Promise<{ item: { userId: string; profile: VolunteerProfile } | null }>;
+        })
+        .then((data) => {
+          if (data.item?.profile) {
+            saveVolunteerProfile(data.item.profile);
+            hydrateProfile(data.item.profile);
+            return;
+          }
+          clearVolunteerProfile();
+          setProfile(null);
+          setForm(emptyForm);
+        })
+        .catch(() => {
+          // Keep local fallback profile if backend is unavailable.
+        })
+        .finally(() => {
+          setProfileLoading(false);
+        });
 
-    fetch(apiUrl('/api/volunteers/profile'), { headers: authHeaders() })
-      .then((response) => {
-        if (!response.ok) throw new Error('Volunteer profile unavailable');
-        return response.json() as Promise<{ item: { userId: string; profile: VolunteerProfile } | null }>;
-      })
-      .then((data) => {
-        if (data.item?.profile) {
-          saveVolunteerProfile(data.item.profile);
-          hydrateProfile(data.item.profile);
-          return;
-        }
-        clearVolunteerProfile();
-        setProfile(null);
-        setForm(emptyForm);
-      })
-      .catch(() => {
-        // Keep local fallback profile if backend is unavailable.
-      })
-      .finally(() => setProfileLoading(false));
+      fetch(apiUrl('/api/volunteers/urgent-alerts'), { headers: authHeaders() })
+        .then((response) => {
+          if (!response.ok) throw new Error('Urgent volunteer alerts unavailable');
+          return response.json() as Promise<{ items: UrgentVolunteerAlert[] }>;
+        })
+        .then((data) => {
+          setUrgentAlerts(data.items);
+        })
+        .catch(() => {
+          setUrgentAlerts([]);
+        });
+    };
+
+    syncVolunteerState();
+    const timer = window.setInterval(syncVolunteerState, API_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -197,7 +218,6 @@ export default function PublicVolunteer() {
       );
   }, [form.availability, form.region, form.skills, opportunities, profile]);
 
-  const offers = profile?.assignments.filter((assignment) => assignment.status === 'offered') ?? [];
   const upcoming = profile?.assignments.filter((assignment) => assignment.status === 'accepted' || assignment.status === 'checked_in') ?? [];
   const completed = profile?.assignments.filter((assignment) => assignment.status === 'completed') ?? [];
   const pendingApplications = profile
@@ -253,6 +273,44 @@ export default function PublicVolunteer() {
       .finally(() => setSubmitting(false));
   };
 
+  const quickVerify = () => {
+    if (!profile) return;
+    fetch(apiUrl('/api/volunteers/profile'), { headers: authHeaders() })
+      .then((response) => {
+        if (!response.ok) throw new Error('Volunteer profile unavailable');
+        return response.json() as Promise<{ item: { userId: string; profile: VolunteerProfile } | null }>;
+      })
+      .then((data) => {
+        if (data.item?.profile) {
+          saveVolunteerProfile(data.item.profile);
+          hydrateProfile(data.item.profile);
+          setMessage(data.item.profile.status === 'verified' ? 'Your profile has been approved and is ready for matching.' : 'Your profile is still under review.');
+          return;
+        }
+        setMessage('We could not find a synced volunteer profile yet.');
+      })
+      .catch(() => {
+        setMessage('Unable to refresh status right now. Please try again once the backend is available.');
+      });
+  };
+
+  const acceptUrgentAlert = (alert: UrgentVolunteerAlert) => {
+    fetch(apiUrl(`/api/volunteers/urgent-alerts/${alert.id}/accept`), {
+      method: 'POST',
+      headers: authHeaders(),
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error('Urgent alert accept failed');
+        return response.json() as Promise<{ item: UrgentVolunteerAlert }>;
+      })
+      .then((data) => {
+        setUrgentAlerts((current) => current.map((item) => item.id === data.item.id ? data.item : item));
+        setMessage(`You are confirmed for ${data.item.title}. ${data.item.agency} now has your details for immediate response.`);
+      })
+      .catch(() => {
+        setMessage('Unable to accept this urgent call right now. Please try again in a moment.');
+      });
+  };
   const applyForOpportunity = (opportunityId: number) => {
     if (!profile) return;
     const opportunity = opportunities.find((item) => item.id === opportunityId);
@@ -286,13 +344,13 @@ export default function PublicVolunteer() {
       appliedOpportunityIds: Array.from(new Set([...profile.appliedOpportunityIds, opportunityId])),
     };
     setWorkTab('applications');
-    persistVolunteerProfile(nextProfile, 'Application submitted. It will stay pending until the agency offers you a role.');
+    persistVolunteerProfile(nextProfile, 'Application submitted. It will stay pending until the agency assigns you to a role.');
   };
 
   const updateAssignment = (assignmentId: string, status: VolunteerAssignment['status'], nextMessage: string) => {
     if (!profile) return;
     const nextAssignments = profile.assignments.map((assignment) => assignment.id === assignmentId ? { ...assignment, status } : assignment);
-    const stillActive = nextAssignments.some((assignment) => assignment.status === 'offered' || assignment.status === 'accepted' || assignment.status === 'checked_in');
+    const stillActive = nextAssignments.some((assignment) => assignment.status === 'accepted' || assignment.status === 'checked_in');
     const nextProfile: VolunteerProfile = {
       ...profile,
       status: status === 'checked_in' ? 'checked_in' : stillActive ? 'assigned' : 'verified',
@@ -350,7 +408,7 @@ export default function PublicVolunteer() {
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Volunteer & Support</h1>
-          <p className="text-zinc-400">Create one volunteer profile, join suitable opportunities, and manage your upcoming shifts.</p>
+          <p className="text-zinc-400">Keep one verified profile, apply to multiple opportunities, and step into assignments from one dashboard.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-900 p-1">
@@ -460,12 +518,13 @@ export default function PublicVolunteer() {
           {!profileLoading && profile && (
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
               <section className="space-y-4">
-                <DashboardSummary pending={pendingApplications.length} offers={offers.length} upcoming={upcoming.length} completed={completed.length} onReset={resetDemoProfile} />
+                <DashboardSummary pending={pendingApplications.length} assigned={upcoming.length} completed={completed.length} onReset={resetDemoProfile} />
+                <UrgentAlertPanel alerts={urgentAlerts} onAccept={acceptUrgentAlert} />
                 <NotificationPanel notifications={myNotifications} opportunities={opportunities} />
                 {message && <div className="rounded-lg border border-green-800 bg-green-950/40 p-3 text-sm text-green-300">{message}</div>}
                 <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-950 p-1">
                   <button onClick={() => setWorkTab('opportunities')} className={`rounded-md px-3 py-1.5 text-sm ${workTab === 'opportunities' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'}`}>Opportunities</button>
-                  <button onClick={() => setWorkTab('applications')} className={`rounded-md px-3 py-1.5 text-sm ${workTab === 'applications' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'}`}>Applications ({pendingApplications.length + offers.length})</button>
+                  <button onClick={() => setWorkTab('applications')} className={`rounded-md px-3 py-1.5 text-sm ${workTab === 'applications' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'}`}>Applications ({pendingApplications.length})</button>
                   <button onClick={() => setWorkTab('upcoming')} className={`rounded-md px-3 py-1.5 text-sm ${workTab === 'upcoming' ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'}`}>Upcoming ({upcoming.length})</button>
                 </div>
                 {workTab === 'opportunities' && (
@@ -474,10 +533,7 @@ export default function PublicVolunteer() {
                 {workTab === 'applications' && (
                   <ApplicationsList
                     pending={pendingApplications}
-                    offers={offers}
                     opportunities={opportunities}
-                    onAccept={(assignment) => updateAssignment(assignment.id, 'accepted', 'Offer accepted. It is now in Upcoming Volunteering.')}
-                    onDecline={(assignment) => updateAssignment(assignment.id, 'declined', 'Offer rejected. You can keep applying for other opportunities.')}
                   />
                 )}
                 {workTab === 'upcoming' && (
@@ -491,7 +547,7 @@ export default function PublicVolunteer() {
               </section>
               <aside className="space-y-4">
                 <ProfileSummary profile={profile} />
-                <UpcomingMini assignments={upcoming} offers={offers} opportunities={opportunities} />
+                <UpcomingMini assignments={upcoming} opportunities={opportunities} />
               </aside>
             </div>
           )}
@@ -615,14 +671,12 @@ function ToggleGroup({ title, values, selected, onToggle }: { title: string; val
 
 function DashboardSummary({
   pending,
-  offers,
-  upcoming,
+  assigned,
   completed,
   onReset,
 }: {
   pending: number;
-  offers: number;
-  upcoming: number;
+  assigned: number;
   completed: number;
   onReset: () => void;
 }) {
@@ -631,7 +685,7 @@ function DashboardSummary({
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold">Volunteer Dashboard</h2>
-          <p className="text-sm text-zinc-400">Browse new opportunities, track applications, and manage accepted shifts from one page.</p>
+          <p className="text-sm text-zinc-400">Browse opportunities, track pending applications, and manage active assignments from one page.</p>
         </div>
         <button onClick={onReset} className="rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-700">Reset Demo</button>
       </div>
@@ -645,13 +699,56 @@ function DashboardSummary({
           <div className="mt-1 text-xl font-bold">{pending}</div>
         </div>
         <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
-          <div className="text-xs text-zinc-500">Offers</div>
-          <div className="mt-1 text-xl font-bold">{offers}</div>
+          <div className="text-xs text-zinc-500">Assigned</div>
+          <div className="mt-1 text-xl font-bold">{assigned}</div>
         </div>
         <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
-          <div className="text-xs text-zinc-500">Assigned / Completed</div>
-          <div className="mt-1 text-xl font-bold">{upcoming} / {completed}</div>
+          <div className="text-xs text-zinc-500">Completed</div>
+          <div className="mt-1 text-xl font-bold">{completed}</div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function UrgentAlertPanel({ alerts, onAccept }: { alerts: UrgentVolunteerAlert[]; onAccept: (alert: UrgentVolunteerAlert) => void }) {
+  if (!alerts.length) return null;
+
+  return (
+    <div className="rounded-xl border border-red-800 bg-red-950/20 p-5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-red-100">Nearby Volunteer Alerts</h2>
+          <p className="text-sm text-red-200/80">One tap confirms you can respond nearby. Your registered contact details are sent to the agency immediately.</p>
+        </div>
+        <span className="rounded bg-red-900 px-2.5 py-1 text-xs text-red-200">{alerts.length} active</span>
+      </div>
+      <div className="space-y-3">
+        {alerts.map((alert) => (
+          <div key={alert.id} className="rounded-lg border border-red-900/70 bg-zinc-950/60 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-medium text-red-100">{alert.title}</div>
+                <div className="mt-1 text-sm text-zinc-300">{alert.message}</div>
+              </div>
+              <span className="rounded bg-zinc-900 px-2 py-1 text-xs text-zinc-300">{alert.agency}</span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-3 text-xs text-zinc-400">
+              <span>{alert.location}</span>
+              <span>{alert.region}</span>
+              <span>{alert.acceptedCount}/{alert.needed} accepted</span>
+            </div>
+            <div className="mt-3">
+              {alert.responded ? (
+                <div className="rounded-lg bg-green-950 px-3 py-2 text-sm text-green-300">Accepted. The agency already has your contact details.</div>
+              ) : (
+                <button onClick={() => onAccept(alert)} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
+                  Respond Nearby
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -669,7 +766,7 @@ function NotificationPanel({ notifications, opportunities }: { notifications: Vo
           return (
             <div key={notification.id} className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-3">
               <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                <div className="text-sm font-medium">{notification.agency} offered a volunteer role</div>
+                <div className="text-sm font-medium">{notification.agency} sent a volunteer update</div>
                 <span className="rounded bg-blue-900 px-2 py-0.5 text-xs text-blue-200">{notification.status}</span>
               </div>
               <div className="text-sm text-zinc-300">{notification.message}</div>
@@ -865,36 +962,15 @@ function volunteerUrgencyBonus(urgency: VolunteerOpportunity['urgency']) {
 
 function ApplicationsList({
   pending,
-  offers,
   opportunities,
-  onAccept,
-  onDecline,
 }: {
   pending: Array<VolunteerOpportunity & { match: number; filled: number }>;
-  offers: VolunteerAssignment[];
   opportunities: VolunteerOpportunity[];
-  onAccept: (assignment: VolunteerAssignment) => void;
-  onDecline: (assignment: VolunteerAssignment) => void;
 }) {
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
       <h2 className="mb-4 text-lg font-semibold">My Applications</h2>
       <div className="space-y-3">
-        {offers.map((assignment) => {
-          const opportunity = opportunities.find((item) => item.id === assignment.opportunityId);
-          if (!opportunity) return null;
-          return (
-            <div key={assignment.id} className="rounded-lg border border-blue-800 bg-blue-950/20 p-4">
-              <div className="mb-1 font-medium">{opportunity.title}</div>
-              <div className="text-sm text-blue-200">{assignment.roleTitle ?? 'Volunteer role'} offered by {opportunity.authorisedAgency}</div>
-              <div className="mt-2 text-sm text-zinc-300">{opportunity.shift} - {opportunity.reportingPoint}</div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                <button onClick={() => onAccept(assignment)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-700">Final Accept</button>
-                <button onClick={() => onDecline(assignment)} className="rounded-lg bg-zinc-700 px-4 py-2 text-sm font-medium hover:bg-zinc-600">Reject Offer</button>
-              </div>
-            </div>
-          );
-        })}
         {pending.map((opportunity) => (
           <div key={opportunity.id} className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
             <div className="mb-1 font-medium">{opportunity.title}</div>
@@ -902,7 +978,7 @@ function ApplicationsList({
             <div className="mt-2 inline-flex rounded bg-blue-950 px-2 py-1 text-xs text-blue-300">Pending agency review</div>
           </div>
         ))}
-        {!offers.length && !pending.length && <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-5 text-sm text-zinc-500">No applications yet. Apply from the opportunities tab.</div>}
+        {!pending.length && <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-5 text-sm text-zinc-500">No pending applications right now.</div>}
       </div>
     </div>
   );
@@ -973,12 +1049,11 @@ function ProfileSummary({ profile }: { profile: VolunteerProfile }) {
   );
 }
 
-function UpcomingMini({ assignments, offers, opportunities }: { assignments: VolunteerAssignment[]; offers: VolunteerAssignment[]; opportunities: VolunteerOpportunity[] }) {
+function UpcomingMini({ assignments, opportunities }: { assignments: VolunteerAssignment[]; opportunities: VolunteerOpportunity[] }) {
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
       <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><Calendar className="h-5 w-5 text-purple-400" />Quick View</h2>
       <div className="space-y-2 text-sm">
-        {offers.length > 0 && <div className="rounded-lg bg-blue-950/40 px-3 py-2 text-blue-200">{offers.length} offer{offers.length === 1 ? '' : 's'} waiting for final accept</div>}
         {assignments.slice(0, 3).map((assignment) => {
           const opportunity = opportunities.find((item) => item.id === assignment.opportunityId);
           return (
@@ -988,7 +1063,7 @@ function UpcomingMini({ assignments, offers, opportunities }: { assignments: Vol
             </div>
           );
         })}
-        {!offers.length && !assignments.length && <p className="text-zinc-500">No confirmed shifts yet.</p>}
+        {!assignments.length && <p className="text-zinc-500">No confirmed shifts yet.</p>}
       </div>
     </div>
   );
