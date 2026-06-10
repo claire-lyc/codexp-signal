@@ -13,7 +13,6 @@ import { apiUrl } from '../../lib/api';
 import { authHeaders } from '../../lib/auth';
 import {
   clearVolunteerProfile,
-  demoCitizenVolunteerProfile,
   makeVolunteerId,
   opportunityCapacity,
   readVolunteerOpportunities,
@@ -53,8 +52,8 @@ const emptyForm: FormState = {
 };
 
 export default function PublicVolunteer() {
-  const [authenticated, setAuthenticated] = useState(true);
   const [profile, setProfile] = useState<VolunteerProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [showProfileForm, setShowProfileForm] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
@@ -106,11 +105,6 @@ export default function PublicVolunteer() {
     const saved = readVolunteerProfile();
     if (saved) {
       hydrateProfile(saved);
-    } else {
-      const demoProfile = { ...demoCitizenVolunteerProfile, assignments: [...demoCitizenVolunteerProfile.assignments] };
-      saveVolunteerProfile(demoProfile);
-      hydrateProfile(demoProfile);
-      setMessage('Demo returning volunteer loaded. You can apply, review pending applications, and check upcoming shifts.');
     }
 
     fetch(apiUrl('/api/volunteers/profile'), { headers: authHeaders() })
@@ -122,11 +116,16 @@ export default function PublicVolunteer() {
         if (data.item?.profile) {
           saveVolunteerProfile(data.item.profile);
           hydrateProfile(data.item.profile);
+          return;
         }
+        clearVolunteerProfile();
+        setProfile(null);
+        setForm(emptyForm);
       })
       .catch(() => {
         // Keep local fallback profile if backend is unavailable.
-      });
+      })
+      .finally(() => setProfileLoading(false));
   }, []);
 
   useEffect(() => {
@@ -361,39 +360,52 @@ export default function PublicVolunteer() {
         </div>
       </div>
 
-      {pageTab === 'donate' && <DonationPanel authenticated={authenticated} />}
+      {pageTab === 'donate' && <DonationPanel authenticated />}
 
       {pageTab === 'volunteer' && (
         <>
-          {!authenticated && (
-            <section className="rounded-xl border border-blue-900/50 bg-blue-950/20 p-6">
-              <div className="flex items-start gap-4">
-                <div className="rounded-lg bg-blue-900/50 p-3">
-                  <Shield className="h-6 w-6 text-blue-400" />
-                </div>
-                <div className="flex-1">
-                  <h2 className="mb-2 font-semibold">Singpass Sign In</h2>
-                  <p className="mb-4 text-sm text-zinc-300">For the demo, signing in lets you continue if a volunteer profile already exists. First-time volunteers can create one after this step.</p>
-                  <button onClick={() => setAuthenticated(true)} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-medium transition-colors hover:bg-blue-700">
-                    <Shield className="h-4 w-4" />
-                    Login with Singpass
-                  </button>
-                </div>
+          {profileLoading ? (
+            <section className="flex min-h-64 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900">
+              <div className="flex items-center gap-3 text-sm text-zinc-400">
+                <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
+                Checking volunteer registration...
               </div>
             </section>
-          )}
+          ) : null}
 
-          {authenticated && !profile && !showProfileForm && (
-            <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
-              <h2 className="mb-2 text-lg font-semibold">Volunteer Readiness Profile</h2>
-              <p className="mb-4 text-sm text-zinc-400">First-time volunteers submit skills and availability once. Returning verified volunteers would be let into the opportunities page immediately.</p>
-              <button onClick={() => setShowProfileForm(true)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-700">
-                Sign Up with Singpass
-              </button>
+          {!profileLoading && !profile && !showProfileForm ? (
+            <section className="overflow-hidden rounded-xl border border-blue-900/60 bg-zinc-900">
+              <div className="border-b border-zinc-800 bg-blue-950/20 px-6 py-5">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white">
+                    <Users className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold">Register as a volunteer</h2>
+                    <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-400">
+                      Create a readiness profile before viewing opportunities. Agencies use your skills,
+                      availability, preferred region, and contact details to coordinate suitable roles.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col gap-4 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2 text-sm text-zinc-400">
+                  <Shield className="h-4 w-4 text-emerald-400" />
+                  Your registration is linked to your signed-in SiGnal account.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowProfileForm(true)}
+                  className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500"
+                >
+                  Sign up as volunteer
+                </button>
+              </div>
             </section>
-          )}
+          ) : null}
 
-          {authenticated && showProfileForm && !profile && (
+          {!profileLoading && showProfileForm && !profile && (
             <ProfileForm
               form={form}
               errors={errors}
@@ -406,7 +418,7 @@ export default function PublicVolunteer() {
             />
           )}
 
-          {authenticated && showProfileForm && profile && (
+          {!profileLoading && showProfileForm && profile && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm">
               <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl">
                 <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-5 py-4">
@@ -440,7 +452,7 @@ export default function PublicVolunteer() {
             </div>
           )}
 
-          {profile && (
+          {!profileLoading && profile && (
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
               <section className="space-y-4">
                 <DashboardSummary pending={pendingApplications.length} offers={offers.length} upcoming={upcoming.length} completed={completed.length} onReset={resetDemoProfile} />

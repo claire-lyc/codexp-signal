@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   Camera,
   CheckCircle,
-  ChevronDown,
   Clock3,
   Database,
   MapPin,
@@ -42,8 +41,8 @@ type CachedDashboardData = {
 type InfrastructureViewId = 'traffic' | 'network';
 
 const infrastructureViews = [
-  { id: 'traffic' as const, label: 'Traffic Monitoring Network', severity: 'low', badge: 'bg-blue-900 text-blue-400', border: 'border-blue-700' },
-  { id: 'network' as const, label: 'Network Information', severity: 'medium', badge: 'bg-yellow-900 text-yellow-400', border: 'border-yellow-700' },
+  { id: 'traffic' as const, label: 'Traffic Network', severity: 'low', color: 'text-blue-400', badge: 'bg-blue-900 text-blue-400' },
+  { id: 'network' as const, label: 'Utilities & Networks', severity: 'medium', color: 'text-yellow-400', badge: 'bg-yellow-900 text-yellow-400' },
 ];
 
 const infrastructureStatus = [
@@ -356,43 +355,32 @@ function NetworkView() {
 
 export default function GovInfrastructure() {
   const [selectedView, setSelectedView] = useState<InfrastructureViewId>('traffic');
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const currentView = infrastructureViews.find((view) => view.id === selectedView)!;
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="mb-2 text-3xl font-bold">Infrastructure Monitoring</h1>
-          <p className="text-zinc-400">Critical infrastructure health, resilience tracking, and live transport-camera coverage</p>
-        </div>
-        <div className="relative">
+      <div>
+        <h1 className="mb-2 text-3xl font-bold">Infrastructure Monitoring</h1>
+        <p className="text-zinc-400">Critical infrastructure health, resilience tracking, and live transport-camera coverage</p>
+      </div>
+
+      <div className="flex overflow-x-auto border-b border-zinc-800" role="tablist" aria-label="Infrastructure dashboards">
+        {infrastructureViews.map((view) => (
           <button
-            onClick={() => setDropdownOpen((open) => !open)}
-            className={`flex items-center gap-2 rounded-lg border ${currentView.border} bg-zinc-800 px-4 py-2 text-sm transition-colors hover:bg-zinc-700`}
+            key={view.id}
+            type="button"
+            role="tab"
+            aria-selected={selectedView === view.id}
+            onClick={() => setSelectedView(view.id)}
+            className={`flex min-w-max items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
+              selectedView === view.id
+                ? `${view.color} border-current`
+                : 'border-transparent text-zinc-500 hover:text-zinc-200'
+            }`}
           >
-            <span className="text-white">{currentView.label}</span>
-            <span className={`rounded px-1.5 py-0.5 text-xs ${currentView.badge}`}>{currentView.severity.toUpperCase()}</span>
-            <ChevronDown className="h-4 w-4 text-zinc-400" />
+            {view.label}
+            <span className={`rounded px-1.5 py-0.5 text-[10px] ${view.badge}`}>{view.severity.toUpperCase()}</span>
           </button>
-          {dropdownOpen ? (
-            <div className="absolute right-0 z-20 mt-1 w-64 rounded-lg border border-zinc-700 bg-zinc-800 shadow-xl">
-              {infrastructureViews.map((view) => (
-                <button
-                  key={view.id}
-                  onClick={() => {
-                    setSelectedView(view.id);
-                    setDropdownOpen(false);
-                  }}
-                  className={`flex w-full items-center justify-between px-4 py-2.5 text-sm transition-colors first:rounded-t-lg last:rounded-b-lg hover:bg-zinc-700 ${selectedView === view.id ? 'bg-zinc-700' : ''}`}
-                >
-                  <span>{view.label}</span>
-                  <span className={`rounded px-1.5 py-0.5 text-xs ${view.badge}`}>{view.severity.toUpperCase()}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
+        ))}
       </div>
 
       {selectedView === 'traffic' ? <TrafficView /> : <NetworkView />}
