@@ -667,7 +667,7 @@ export default function PublicTickets() {
             </button>
           </div>
 
-          <div className="space-y-3">
+          <div className="max-h-[56vh] space-y-3 overflow-y-auto pr-2 [scrollbar-color:#3f3f46_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700/70">
             {tickets.map((ticket) => (
               <TicketCard key={ticket.id} ticket={ticket} selected={selectedTicket?.id === ticket.id} onClick={() => openTicket(ticket)} />
             ))}
