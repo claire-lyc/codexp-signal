@@ -4,7 +4,7 @@
 // PATCH /api/volunteers/applications/{id}/verify
 // POST /api/volunteers/assignments
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ChevronDown, Clock, Lock, MapPin, Plus, ShieldCheck, UserCheck, Users, X } from 'lucide-react';
+import { AlertCircle, Building2, ChevronDown, Clock, Lock, MapPin, Plus, ShieldCheck, UserCheck, Users, X } from 'lucide-react';
 import { API_REFRESH_INTERVAL_MS, apiUrl } from '../../lib/api';
 import { authHeaders } from '../../lib/auth';
 import {
@@ -58,9 +58,13 @@ type UrgentAlertForm = {
   title: string;
   message: string;
   location: string;
+  targetAddress: string;
   region: string;
+  radiusKm: number;
   needed: number;
 };
+
+type CreateMode = 'need' | 'urgent';
 
 const agencies = ['All agencies', 'LTA', 'MOH', 'PUB', 'SCDF', 'SPF', 'NEA', 'Enterprise SG', 'MSF'];
 
@@ -87,10 +91,14 @@ const emptyNeedForm: NeedForm = {
 const emptyUrgentAlertForm: UrgentAlertForm = {
   title: 'Immediate nearby support needed',
   message: 'Need nearby registered volunteers to report immediately for urgent ground support.',
-  location: 'Bugis',
-  region: 'Central',
+  location: 'Bugis Community Support Point',
+  targetAddress: '230 Victoria Street, Singapore 188024',
+  region: 'Islandwide',
+  radiusKm: 5,
   needed: 6,
 };
+
+const urgentAlertRadiusOptions = [1, 3, 5, 8, 10];
 
 const urgencyColors: Record<string, string> = {
   high: 'border-red-800 bg-red-950/30',
@@ -126,6 +134,11 @@ function agencyFromStoredUser() {
     window.localStorage.removeItem('signal-current-user');
   }
   return 'All agencies';
+}
+
+function estimateUrgentAlertReach(applicantCount: number, radiusKm: number) {
+  const factor = radiusKm <= 1 ? 0.2 : radiusKm <= 3 ? 0.4 : radiusKm <= 5 ? 0.6 : radiusKm <= 8 ? 0.8 : 1;
+  return Math.max(1, Math.round(applicantCount * factor));
 }
 
 function bestRoleForProfile(profile: VolunteerProfile, opportunity: VolunteerOpportunity) {
@@ -177,6 +190,8 @@ export default function GovVolunteers() {
   const [needForm, setNeedForm] = useState<NeedForm>(emptyNeedForm);
   const [showUrgentAlertForm, setShowUrgentAlertForm] = useState(false);
   const [urgentAlertForm, setUrgentAlertForm] = useState<UrgentAlertForm>(emptyUrgentAlertForm);
+  const [createMode, setCreateMode] = useState<CreateMode>('need');
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [allocateModal, setAllocateModal] = useState<VolunteerOpportunity | null>(null);
   const [additionalSlots, setAdditionalSlots] = useState(5);
   const [activityLog, setActivityLog] = useState<string[]>([]);
@@ -333,6 +348,10 @@ export default function GovVolunteers() {
     ), 0),
     pendingSkills: skillVerificationProfiles.length,
   };
+  const nearbyReachEstimate = estimateUrgentAlertReach(
+    rawApplicants.length,
+    urgentAlertForm.radiusKm,
+  );
 
   const verifyVolunteer = (profile: VolunteerProfile) => {
     updateProfile(profile, { status: 'verified' });
@@ -507,6 +526,24 @@ export default function GovVolunteers() {
       });
   };
 
+  const closeCreatePanel = () => {
+    setShowNeedForm(false);
+    setShowUrgentAlertForm(false);
+    setCreateMenuOpen(false);
+  };
+
+  const openCreatePanel = (mode: CreateMode = 'need') => {
+    setCreateMode(mode);
+    setCreateMenuOpen(false);
+    if (mode === 'urgent') {
+      setShowUrgentAlertForm(true);
+      setShowNeedForm(false);
+      return;
+    }
+    setShowNeedForm(true);
+    setShowUrgentAlertForm(false);
+  };
+
   const handleAllocate = (opportunity: VolunteerOpportunity) => {
     pushActivity(`${additionalSlots} standby slots opened for ${opportunity.title}`);
     setAllocateModal(null);
@@ -557,14 +594,40 @@ export default function GovVolunteers() {
           <p className="text-zinc-400">Review volunteer profiles, create needs, alert nearby volunteers, and assign approved roles.</p>
         </div>
         <div className="flex flex-wrap items-end gap-2">
-          <button onClick={() => setShowUrgentAlertForm((value) => !value)} className="inline-flex items-center gap-2 rounded-lg border border-red-800 bg-red-950/40 px-4 py-2 text-sm font-medium text-red-100 hover:bg-red-950/60">
-            <AlertCircle className="h-4 w-4" />
-            Alert Nearby Volunteers
-          </button>
-          <button onClick={() => setShowNeedForm(true)} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-700">
-            <Plus className="h-4 w-4" />
-            New
-          </button>
+          <div className="relative inline-flex">
+            <button onClick={() => openCreatePanel('need')} className="inline-flex items-center gap-2 rounded-l-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-700">
+              <Plus className="h-4 w-4" />
+              New
+            </button>
+            <button
+              type="button"
+              onClick={() => setCreateMenuOpen((open) => !open)}
+              className="rounded-r-lg border-l border-blue-500/60 bg-blue-600 px-3 py-2 text-sm font-medium hover:bg-blue-700"
+              aria-label="Choose new request type"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </button>
+            {createMenuOpen && (
+              <div className="absolute right-0 top-[calc(100%+8px)] z-20 w-52 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl">
+                <button
+                  type="button"
+                  onClick={() => openCreatePanel('need')}
+                  className="flex w-full items-center justify-between px-4 py-3 text-left text-sm text-zinc-200 hover:bg-zinc-900"
+                >
+                  <span>Volunteer need</span>
+                  <Plus className="h-4 w-4 text-zinc-500" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openCreatePanel('urgent')}
+                  className="flex w-full items-center justify-between border-t border-zinc-800 px-4 py-3 text-left text-sm text-zinc-200 hover:bg-zinc-900"
+                >
+                  <span>Urgent request</span>
+                  <AlertCircle className="h-4 w-4 text-red-400" />
+                </button>
+              </div>
+            )}
+          </div>
           <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-400">
             <label className="mb-1 block text-xs text-zinc-500">Agency filter</label>
             <select value={currentAgency} onChange={(event) => setCurrentAgency(event.target.value)} className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100">
@@ -589,22 +652,89 @@ export default function GovVolunteers() {
               <h2 className="font-semibold text-red-100">Urgent Nearby Volunteer Alert</h2>
               <p className="text-sm text-red-200/70">This sends a rapid nearby-response request to registered volunteers in the selected region. They can accept in one tap.</p>
             </div>
-            <button onClick={() => setShowUrgentAlertForm(false)} className="rounded-lg bg-zinc-900 p-2 text-zinc-300 hover:bg-zinc-800">
+            <button onClick={closeCreatePanel} className="rounded-lg bg-zinc-900 p-2 text-zinc-300 hover:bg-zinc-800">
               <X className="h-4 w-4" />
             </button>
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-5">
             <Field label="Alert title" value={urgentAlertForm.title} onChange={(value) => setUrgentAlertForm((current) => ({ ...current, title: value }))} />
-            <Field label="Location" value={urgentAlertForm.location} onChange={(value) => setUrgentAlertForm((current) => ({ ...current, location: value }))} />
-            <SelectField label="Region" value={urgentAlertForm.region} values={['Central', 'North', 'South', 'East', 'West', 'Islandwide']} onChange={(value) => setUrgentAlertForm((current) => ({ ...current, region: value }))} />
-            <label className="block">
-              <div className="mb-2 text-sm font-medium">Volunteers needed</div>
-              <input type="number" min={1} value={urgentAlertForm.needed} onChange={(event) => setUrgentAlertForm((current) => ({ ...current, needed: Math.max(1, Number(event.target.value) || 1) }))} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-600" />
-            </label>
-            <label className="block md:col-span-2">
-              <div className="mb-2 text-sm font-medium">Urgent message</div>
-              <textarea value={urgentAlertForm.message} onChange={(event) => setUrgentAlertForm((current) => ({ ...current, message: event.target.value }))} rows={3} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-600" />
-            </label>
+
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/80 p-4">
+              <div className="mb-1 text-base font-semibold text-white">Target location</div>
+              <div className="mb-4 text-sm text-zinc-500">Set the address and how far out to notify nearby volunteers.</div>
+
+              <div className="grid gap-4">
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-xl bg-violet-600/15 p-3 text-violet-300">
+                      <Building2 className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-3">
+                      <div>
+                        <div className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">Location Name</div>
+                        <input
+                          value={urgentAlertForm.location}
+                          onChange={(event) => setUrgentAlertForm((current) => ({ ...current, location: event.target.value }))}
+                          placeholder="Bugis Community Support Point"
+                          className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-500/70"
+                        />
+                      </div>
+                      <div>
+                        <div className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">Address</div>
+                        <input
+                          value={urgentAlertForm.targetAddress}
+                          onChange={(event) => setUrgentAlertForm((current) => ({ ...current, targetAddress: event.target.value }))}
+                          placeholder="230 Victoria Street, Singapore 188024"
+                          className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-500/70"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-2 text-sm font-medium">Radius</div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={urgentAlertRadiusOptions.length - 1}
+                      step={1}
+                      value={urgentAlertRadiusOptions.indexOf(urgentAlertForm.radiusKm)}
+                      onChange={(event) => {
+                        const nextRadius = urgentAlertRadiusOptions[Number(event.target.value)] ?? 5;
+                        setUrgentAlertForm((current) => ({ ...current, radiusKm: nextRadius }));
+                      }}
+                      className="h-2 w-full cursor-pointer accent-violet-500"
+                    />
+                  </div>
+                  <div className="mt-6 shrink-0 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100">
+                    {urgentAlertForm.radiusKm} km
+                  </div>
+                </div>
+                <div className="flex justify-between text-xs text-zinc-500">
+                  <span>1 km</span>
+                  <span>5 km</span>
+                  <span>10 km</span>
+                </div>
+                <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm text-zinc-300">
+                  Sending within <span className="font-medium text-white">{urgentAlertForm.radiusKm} km</span> of <span className="font-medium text-white">{urgentAlertForm.location}</span>. Estimated reach: <span className="font-medium text-white">{nearbyReachEstimate}</span> volunteers.
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-[160px_minmax(0,1fr)]">
+              <label className="block">
+                <div className="mb-2 text-sm font-medium">Volunteers needed</div>
+                <input type="number" min={1} value={urgentAlertForm.needed} onChange={(event) => setUrgentAlertForm((current) => ({ ...current, needed: Math.max(1, Number(event.target.value) || 1) }))} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-600" />
+              </label>
+              <label className="block">
+                <div className="mb-2 text-sm font-medium">Alert message</div>
+                <textarea value={urgentAlertForm.message} onChange={(event) => setUrgentAlertForm((current) => ({ ...current, message: event.target.value }))} rows={3} className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-600" />
+              </label>
+            </div>
           </div>
           <div className="mt-4 flex justify-end">
             <button onClick={sendUrgentAlert} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
@@ -634,12 +764,12 @@ export default function GovVolunteers() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="font-medium">{alert.title}</div>
-                    <div className="mt-1 text-sm text-zinc-400">{alert.location} • {alert.region}</div>
+                    <div className="mt-1 text-sm text-zinc-400">{alert.location} • {alert.targetAddress}</div>
                   </div>
                   <span className={`rounded px-2 py-1 text-xs ${alert.status === 'active' ? 'bg-red-950 text-red-300' : 'bg-zinc-800 text-zinc-300'}`}>{alert.status}</span>
                 </div>
                 <div className="mt-2 text-sm text-zinc-300">{alert.message}</div>
-                <div className="mt-3 text-xs text-zinc-500">{alert.acceptedCount}/{alert.needed} accepted • {alert.agency}</div>
+                <div className="mt-3 text-xs text-zinc-500">{alert.acceptedCount}/{alert.needed} accepted • {alert.radiusKm} km radius • {alert.agency}</div>
                 {alert.responders.length > 0 && (
                   <div className="mt-3 space-y-2">
                     {alert.responders.slice(0, 3).map((responder) => (
@@ -662,7 +792,7 @@ export default function GovVolunteers() {
             <h2 className="font-semibold">Add Agency Volunteer Need</h2>
             <p className="text-sm text-zinc-500">Use roles when one operation needs different volunteer types.</p>
           </div>
-          <button onClick={() => setShowNeedForm((value) => !value)} className="rounded-lg bg-zinc-800 p-2 hover:bg-zinc-700">
+          <button onClick={closeCreatePanel} className="rounded-lg bg-zinc-800 p-2 hover:bg-zinc-700">
             {showNeedForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
           </button>
         </div>

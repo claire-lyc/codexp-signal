@@ -12,7 +12,9 @@ type StoredUrgentVolunteerAlert = {
   title: string;
   message: string;
   location: string;
+  target_address: string | null;
   region: string;
+  radius_km: number | null;
   agency: string;
   needed_count: number;
   status: 'active' | 'resolved';
@@ -47,7 +49,9 @@ export type UrgentVolunteerAlert = {
   title: string;
   message: string;
   location: string;
+  targetAddress: string;
   region: string;
+  radiusKm: number;
   agency: string;
   needed: number;
   status: 'active' | 'resolved';
@@ -77,7 +81,9 @@ async function ensureVolunteerSchema() {
             title TEXT NOT NULL,
             message TEXT NOT NULL,
             location TEXT NOT NULL,
+            target_address TEXT,
             region TEXT NOT NULL,
+            radius_km INTEGER,
             agency TEXT NOT NULL,
             needed_count INTEGER NOT NULL DEFAULT 1,
             status TEXT NOT NULL DEFAULT 'active',
@@ -85,6 +91,8 @@ async function ensureVolunteerSchema() {
             updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
           )
         `);
+        await client.query(`ALTER TABLE citizen.volunteer_urgent_alerts ADD COLUMN IF NOT EXISTS target_address TEXT`);
+        await client.query(`ALTER TABLE citizen.volunteer_urgent_alerts ADD COLUMN IF NOT EXISTS radius_km INTEGER`);
         await client.query(`
           CREATE TABLE IF NOT EXISTS citizen.volunteer_urgent_alert_responses (
             alert_id TEXT NOT NULL REFERENCES citizen.volunteer_urgent_alerts(id) ON DELETE CASCADE,
@@ -158,7 +166,9 @@ export async function createUrgentVolunteerAlert(input: {
   title: string;
   message: string;
   location: string;
+  targetAddress: string;
   region: string;
+  radiusKm: number;
   agency: string;
   needed: number;
 }) {
@@ -170,17 +180,19 @@ export async function createUrgentVolunteerAlert(input: {
         title,
         message,
         location,
+        target_address,
         region,
+        radius_km,
         agency,
         needed_count,
         status,
         created_at,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', now(), now())
-      RETURNING id, title, message, location, region, agency, needed_count, status, created_at, updated_at
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'active', now(), now())
+      RETURNING id, title, message, location, target_address, region, radius_km, agency, needed_count, status, created_at, updated_at
     `,
-    [randomUUID(), input.title, input.message, input.location, input.region, input.agency, Math.max(1, input.needed)],
+    [randomUUID(), input.title, input.message, input.location, input.targetAddress, input.region, Math.max(1, input.radiusKm), input.agency, Math.max(1, input.needed)],
   );
   return hydrateUrgentAlerts(rows, null).then((alerts) => alerts[0] ?? null);
 }
@@ -189,7 +201,7 @@ export async function listUrgentVolunteerAlerts() {
   await ensureVolunteerSchema();
   const rows = await query<StoredUrgentVolunteerAlert>(
     `
-      SELECT id, title, message, location, region, agency, needed_count, status, created_at, updated_at
+      SELECT id, title, message, location, target_address, region, radius_km, agency, needed_count, status, created_at, updated_at
       FROM citizen.volunteer_urgent_alerts
       ORDER BY
         CASE status WHEN 'active' THEN 0 ELSE 1 END,
@@ -206,7 +218,7 @@ export async function listUrgentVolunteerAlertsForVolunteer(userId: string) {
 
   const rows = await query<StoredUrgentVolunteerAlert>(
     `
-      SELECT id, title, message, location, region, agency, needed_count, status, created_at, updated_at
+      SELECT id, title, message, location, target_address, region, radius_km, agency, needed_count, status, created_at, updated_at
       FROM citizen.volunteer_urgent_alerts
       WHERE status = 'active'
         AND (
@@ -226,7 +238,7 @@ export async function acceptUrgentVolunteerAlert(alertId: string, userId: string
   await ensureVolunteerSchema();
   const alert = await query<StoredUrgentVolunteerAlert>(
     `
-      SELECT id, title, message, location, region, agency, needed_count, status, created_at, updated_at
+      SELECT id, title, message, location, target_address, region, radius_km, agency, needed_count, status, created_at, updated_at
       FROM citizen.volunteer_urgent_alerts
       WHERE id = $1
       LIMIT 1
@@ -277,7 +289,7 @@ export async function acceptUrgentVolunteerAlert(alertId: string, userId: string
 async function getUrgentVolunteerAlertById(alertId: string, userId: string | null) {
   const rows = await query<StoredUrgentVolunteerAlert>(
     `
-      SELECT id, title, message, location, region, agency, needed_count, status, created_at, updated_at
+      SELECT id, title, message, location, target_address, region, radius_km, agency, needed_count, status, created_at, updated_at
       FROM citizen.volunteer_urgent_alerts
       WHERE id = $1
       LIMIT 1
@@ -329,7 +341,9 @@ async function hydrateUrgentAlerts(rows: StoredUrgentVolunteerAlert[], currentUs
       title: row.title,
       message: row.message,
       location: row.location,
+      targetAddress: row.target_address ?? row.location,
       region: row.region,
+      radiusKm: row.radius_km ?? 5,
       agency: row.agency,
       needed: row.needed_count,
       status: row.status,

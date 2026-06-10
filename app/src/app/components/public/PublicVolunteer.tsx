@@ -735,7 +735,9 @@ function UrgentAlertPanel({ alerts, onAccept }: { alerts: UrgentVolunteerAlert[]
             </div>
             <div className="mt-3 flex flex-wrap gap-3 text-xs text-zinc-400">
               <span>{alert.location}</span>
+              <span>{alert.targetAddress}</span>
               <span>{alert.region}</span>
+              <span>{alert.radiusKm} km radius</span>
               <span>{alert.acceptedCount}/{alert.needed} accepted</span>
             </div>
             <div className="mt-3">

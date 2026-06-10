@@ -419,12 +419,14 @@ app.post('/api/gov/volunteers/urgent-alerts', ...requireGovUser, async (request:
     const title = stringBody(request.body?.title);
     const message = stringBody(request.body?.message);
     const location = stringBody(request.body?.location);
+    const targetAddress = stringBody(request.body?.targetAddress) ?? location;
     const region = stringBody(request.body?.region);
+    const radiusKm = numberBody(request.body?.radiusKm) ?? 5;
     const agency = stringBody(request.body?.agency) ?? request.user?.username ?? request.user?.display_name ?? 'Government';
     const needed = numberBody(request.body?.needed) ?? 1;
 
-    if (!title || !message || !location || !region) {
-      response.status(400).json({ error: 'Title, message, location, and region are required' });
+    if (!title || !message || !location || !targetAddress || !region) {
+      response.status(400).json({ error: 'Title, message, location, target address, and region are required' });
       return;
     }
 
@@ -432,7 +434,9 @@ app.post('/api/gov/volunteers/urgent-alerts', ...requireGovUser, async (request:
       title,
       message,
       location,
+      targetAddress,
       region,
+      radiusKm,
       agency,
       needed,
     });

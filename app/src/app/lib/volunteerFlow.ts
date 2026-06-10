@@ -58,7 +58,9 @@ export type UrgentVolunteerAlert = {
   title: string;
   message: string;
   location: string;
+  targetAddress: string;
   region: string;
+  radiusKm: number;
   agency: string;
   needed: number;
   status: UrgentVolunteerAlertStatus;
