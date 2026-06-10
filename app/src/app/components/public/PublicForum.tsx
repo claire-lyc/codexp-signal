@@ -725,11 +725,19 @@ export default function PublicForum() {
             {filteredPosts.map((post) => {
               const selected = selectedPost?.id === post.id;
               return (
-                <button
+                <article
                   key={post.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   data-tour={post.id === welcomePost.id ? 'welcome-post' : undefined}
                   onClick={() => setExpandedPostId(post.id)}
+                  onKeyDown={(event) => {
+                    if (event.currentTarget !== event.target) return;
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setExpandedPostId(post.id);
+                    }
+                  }}
                   className={`w-full rounded-lg border p-4 text-left transition-colors ${
                     selected
                       ? 'border-blue-600 bg-blue-950/30'
@@ -768,12 +776,41 @@ export default function PublicForum() {
                     </div>
                   )}
                   <div className="mt-3 flex items-center gap-3 text-xs text-zinc-500">
-                    <span className={`inline-flex items-center gap-1 ${likedPostIds.has(post.id) ? 'text-blue-400' : ''}`}><ThumbsUp className="h-3.5 w-3.5" />{post.likes}</span>
-                    <span className={`inline-flex items-center gap-1 ${dislikedPostIds.has(post.id) ? 'text-red-400' : ''}`}><ThumbsDown className="h-3.5 w-3.5" />{post.dislikes ?? 0}</span>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void handleLike(post.id);
+                      }}
+                      disabled={likedPostIds.has(post.id)}
+                      data-tour={post.id === welcomePost.id ? 'welcome-like' : undefined}
+                      className={`inline-flex items-center gap-1 rounded px-1.5 py-1 transition-colors hover:bg-zinc-800 hover:text-blue-400 disabled:cursor-not-allowed ${
+                        likedPostIds.has(post.id) ? 'text-blue-400' : ''
+                      }`}
+                      aria-label="Like post"
+                    >
+                      <ThumbsUp className="h-3.5 w-3.5" />
+                      {post.likes}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void handleDislike(post.id);
+                      }}
+                      disabled={dislikedPostIds.has(post.id)}
+                      className={`inline-flex items-center gap-1 rounded px-1.5 py-1 transition-colors hover:bg-zinc-800 hover:text-red-400 disabled:cursor-not-allowed ${
+                        dislikedPostIds.has(post.id) ? 'text-red-400' : ''
+                      }`}
+                      aria-label="Dislike post"
+                    >
+                      <ThumbsDown className="h-3.5 w-3.5" />
+                      {post.dislikes ?? 0}
+                    </button>
                     {post.reports ? <span className="inline-flex items-center gap-1 text-red-400"><Flag className="h-3.5 w-3.5" />{post.reports}</span> : null}
                     {post.similarReports ? <span>{post.similarReports} similar reports</span> : null}
                   </div>
-                </button>
+                </article>
               );
             })}
           </div>

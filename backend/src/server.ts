@@ -9,6 +9,7 @@ import {
   createForumPost,
   createOrMergeForumPost,
   createForumReply,
+  dislikeForumPost,
   findForumPostByReportId,
   likeForumPost,
   listForumPosts,
@@ -275,6 +276,15 @@ app.post('/api/forum/posts', authenticateJwt as express.RequestHandler, async (r
 
 app.post('/api/forum/posts/:id/like', (request, response) => {
   const post = likeForumPost(request.params.id);
+  if (!post) {
+    response.status(404).json({ error: 'Forum post not found' });
+    return;
+  }
+  response.json({ item: post });
+});
+
+app.post('/api/forum/posts/:id/dislike', (request, response) => {
+  const post = dislikeForumPost(request.params.id);
   if (!post) {
     response.status(404).json({ error: 'Forum post not found' });
     return;
