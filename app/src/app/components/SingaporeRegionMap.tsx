@@ -390,6 +390,7 @@ export default function SingaporeRegionMap({
   const activeArea = planningAreas.find((area) => area.id === activeAreaId);
   const isTemperatureHeatmap = heatmapLayer?.palette === 'temperature';
   const isNeutralMap = !heatmapLayer && !weatherOverlay;
+  const useLightMapChrome = false;
   const activeStatus = activeArea ? areaStatuses.get(activeArea.id) : null;
   const activeMarker = markers.find((marker) => marker.id === activeMarkerId);
   const projectedMarkers = useMemo<ProjectedMarker[]>(
@@ -694,13 +695,9 @@ export default function SingaporeRegionMap({
   return (
     <div
       ref={mapContainerRef}
-      className={`relative h-full min-h-[280px] overflow-hidden rounded-lg ${isNeutralMap ? 'bg-[#8bd5e8]' : 'bg-zinc-800'}`}
+      className="relative h-full min-h-[280px] overflow-hidden rounded-lg bg-zinc-800"
     >
-      <div className={`pointer-events-none absolute inset-0 ${
-        isNeutralMap
-          ? 'bg-[#8bd5e8]'
-          : 'bg-[radial-gradient(circle_at_50%_42%,rgba(82,82,91,0.38),transparent_70%)]'
-      }`} />
+      <div className="pointer-events-none absolute inset-0 bg-zinc-800" />
 
       <svg
         ref={mapSvgRef}
@@ -740,47 +737,6 @@ export default function SingaporeRegionMap({
             <path d="M0,0 L7,3.5 L0,7 L1.8,3.5 Z" fill="#ffffff" stroke="#164e63" strokeWidth="0.8" />
           </marker>
         </defs>
-
-        {isNeutralMap && (
-          <g className="pointer-events-none">
-            <image
-              href="/maps/singapore-base.svg"
-              x="0"
-              y="0"
-              width={mapData.width}
-              height={mapData.height}
-              preserveAspectRatio="none"
-            />
-            <image
-              href="/maps/singapore-roads-main.svg"
-              x="0"
-              y="0"
-              width={mapData.width}
-              height={mapData.height}
-              preserveAspectRatio="none"
-            />
-            {zoom >= 2.25 && (
-              <image
-                href="/maps/singapore-roads-arterial.svg"
-                x="0"
-                y="0"
-                width={mapData.width}
-                height={mapData.height}
-                preserveAspectRatio="none"
-              />
-            )}
-            {zoom >= 4 && (
-              <image
-                href="/maps/singapore-roads-local.svg"
-                x="0"
-                y="0"
-                width={mapData.width}
-                height={mapData.height}
-                preserveAspectRatio="none"
-              />
-            )}
-          </g>
-        )}
 
         {heatmapLayer && heatBounds && (
           <g clipPath="url(#singapore-map-land-clip)" className="pointer-events-none">
@@ -872,19 +828,23 @@ export default function SingaporeRegionMap({
             const isActive = activeAreaId === area.id;
             const status = areaStatuses.get(area.id);
             const style = riskStyleFor(status?.severity);
-            const fillOpacity = isNeutralMap ? (isActive ? 0.32 : 0.001) : heatmapLayer ? (isActive ? 0.2 : 0.03) : 1;
+            const fillOpacity = heatmapLayer
+              ? (isActive ? 0.2 : 0.03)
+              : isNeutralMap
+                ? (isActive ? 0.58 : 0.34)
+                : 1;
 
             return (
               <path
                 key={area.id}
                 d={polygonPath(area.polygons)}
-                fill={isNeutralMap ? '#3b82f6' : isActive ? style.hover : '#52525b'}
+                fill={isNeutralMap ? (isActive ? '#2563eb' : '#334155') : isActive ? style.hover : '#52525b'}
                 fillOpacity={fillOpacity}
                 fillRule="evenodd"
                 clipRule="evenodd"
-                stroke={isNeutralMap ? (isActive ? '#2563eb' : 'transparent') : heatmapLayer ? '#0b1120' : '#18181b'}
-                strokeOpacity={heatmapLayer ? 0.72 : 1}
-                strokeWidth={isNeutralMap ? (isActive ? '2' : '0') : heatmapLayer ? '1.05' : '1.35'}
+                stroke={isNeutralMap ? (isActive ? '#93c5fd' : '#0f172a') : heatmapLayer ? '#0b1120' : '#18181b'}
+                strokeOpacity={heatmapLayer ? 0.72 : isNeutralMap ? 0.86 : 1}
+                strokeWidth={isNeutralMap ? (isActive ? '2' : '1.05') : heatmapLayer ? '1.05' : '1.35'}
                 strokeLinejoin="round"
                 vectorEffect="non-scaling-stroke"
                 className="outline-none transition-colors duration-150"
@@ -911,7 +871,7 @@ export default function SingaporeRegionMap({
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
             className="pointer-events-none"
-            style={{ filter: isNeutralMap ? 'drop-shadow(0 1px 2px rgba(37,99,235,0.3))' : `drop-shadow(0 0 4px ${riskStyleFor(activeStatus.severity).dot})` }}
+            style={{ filter: isNeutralMap ? 'drop-shadow(0 0 5px rgba(96,165,250,0.45))' : `drop-shadow(0 0 4px ${riskStyleFor(activeStatus.severity).dot})` }}
           />
         )}
 
@@ -1055,15 +1015,15 @@ export default function SingaporeRegionMap({
                   />
                 )}
                 <text
-                  x={labelX + (isNeutralMap ? 0 : 5)}
+                  x={labelX + 5}
                   y={labelY + 3}
-                  fill={isNeutralMap ? (isActive ? '#1d4ed8' : '#334155') : isActive ? '#ffffff' : '#e4e4e7'}
+                  fill={isActive ? '#ffffff' : '#e4e4e7'}
                   fontSize={isActive ? labelFontSize(area.name) + 1.5 : labelFontSize(area.name)}
                   fontWeight={isActive ? 700 : 500}
                   style={{
                     paintOrder: 'stroke',
-                    stroke: isNeutralMap ? 'rgba(255,255,255,0.95)' : '#27272a',
-                    strokeWidth: isNeutralMap ? 3.5 : 2.5,
+                    stroke: '#27272a',
+                    strokeWidth: 2.5,
                     strokeLinejoin: 'round',
                   }}
                 >
@@ -1076,14 +1036,14 @@ export default function SingaporeRegionMap({
       </svg>
 
       <div className={`absolute right-3 top-3 flex items-center overflow-hidden rounded-lg shadow-xl ${
-        isNeutralMap ? 'border border-slate-300 bg-white/95' : 'border border-zinc-700 bg-zinc-950/95 backdrop-blur'
+        useLightMapChrome ? 'border border-slate-300 bg-white/95' : 'border border-zinc-700 bg-zinc-950/95 backdrop-blur'
       }`}>
         <button
           type="button"
           onClick={() => zoomAt(zoom / 1.35)}
           disabled={zoom <= 1.01}
           className={`grid h-9 w-9 place-items-center border-r text-lg transition-colors disabled:cursor-not-allowed ${
-            isNeutralMap
+            useLightMapChrome
               ? 'border-slate-300 text-slate-700 hover:bg-slate-100 disabled:text-slate-300'
               : 'border-zinc-700 text-zinc-200 hover:bg-zinc-800 disabled:text-zinc-600'
           }`}
@@ -1095,7 +1055,7 @@ export default function SingaporeRegionMap({
           type="button"
           onClick={() => setViewport(initialViewport)}
           className={`h-9 min-w-16 border-r px-2 text-xs font-medium transition-colors ${
-            isNeutralMap ? 'border-slate-300 text-slate-600 hover:bg-slate-100' : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800'
+            useLightMapChrome ? 'border-slate-300 text-slate-600 hover:bg-slate-100' : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800'
           }`}
           aria-label="Reset map zoom"
         >
@@ -1106,7 +1066,7 @@ export default function SingaporeRegionMap({
           onClick={() => zoomAt(zoom * 1.35)}
           disabled={zoom >= maxZoom - 0.01}
           className={`grid h-9 w-9 place-items-center text-lg transition-colors disabled:cursor-not-allowed ${
-            isNeutralMap ? 'text-slate-700 hover:bg-slate-100 disabled:text-slate-300' : 'text-zinc-200 hover:bg-zinc-800 disabled:text-zinc-600'
+            useLightMapChrome ? 'text-slate-700 hover:bg-slate-100 disabled:text-slate-300' : 'text-zinc-200 hover:bg-zinc-800 disabled:text-zinc-600'
           }`}
           aria-label="Zoom in"
         >
@@ -1115,21 +1075,11 @@ export default function SingaporeRegionMap({
       </div>
 
       <div className={`pointer-events-none absolute bottom-3 right-3 rounded-md px-2 py-1 text-[10px] ${
-        isNeutralMap ? 'border border-slate-300 bg-white/90 text-slate-500' : 'border border-zinc-700 bg-zinc-950/85 text-zinc-400 backdrop-blur'
+        useLightMapChrome ? 'border border-slate-300 bg-white/90 text-slate-500' : 'border border-zinc-700 bg-zinc-950/85 text-zinc-400 backdrop-blur'
       }`}>
         Pinch to zoom - Drag to move - Select clusters to expand
       </div>
 
-      {isNeutralMap && (
-        <a
-          href="https://www.openstreetmap.org/copyright"
-          target="_blank"
-          rel="noopener"
-          className="absolute bottom-3 left-3 rounded border border-slate-300 bg-white/90 px-2 py-1 text-[10px] text-slate-600 shadow-sm hover:text-blue-700"
-        >
-          © OpenStreetMap contributors
-        </a>
-      )}
 
       {heatmapLayer && heatBounds && (
         <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 rounded-lg border border-zinc-700 bg-zinc-950/90 p-2 shadow-xl backdrop-blur">
@@ -1147,38 +1097,38 @@ export default function SingaporeRegionMap({
       )}
 
       <div className={`pointer-events-none absolute ${heatmapLayer ? 'left-3 top-[calc(50%-13rem)]' : 'left-3 top-3'} max-w-[240px] rounded-lg px-3 py-2 shadow-xl ${
-        isNeutralMap ? 'border border-slate-300 bg-white/95' : 'border border-zinc-700 bg-zinc-950/95 backdrop-blur'
+        useLightMapChrome ? 'border border-slate-300 bg-white/95' : 'border border-zinc-700 bg-zinc-950/95 backdrop-blur'
       }`}>
         {activeCluster ? (
           <>
-            <div className={`flex items-center gap-2 text-sm font-semibold ${isNeutralMap ? 'text-slate-900' : 'text-white'}`}>
+            <div className={`flex items-center gap-2 text-sm font-semibold ${useLightMapChrome ? 'text-slate-900' : 'text-white'}`}>
               <span
                 className="h-2 w-2 shrink-0 rounded-full"
                 style={{ backgroundColor: riskStyleFor(activeCluster.severity).dot }}
               />
               {activeCluster.markers.length} nearby locations
             </div>
-            <div className={`mt-1 text-xs ${isNeutralMap ? 'text-slate-700' : 'text-zinc-300'}`}>
+            <div className={`mt-1 text-xs ${useLightMapChrome ? 'text-slate-700' : 'text-zinc-300'}`}>
               {activeCluster.markers.slice(0, 3).map((marker) => marker.name).join(', ')}
               {activeCluster.markers.length > 3 ? ` and ${activeCluster.markers.length - 3} more` : ''}
             </div>
-            <div className={`mt-1 text-[11px] ${isNeutralMap ? 'text-slate-500' : 'text-zinc-500'}`}>Select the cluster to zoom in and separate its locations.</div>
+            <div className={`mt-1 text-[11px] ${useLightMapChrome ? 'text-slate-500' : 'text-zinc-500'}`}>Select the cluster to zoom in and separate its locations.</div>
           </>
         ) : activeMarker ? (
           <>
-            <div className={`flex items-center gap-2 text-sm font-semibold ${isNeutralMap ? 'text-slate-900' : 'text-white'}`}>
+            <div className={`flex items-center gap-2 text-sm font-semibold ${useLightMapChrome ? 'text-slate-900' : 'text-white'}`}>
               <span
                 className="h-2 w-2 shrink-0 rounded-full"
                 style={{ backgroundColor: riskStyleFor(activeMarker.severity).dot }}
               />
               {activeMarker.name}
             </div>
-            <div className={`mt-1 text-sm font-semibold ${isNeutralMap ? 'text-slate-800' : 'text-zinc-100'}`}>{activeMarker.value}</div>
-            <div className={`mt-0.5 text-xs ${isNeutralMap ? 'text-slate-600' : 'text-zinc-300'}`}>{activeMarker.detail}</div>
+            <div className={`mt-1 text-sm font-semibold ${useLightMapChrome ? 'text-slate-800' : 'text-zinc-100'}`}>{activeMarker.value}</div>
+            <div className={`mt-0.5 text-xs ${useLightMapChrome ? 'text-slate-600' : 'text-zinc-300'}`}>{activeMarker.detail}</div>
           </>
         ) : activeArea && activeStatus ? (
           <>
-            <div className={`flex items-center gap-2 text-sm font-semibold ${isNeutralMap ? 'text-slate-900' : 'text-white'}`}>
+            <div className={`flex items-center gap-2 text-sm font-semibold ${useLightMapChrome ? 'text-slate-900' : 'text-white'}`}>
               <span
                 className="h-2 w-2 shrink-0 rounded-full"
                 style={{
@@ -1189,8 +1139,8 @@ export default function SingaporeRegionMap({
               />
               {activeArea.name}
             </div>
-            <div className={`mt-0.5 text-[11px] ${isNeutralMap ? 'text-slate-500' : 'text-zinc-500'}`}>{activeArea.region}</div>
-            <div className={`mt-1 text-xs ${isNeutralMap ? 'text-slate-700' : 'text-zinc-300'}`}>
+            <div className={`mt-0.5 text-[11px] ${useLightMapChrome ? 'text-slate-500' : 'text-zinc-500'}`}>{activeArea.region}</div>
+            <div className={`mt-1 text-xs ${useLightMapChrome ? 'text-slate-700' : 'text-zinc-300'}`}>
               {activeHeatStats && heatmapLayer ? (
                 <>
                   {activeHeatStats.estimated
@@ -1214,8 +1164,8 @@ export default function SingaporeRegionMap({
           </>
         ) : (
           <>
-            <div className={`text-xs font-medium ${isNeutralMap ? 'text-slate-700' : 'text-zinc-300'}`}>{emptyTitle}</div>
-            <div className={`mt-0.5 text-[11px] ${isNeutralMap ? 'text-slate-500' : 'text-zinc-500'}`}>{emptyDetail}</div>
+            <div className={`text-xs font-medium ${useLightMapChrome ? 'text-slate-700' : 'text-zinc-300'}`}>{emptyTitle}</div>
+            <div className={`mt-0.5 text-[11px] ${useLightMapChrome ? 'text-slate-500' : 'text-zinc-500'}`}>{emptyDetail}</div>
           </>
         )}
       </div>

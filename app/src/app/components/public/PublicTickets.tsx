@@ -73,6 +73,13 @@ type AuthUser = {
   tags: string[];
 };
 
+type SubjectTag = {
+  id: string;
+  label: string;
+  description: string | null;
+  categories: string[];
+};
+
 type FieldErrors = {
   reportType?: string;
   specificCrisis?: string;
@@ -84,21 +91,19 @@ type FieldErrors = {
 
 const ticketTags = [
   { value: 'health', label: 'Health', icon: 'H', agency: 'MOH' },
-  { value: 'flood', label: 'Flooding', icon: 'W', agency: 'PUB' },
+  { value: 'environment', label: 'Weather & Environment', icon: 'W', agency: 'PUB / NEA' },
   { value: 'supply', label: 'Supply Shortage', icon: 'S', agency: 'Enterprise SG' },
   { value: 'infrastructure', label: 'Infrastructure', icon: 'I', agency: 'LTA' },
   { value: 'transport', label: 'Transport', icon: 'T', agency: 'LTA' },
-  { value: 'environment', label: 'Environment', icon: 'E', agency: 'NEA' },
   { value: 'other', label: 'Other', icon: 'O', agency: 'GOV-OPS' },
 ];
 
 const specificCrises: Record<string, string[]> = {
   health: ['COVID-19', 'Hantavirus', 'Dengue', 'Other health issue'],
-  flood: ['Flash flooding', 'Drain overflow', 'Rising water level', 'Other flooding issue'],
   supply: ['Medicine shortage', 'Food shortage', 'Essential goods shortage', 'Fuel shortage'],
   infrastructure: ['Power outage', 'Water supply disruption', 'Building or road damage', 'Telecommunications outage'],
   transport: ['Train disruption', 'Bus disruption', 'Traffic incident', 'Road obstruction'],
-  environment: ['Haze', 'Air pollution', 'Water pollution', 'Pest or animal issue'],
+  environment: ['Flash flood', 'Drain overflow', 'Rising water level', 'Haze', 'Air pollution', 'Water pollution', 'Pest or animal issue', 'Other weather or environment issue'],
   other: ['Community safety issue', 'Public facility issue', 'Noise or nuisance', 'Other issue'],
 };
 
@@ -129,9 +134,29 @@ export default function PublicTickets() {
   const [showAllTags, setShowAllTags] = useState(false);
   const [locating, setLocating] = useState(false);
   const [reportComposerOpen, setReportComposerOpen] = useState(false);
+  const [subjectTags, setSubjectTags] = useState<SubjectTag[]>([]);
 
   const visibleTags = showAllTags ? ticketTags : ticketTags.slice(0, 5);
   const imagePreviews = useMemo(() => files.map((file) => ({ file, url: URL.createObjectURL(file) })), [files]);
+  const specificCrisisOptions = useMemo(() => {
+    const base = specificCrises[reportType] ?? [];
+    const categoryAliases = categoriesForReportType(reportType);
+    const dynamic = subjectTags
+      .filter((tag) => tag.categories.some((category) => categoryAliases.includes(category)) && subjectTagFitsReportType(tag.label, reportType))
+      .map((tag) => tag.label);
+    const seen = new Set<string>();
+    return [...base, ...dynamic].filter((label) => {
+      const key = label.trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).sort((a, b) => {
+      const aOther = a.toLowerCase().startsWith('other');
+      const bOther = b.toLowerCase().startsWith('other');
+      if (aOther !== bOther) return aOther ? 1 : -1;
+      return a.localeCompare(b);
+    });
+  }, [reportType, subjectTags]);
 
   useEffect(() => {
     fetchMe();
@@ -142,6 +167,14 @@ export default function PublicTickets() {
     loadMyTickets();
     const timer = window.setInterval(() => loadMyTickets(true), 15000);
     return () => window.clearInterval(timer);
+  }, [authUser?.username, authUser?.email]);
+
+  useEffect(() => {
+    if (!authUser) return;
+    fetch(apiUrl('/api/report-subject-tags?active=true'), { headers: authHeaders() })
+      .then((response) => response.ok ? response.json() as Promise<{ items: SubjectTag[] }> : Promise.reject())
+      .then((data) => setSubjectTags(data.items))
+      .catch(() => setSubjectTags([]));
   }, [authUser?.username, authUser?.email]);
 
   useEffect(() => {
@@ -168,14 +201,15 @@ export default function PublicTickets() {
   const loadMyTickets = async (quiet = false) => {
     if (!quiet) setTicketsLoading(true);
     try {
-      const response = await fetch(apiUrl('/api/citizen/reports'), { headers: authHeaders() });
+      const response = await fetch(apiUrl('/api/citizen/reports?scope=visible'), { headers: authHeaders() });
       if (!response.ok) throw new Error('Unable to load tickets');
       const data = await response.json() as { items: TicketRecord[] };
-      setTickets(data.items);
+      const visibleItems = data.items.filter((ticket) => !isSpam(ticket));
+      setTickets(visibleItems);
       setSelectedTicket((current) => {
-        if (!data.items.length) return null;
-        const matching = data.items.find((ticket) => ticket.id === current?.id);
-        if (!matching) return current ?? data.items[0];
+        if (!visibleItems.length) return null;
+        const matching = visibleItems.find((ticket) => ticket.id === current?.id);
+        if (!matching) return current && !isSpam(current) ? current : visibleItems[0];
         return {
           ...matching,
           images: current?.images?.some((image) => image.previewUrl) ? current.images : matching.images,
@@ -308,8 +342,10 @@ export default function PublicTickets() {
         hasImage: files.length > 0,
       });
       setCreatedTicket(data);
-      setTickets((current) => [item, ...current.filter((ticket) => ticket.id !== item.id)]);
-      setSelectedTicket(item);
+      if (!isSpam(item)) {
+        setTickets((current) => [item, ...current.filter((ticket) => ticket.id !== item.id)]);
+        setSelectedTicket(item);
+      }
       setDescription('');
       setSpecificCrisis('');
       setLocation('');
@@ -336,6 +372,7 @@ export default function PublicTickets() {
       const response = await fetch(apiUrl(`/api/citizen/reports/${normalizedId}`), { headers: authHeaders() });
       if (!response.ok) throw new Error('Report not found');
       const data = await response.json() as { item: TicketRecord };
+      if (isSpam(data.item)) throw new Error('Report not found');
       setTickets((current) => [data.item, ...current.filter((ticket) => ticket.id !== data.item.id)]);
       setSelectedTicket(data.item);
     } catch {
@@ -355,6 +392,7 @@ export default function PublicTickets() {
       if (response.status === 409) throw new Error('This ticket is resolved. Discussion is closed.');
       if (!response.ok) throw new Error('Unable to send reply');
       const data = await response.json() as { item: TicketRecord };
+      if (isSpam(data.item)) return;
       setSelectedTicket(data.item);
       setTickets((current) => [data.item, ...current.filter((ticket) => ticket.id !== data.item.id)]);
       setReply('');
@@ -532,7 +570,7 @@ export default function PublicTickets() {
                     className={inputClass(Boolean(fieldErrors.specificCrisis))}
                   >
                     <option value="">Select a specific problem</option>
-                    {(specificCrises[reportType] ?? []).map((crisis) => (
+                    {specificCrisisOptions.map((crisis) => (
                       <option key={crisis} value={crisis}>{crisis}</option>
                     ))}
                   </select>
@@ -630,7 +668,7 @@ export default function PublicTickets() {
           </div>
 
           <div className="space-y-3">
-            {(tickets.length ? tickets : createdTicket?.item ? [createdTicket.item] : []).map((ticket) => (
+            {tickets.map((ticket) => (
               <TicketCard key={ticket.id} ticket={ticket} selected={selectedTicket?.id === ticket.id} onClick={() => openTicket(ticket)} />
             ))}
             {ticketsLoading && (
@@ -638,7 +676,7 @@ export default function PublicTickets() {
                 Loading your reports...
               </div>
             )}
-            {!ticketsLoading && !tickets.length && !createdTicket?.item && (
+            {!ticketsLoading && !tickets.length && (
               <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
                 Your submitted or tracked reports will appear here.
               </div>
@@ -961,6 +999,10 @@ function isResolved(ticket: TicketRecord) {
   return ticket.status === 'resolved' || ticket.chatEnabled === false;
 }
 
+function isSpam(ticket: TicketRecord) {
+  return ticket.status === 'spam' || ticket.status === 'rejected';
+}
+
 function labelForReportType(value: string) {
   if (value === 'health') return 'Health';
   if (value === 'flood' || value === 'environment') return 'Weather';
@@ -982,6 +1024,32 @@ function urgencyFor(crisisType: string, message: string): TicketUrgency {
   void message;
   return 'medium';
 
+}
+
+function categoriesForReportType(reportType: string) {
+  if (reportType === 'flood') return ['flood', 'weather'];
+  if (reportType === 'supply') return ['supply', 'supply_chain'];
+  if (reportType === 'transport') return ['transport', 'infrastructure'];
+  if (reportType === 'environment') return ['environment', 'weather', 'flood'];
+  if (reportType === 'other') return ['other', 'general'];
+  return [reportType];
+}
+
+function subjectTagFitsReportType(label: string, reportType: string) {
+  const text = label.toLowerCase();
+  if (text === 'flash flooding') return false;
+  const supply = ['medicine', 'food', 'goods', 'fuel', 'shortage', 'stock', 'panadol', 'salbutamol', 'inhaler', 'pharmacy', 'pharmacies'];
+  const weather = ['flood', 'drain', 'water', 'haze', 'pollution', 'pest', 'weather'];
+  const health = ['covid', 'hantavirus', 'dengue', 'health', 'symptom', 'clinic', 'hospital'];
+  const infrastructure = ['power', 'outage', 'building', 'road damage', 'telecommunications', 'lift'];
+  const transport = ['train', 'bus', 'traffic', 'road obstruction'];
+
+  if (reportType === 'health') return health.some((keyword) => text.includes(keyword));
+  if (reportType === 'environment') return weather.some((keyword) => text.includes(keyword));
+  if (reportType === 'supply') return supply.some((keyword) => text.includes(keyword));
+  if (reportType === 'infrastructure') return infrastructure.some((keyword) => text.includes(keyword));
+  if (reportType === 'transport') return transport.some((keyword) => text.includes(keyword));
+  return true;
 }
 
 function formatCommentTime(value: string) {
