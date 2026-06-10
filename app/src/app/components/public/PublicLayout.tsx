@@ -14,16 +14,15 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { fetchWithAuth } from '../../lib/api';
-import PublicCrisisAssistant from './PublicCrisisAssistant';
-import CitizenOnboarding from './CitizenOnboarding';
+import { apiUrl } from '../../lib/api';
+import { authHeaders } from '../../lib/auth';
 
 const navItems = [
   { path: '/public', label: 'Home', icon: Home },
   { path: '/public/alerts', label: 'Alerts', icon: Bell },
+  { path: '/public/forum', label: 'Forum', icon: MessageSquare },
   { path: '/public/report', label: 'Report', icon: AlertTriangle },
   { path: '/public/volunteer', label: 'Volunteer', icon: Users },
-  { path: '/public/forum', label: 'Forum', icon: MessageSquare },
 ];
 
 export default function PublicLayout() {
@@ -56,12 +55,7 @@ export default function PublicLayout() {
             <nav className="hidden md:flex items-center gap-1">
               {navItems.map((item) => {
                 const Icon = item.icon;
-                const isReportSection = item.path === '/public/report' && (
-                  location.pathname === '/public/report' ||
-                  location.pathname === '/public/tickets' ||
-                  location.pathname === '/public/sos'
-                );
-                const isActive = isReportSection || location.pathname === item.path;
+                const isActive = location.pathname === item.path;
                 return (
                   <Link
                     key={item.path}
@@ -83,7 +77,6 @@ export default function PublicLayout() {
               <div className="relative">
                 <button
                   type="button"
-                  data-tour="notification-bell"
                   onClick={() => {
                     setNotificationsOpen((open) => !open);
                     void loadCitizenNotifications()
@@ -130,7 +123,6 @@ export default function PublicLayout() {
               <div className="relative hidden md:block">
                 <button
                   type="button"
-                  data-tour="profile-menu"
                   onClick={() => setProfileOpen((open) => !open)}
                   className="inline-flex rounded-lg p-2 text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
                   aria-label="Open profile menu"
@@ -174,12 +166,7 @@ export default function PublicLayout() {
             <nav className="px-4 py-2 space-y-1">
               {navItems.map((item) => {
                 const Icon = item.icon;
-                const isReportSection = item.path === '/public/report' && (
-                  location.pathname === '/public/report' ||
-                  location.pathname === '/public/tickets' ||
-                  location.pathname === '/public/sos'
-                );
-                const isActive = isReportSection || location.pathname === item.path;
+                const isActive = location.pathname === item.path;
                 return (
                   <Link
                     key={item.path}
@@ -205,18 +192,22 @@ export default function PublicLayout() {
         <Outlet />
       </main>
 
-      <CitizenOnboarding />
-
       <footer className="bg-zinc-900 border-t border-zinc-800 mt-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <Link
+            to="/public/profile"
+            className="mx-auto mb-6 flex max-w-xs items-center justify-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-300 transition-colors hover:border-blue-800 hover:text-white"
+          >
+            <UserCircle className="h-5 w-5 text-blue-400" />
+            Profile and notifications
+          </Link>
+
           <div className="text-center text-sm text-zinc-500">
             <p className="mb-2">Singapore&apos;s National Adaptive Logistics & Alert Network</p>
             <p>A trusted platform for crisis information and coordination</p>
           </div>
         </div>
       </footer>
-
-      {location.pathname === '/public' && <PublicCrisisAssistant />}
     </div>
   );
 }
@@ -230,15 +221,16 @@ type NotificationItem = {
 };
 
 async function loadCitizenNotifications(): Promise<NotificationItem[]> {
-  const response = await fetchWithAuth('/api/notifications');
+  const response = await fetch(apiUrl('/api/notifications'), { headers: authHeaders() });
   if (!response.ok) return [];
   const data = (await response.json()) as { items: NotificationItem[] };
   return data.items;
 }
 
 async function markNotificationRead(id: string) {
-  await fetchWithAuth(`/api/notifications/${id}/read`, {
+  await fetch(apiUrl(`/api/notifications/${id}/read`), {
     method: 'PATCH',
+    headers: authHeaders(),
   });
 }
 
