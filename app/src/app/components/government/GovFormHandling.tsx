@@ -289,22 +289,49 @@ export default function GovFormHandling() {
     return Array.from(byId.values()).sort((a, b) => a.label.localeCompare(b.label));
   }, [subjectTags, tickets]);
 
+  const ticketMatchesView = (
+    ticket: Ticket,
+    subjectId: string = filterSubjectId,
+    status: 'All' | TicketStatus = filterStatus,
+    view: QueueView = queueView,
+  ) => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const archiveMatch = view === 'archive' ? isResolved(ticket) : !isResolved(ticket);
+    const statusMatch = status === 'All' || ticket.status === status;
+    const crisisMatch = filterCrisis === 'All' || ticket.crisisType === filterCrisis;
+    const agencyMatch = filterAgency === 'All Agencies' || ticket.assignedAgency === filterAgency || ticket.pingedAgencies.includes(filterAgency);
+    const governmentUserMatch =
+      filterGovernmentUser === 'All Government Users' ||
+      ticket.currentHandler === filterGovernmentUser ||
+      ticket.startedWorkBy === filterGovernmentUser;
+    const subjectMatch =
+      subjectId === 'All Subjects' ||
+      (subjectId === 'Ungrouped' ? !ticket.subjectTag : ticket.subjectTag?.id === subjectId);
+    const queryMatch =
+      !normalizedQuery ||
+      ticket.id.toLowerCase().includes(normalizedQuery) ||
+      ticket.message.toLowerCase().includes(normalizedQuery) ||
+      ticket.location.toLowerCase().includes(normalizedQuery) ||
+      ticket.reporter.toLowerCase().includes(normalizedQuery);
+    return archiveMatch && statusMatch && crisisMatch && agencyMatch && governmentUserMatch && subjectMatch && queryMatch;
+  };
+
   const subjectGroupSummaries = useMemo(() => (
     availableSubjectTags.map((tag) => {
-      const groupTickets = tickets.filter((ticket) => ticket.subjectTag?.id === tag.id);
+      const groupTickets = tickets.filter((ticket) => ticketMatchesView(ticket, tag.id, 'All'));
       const activeCount = groupTickets.filter((ticket) => !isResolved(ticket)).length;
       const highestUrgency = groupTickets.reduce<TicketUrgency | null>((highest, ticket) => {
         if (!highest || urgencyRank[ticket.urgency] < urgencyRank[highest]) return ticket.urgency;
         return highest;
       }, null);
       return { tag, tickets: groupTickets, activeCount, highestUrgency };
-    }).filter((group) => group.tickets.length > 0 || subjectTags.some((tag) => tag.id === group.tag.id))
+    }).filter((group) => group.tickets.length > 0)
       .sort((a, b) => {
         const urgencyA = a.highestUrgency ? urgencyRank[a.highestUrgency] : 99;
         const urgencyB = b.highestUrgency ? urgencyRank[b.highestUrgency] : 99;
         return urgencyA - urgencyB || b.activeCount - a.activeCount || a.tag.label.localeCompare(b.tag.label);
       })
-  ), [availableSubjectTags, subjectTags, tickets]);
+  ), [availableSubjectTags, tickets, query, queueView, filterAgency, filterCrisis]);
 
   useEffect(() => {
     let active = true;
@@ -379,51 +406,13 @@ export default function GovFormHandling() {
   }, [filterSubjectId]);
 
   const filtered = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
     return tickets
-      .filter((ticket) => {
-        const archiveMatch = queueView === 'archive' ? isResolved(ticket) : !isResolved(ticket);
-        const statusMatch = filterStatus === 'All' || ticket.status === filterStatus;
-        const crisisMatch = filterCrisis === 'All' || ticket.crisisType === filterCrisis;
-        const agencyMatch = filterAgency === 'All Agencies' || ticket.assignedAgency === filterAgency || ticket.pingedAgencies.includes(filterAgency);
-        const governmentUserMatch =
-          filterGovernmentUser === 'All Government Users' ||
-          ticket.currentHandler === filterGovernmentUser ||
-          ticket.startedWorkBy === filterGovernmentUser;
-        const subjectMatch =
-          filterSubjectId === 'All Subjects' ||
-          (filterSubjectId === 'Ungrouped' ? !ticket.subjectTag : ticket.subjectTag?.id === filterSubjectId);
-        const queryMatch =
-          !normalizedQuery ||
-          ticket.id.toLowerCase().includes(normalizedQuery) ||
-          ticket.message.toLowerCase().includes(normalizedQuery) ||
-          ticket.location.toLowerCase().includes(normalizedQuery) ||
-          ticket.reporter.toLowerCase().includes(normalizedQuery);
-        return archiveMatch && statusMatch && crisisMatch && agencyMatch && governmentUserMatch && subjectMatch && queryMatch;
-      })
+      .filter((ticket) => ticketMatchesView(ticket))
       .sort((a, b) => sortTickets(a, b, sortMode));
   }, [filterAgency, filterCrisis, filterGovernmentUser, filterStatus, filterSubjectId, query, queueView, sortMode, tickets]);
 
   const ticketMatchesCurrentScope = (ticket: Ticket, status: 'All' | TicketStatus = filterStatus) => {
-    const normalizedQuery = query.trim().toLowerCase();
-    const archiveMatch = queueView === 'archive' ? isResolved(ticket) : !isResolved(ticket);
-    const statusMatch = status === 'All' || ticket.status === status;
-    const crisisMatch = filterCrisis === 'All' || ticket.crisisType === filterCrisis;
-    const agencyMatch = filterAgency === 'All Agencies' || ticket.assignedAgency === filterAgency || ticket.pingedAgencies.includes(filterAgency);
-    const governmentUserMatch =
-      filterGovernmentUser === 'All Government Users' ||
-      ticket.currentHandler === filterGovernmentUser ||
-      ticket.startedWorkBy === filterGovernmentUser;
-    const subjectMatch =
-      filterSubjectId === 'All Subjects' ||
-      (filterSubjectId === 'Ungrouped' ? !ticket.subjectTag : ticket.subjectTag?.id === filterSubjectId);
-    const queryMatch =
-      !normalizedQuery ||
-      ticket.id.toLowerCase().includes(normalizedQuery) ||
-      ticket.message.toLowerCase().includes(normalizedQuery) ||
-      ticket.location.toLowerCase().includes(normalizedQuery) ||
-      ticket.reporter.toLowerCase().includes(normalizedQuery);
-    return archiveMatch && statusMatch && crisisMatch && agencyMatch && governmentUserMatch && subjectMatch && queryMatch;
+    return ticketMatchesView(ticket, filterSubjectId, status);
   };
 
   const visibleStatusOptions: Array<'All' | TicketStatus> =
@@ -436,18 +425,31 @@ export default function GovFormHandling() {
     }, {})
   ), [visibleStatusOptions, tickets, query, queueView, filterAgency, filterCrisis, filterGovernmentUser, filterSubjectId]);
 
-  const selectedTicket = tickets.find((ticket) => ticket.id === selectedTicketId) ?? filtered[0] ?? null;
-  const selectedTicketResolved = selectedTicket ? isResolved(selectedTicket) : false;
+  const summaryCounts = useMemo(() => ({
+    open: tickets.filter((ticket) => ticketMatchesView(ticket, filterSubjectId, 'open', 'active')).length,
+    inProgress: tickets.filter((ticket) => ticketMatchesView(ticket, filterSubjectId, 'in-progress', 'active')).length,
+    archived: tickets.filter((ticket) => ticketMatchesView(ticket, filterSubjectId, 'resolved', 'archive')).length,
+  }), [tickets, query, filterAgency, filterCrisis, filterSubjectId]);
+
+  const selectedSubjectTag = filterSubjectId === 'All Subjects' || filterSubjectId === 'Ungrouped'
+    ? null
+    : availableSubjectTags.find((tag) => tag.id === filterSubjectId) ?? null;
   const detailNavigatorTickets = filterSubjectId === 'Ungrouped'
-    ? tickets.filter((ticket) => !ticket.subjectTag && (queueView === 'archive' ? isResolved(ticket) : !isResolved(ticket)))
-    : selectedTicket?.subjectTag
-      ? tickets.filter((ticket) => ticket.subjectTag?.id === selectedTicket.subjectTag?.id)
+    ? tickets.filter((ticket) => ticketMatchesView(ticket, 'Ungrouped', 'All'))
+    : selectedSubjectTag
+      ? tickets.filter((ticket) => ticketMatchesView(ticket, selectedSubjectTag.id, 'All'))
       : filtered;
   const detailNavigatorLabel = filterSubjectId === 'Ungrouped'
     ? 'Ungrouped reports'
-    : selectedTicket?.subjectTag
-      ? 'Case reports'
-      : 'Reports in this view';
+    : selectedSubjectTag
+      ? `Tickets in ${selectedSubjectTag.label}`
+      : 'All visible reports';
+  const selectedTicket =
+    detailNavigatorTickets.find((ticket) => ticket.id === selectedTicketId) ??
+    detailNavigatorTickets[0] ??
+    filtered[0] ??
+    null;
+  const selectedTicketResolved = selectedTicket ? isResolved(selectedTicket) : false;
   const detailNavigatorIndex = selectedTicket
     ? detailNavigatorTickets.findIndex((ticket) => ticket.id === selectedTicket.id)
     : -1;
@@ -455,17 +457,15 @@ export default function GovFormHandling() {
   const nextNavigatorTicket = detailNavigatorIndex >= 0 && detailNavigatorIndex < detailNavigatorTickets.length - 1
     ? detailNavigatorTickets[detailNavigatorIndex + 1]
     : null;
-  const selectedSubjectTag = filterSubjectId === 'All Subjects' || filterSubjectId === 'Ungrouped'
-    ? null
-    : availableSubjectTags.find((tag) => tag.id === filterSubjectId) ?? null;
   const allSelectedCaseTickets = selectedSubjectTag
-    ? tickets.filter((ticket) => ticket.subjectTag?.id === selectedSubjectTag.id)
+    ? tickets.filter((ticket) => ticketMatchesView(ticket, selectedSubjectTag.id, 'All'))
     : [];
   const selectedCaseTickets = selectedSubjectTag
     ? filtered.filter((ticket) => ticket.subjectTag?.id === selectedSubjectTag.id)
     : [];
   const selectedCaseReviewTickets = selectedCaseTickets.filter((ticket) => selectedCaseTicketIds.includes(ticket.id));
   const showingMultiReportReview = selectedCaseReviewTickets.length > 1;
+  const showTicketNavigator = detailNavigatorTickets.length > 0 && (filterSubjectId !== 'All Subjects' || detailNavigatorTickets.length > 1);
 
   const syncTicket = (updated: Ticket) => {
     setTickets((current) => current.map((ticket) => (ticket.id === updated.id ? updated : ticket)));
@@ -498,8 +498,10 @@ export default function GovFormHandling() {
   };
 
   const openNavigatorTicket = (ticket: Ticket) => {
-    if (ticket.subjectTag) setFilterSubjectId(ticket.subjectTag.id);
-    else setFilterSubjectId('Ungrouped');
+    if (filterSubjectId !== 'All Subjects') {
+      if (ticket.subjectTag) setFilterSubjectId(ticket.subjectTag.id);
+      else setFilterSubjectId('Ungrouped');
+    }
     setQueueView(isResolved(ticket) ? 'archive' : 'active');
     setFilterStatus('All');
     setSelectedCaseTicketIds([]);
@@ -537,8 +539,6 @@ export default function GovFormHandling() {
               ? {
                   ...item,
                   status,
-                  subjectTag: status === 'resolved' ? null : item.subjectTag,
-                  relatedTickets: status === 'resolved' ? [] : item.relatedTickets,
                   comments: [...item.comments, createComment('internal', `Status changed to ${status}.`)],
                 }
               : item,
@@ -548,8 +548,6 @@ export default function GovFormHandling() {
       updatedTicket = {
         ...ticket,
         status,
-        subjectTag: status === 'resolved' ? null : ticket.subjectTag,
-        relatedTickets: status === 'resolved' ? [] : ticket.relatedTickets,
       };
     }
     if (updatedTicket && isResolved(updatedTicket) && queueView === 'active') {
@@ -629,6 +627,34 @@ export default function GovFormHandling() {
     setSubjectTags((current) => current.filter((tag) => tag.id !== subjectTag.id));
     if (filterSubjectId === subjectTag.id) setFilterSubjectId('All Subjects');
     setNotice(`Closed case: ${subjectTag.label}.`);
+  };
+
+  const archiveSubjectGroup = (subjectTag: SubjectTag) => {
+    const archivedAt = new Date().toISOString();
+    updateLocalTickets(
+      (current) => current.map((ticket) => (
+        ticket.subjectTag?.id === subjectTag.id
+          ? {
+              ...ticket,
+              status: 'resolved',
+              chatEnabled: false,
+              resolvedAt: ticket.resolvedAt ?? archivedAt,
+              comments: [
+                ...ticket.comments,
+                createComment('internal', `Case "${subjectTag.label}" archived after resolution.`),
+              ],
+            }
+          : ticket
+      )),
+      setTickets,
+    );
+    setQueueView('archive');
+    setFilterStatus('All');
+    setFilterSubjectId(subjectTag.id);
+    setSelectedCaseTicketIds([]);
+    const firstCaseTicket = tickets.find((ticket) => ticket.subjectTag?.id === subjectTag.id);
+    if (firstCaseTicket) setSelectedTicketId(firstCaseTicket.id);
+    setNotice(`Archived case: ${subjectTag.label}.`);
   };
 
   const createSubjectTag = async () => {
@@ -777,13 +803,13 @@ export default function GovFormHandling() {
         </div>
         <div className="flex items-center gap-2 text-sm">
           <span className="px-2.5 py-1 bg-zinc-900/80 border border-zinc-700 text-zinc-200 rounded-lg">
-            {tickets.filter((ticket) => ticket.status === 'open').length} Open
+            {summaryCounts.open} Open
           </span>
           <span className="px-2.5 py-1 bg-blue-900/50 border border-blue-800 text-blue-400 rounded-lg">
-            {tickets.filter((ticket) => ticket.status === 'in-progress').length} In Progress
+            {summaryCounts.inProgress} In Progress
           </span>
           <span className="px-2.5 py-1 bg-green-900/40 border border-green-800 text-green-400 rounded-lg">
-            {tickets.filter((ticket) => isResolved(ticket)).length} Archived
+            {summaryCounts.archived} Archived
           </span>
         </div>
       </div>
@@ -797,7 +823,7 @@ export default function GovFormHandling() {
 
       <div className="flex gap-4 h-[calc(100vh-280px)] min-h-[600px]">
         <div className="w-64 flex-shrink-0 bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col overflow-hidden">
-          <div className="p-3 border-b border-zinc-800 space-y-2">
+          <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
             <div className="relative">
               <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-zinc-500" />
               <input
@@ -862,9 +888,9 @@ export default function GovFormHandling() {
             >
               {governmentUsers.map((user) => <option key={user}>{user}</option>)}
             </select>
-            <div className="space-y-1 rounded-lg border border-zinc-800 bg-zinc-950 p-2">
+            <div className="space-y-1.5 rounded-lg border border-zinc-800 bg-zinc-950 p-2">
               <div className="flex items-center justify-between">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Case filter</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Report scope</div>
                 <button
                   type="button"
                   onClick={() => setCreateSubjectOpen(true)}
@@ -875,66 +901,78 @@ export default function GovFormHandling() {
                   <Plus className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <select value={filterSubjectId} onChange={(event) => setFilterSubjectId(event.target.value)} className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-600">
-                <option value="All Subjects">All reports</option>
-                <option value="Ungrouped">Ungrouped</option>
-                {availableSubjectTags.map((tag) => <option key={tag.id} value={tag.id}>{tag.label}</option>)}
-              </select>
+              <button
+                type="button"
+                onClick={() => setFilterSubjectId('All Subjects')}
+                className={`w-full rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                  filterSubjectId === 'All Subjects'
+                    ? 'border-blue-700 bg-blue-950/40 text-blue-200'
+                    : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-xs font-medium">All reports</span>
+                  <span className="shrink-0 text-[11px] text-zinc-500">{tickets.filter((ticket) => ticketMatchesView(ticket, 'All Subjects')).length}</span>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterSubjectId('Ungrouped')}
+                className={`w-full rounded-lg border border-dashed px-2.5 py-2 text-left transition-colors ${
+                  filterSubjectId === 'Ungrouped'
+                    ? 'border-blue-700 bg-blue-950/40 text-blue-200'
+                    : 'border-zinc-700 bg-zinc-950/70 text-zinc-300 hover:border-zinc-600'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-xs font-medium">Ungrouped</span>
+                  <span className="shrink-0 text-[11px] text-zinc-500">{tickets.filter((ticket) => ticketMatchesView(ticket, 'Ungrouped')).length}</span>
+                </div>
+                <div className="mt-1 text-[11px] text-zinc-500">Needs case decision</div>
+              </button>
             </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-2">
-              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Case queue</div>
-              <div className="space-y-1.5">
-                <button
-                  type="button"
-                  onClick={() => setFilterSubjectId('All Subjects')}
-                  className={`w-full rounded-lg border px-2.5 py-2 text-left transition-colors ${
-                    filterSubjectId === 'All Subjects'
-                      ? 'border-blue-700 bg-blue-950/40 text-blue-200'
-                      : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-xs font-medium">All reports</span>
-                    <span className="shrink-0 text-[11px] text-zinc-500">{tickets.filter((ticket) => !isResolved(ticket)).length}</span>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFilterSubjectId('Ungrouped')}
-                  className={`w-full rounded-lg border border-dashed px-2.5 py-2 text-left transition-colors ${
-                    filterSubjectId === 'Ungrouped'
-                      ? 'border-blue-700 bg-blue-950/40 text-blue-200'
-                      : 'border-zinc-700 bg-zinc-950/70 text-zinc-300 hover:border-zinc-600'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-xs font-medium">Ungrouped</span>
-                    <span className="shrink-0 text-[11px] text-zinc-500">{tickets.filter((ticket) => !ticket.subjectTag && !isResolved(ticket)).length}</span>
-                  </div>
-                  <div className="mt-1 text-[11px] text-zinc-500">Needs case decision</div>
-                </button>
-                <div className="pt-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Cases</div>
-                <div className="max-h-56 space-y-1.5 overflow-y-auto pr-1 [scrollbar-color:#3f3f46_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700/70">
+            <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-zinc-800 bg-zinc-950/50 p-2">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Grouped cases</div>
+                <span className="text-[11px] text-zinc-500">{subjectGroupSummaries.length}</span>
+              </div>
+              <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+                <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1 [scrollbar-color:#3f3f46_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700/70">
                   {subjectGroupSummaries.map((group) => (
-                    <button
+                    <div
                       key={group.tag.id}
-                      type="button"
-                      onClick={() => setFilterSubjectId(group.tag.id)}
                       className={`w-full rounded-lg border px-2.5 py-2 text-left transition-colors ${
                         filterSubjectId === group.tag.id
                           ? 'border-blue-700 bg-blue-950/40 text-blue-200'
                           : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate text-xs font-medium">{group.tag.label}</span>
-                        <span className="shrink-0 text-[11px] text-zinc-500">{group.tickets.length}</span>
+                      <div className="flex items-start justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setFilterSubjectId(group.tag.id)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate text-xs font-medium">{group.tag.label}</span>
+                            <span className="shrink-0 text-[11px] text-zinc-500">{group.tickets.length}</span>
+                          </div>
+                          <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-500">
+                            <span>{queueView === 'archive' ? `${group.tickets.length} resolved` : `${group.tickets.length} current`}</span>
+                            {group.highestUrgency && <span>{group.highestUrgency}</span>}
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => retireSubjectGroup(group.tag)}
+                          className="shrink-0 rounded-md p-1 text-zinc-500 hover:bg-red-950/50 hover:text-red-300"
+                          title="Delete case"
+                          aria-label={`Delete ${group.tag.label}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
-                      <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-500">
-                        <span>{group.activeCount} active</span>
-                        {group.highestUrgency && <span>{group.highestUrgency}</span>}
-                      </div>
-                    </button>
+                    </div>
                   ))}
                   {!subjectGroupSummaries.length && (
                     <div className="rounded-lg border border-dashed border-zinc-800 px-2.5 py-3 text-xs text-zinc-500">
@@ -944,104 +982,6 @@ export default function GovFormHandling() {
                 </div>
               </div>
             </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto">
-            {filterSubjectId !== 'All Subjects' && (
-              <div className="border-b border-zinc-800 bg-zinc-950/60 p-3">
-                <div className="mb-2 flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Layers className="h-4 w-4 text-purple-300" />
-                      <div className="truncate text-sm font-semibold text-zinc-100">
-                        {filterSubjectId === 'Ungrouped' ? 'Ungrouped' : selectedSubjectTag?.label ?? 'Selected case'}
-                      </div>
-                    </div>
-                    <div className="mt-1 text-xs text-zinc-500">
-                      {filterSubjectId === 'Ungrouped'
-                        ? 'Reports that still need to be assigned to a case.'
-                        : 'Reports linked to the same operational case.'}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="rounded bg-zinc-900 px-2 py-1 text-xs text-zinc-400">{filtered.length} reports</span>
-                    {selectedSubjectTag && (
-                      <>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedCaseTicketIds(allSelectedCaseTickets.map((ticket) => ticket.id))}
-                        className="rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-xs text-zinc-200 hover:bg-zinc-700"
-                      >
-                        Select all
-                      </button>
-                      {selectedCaseTicketIds.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setSelectedCaseTicketIds([])}
-                          className="rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-200"
-                        >
-                          Clear
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => retireSubjectGroup(selectedSubjectTag)}
-                        className="rounded-lg border border-red-900/70 bg-red-950/30 px-2.5 py-1.5 text-xs text-red-200 hover:bg-red-950/60"
-                      >
-                        Close case
-                      </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-                {selectedSubjectTag && (
-                  <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-900/70">
-                    <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2">
-                      <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Reports in this case</div>
-                      <div className="text-[11px] text-zinc-500">{allSelectedCaseTickets.length} total</div>
-                    </div>
-                    <div className="max-h-40 overflow-y-auto p-1.5 [scrollbar-color:#3f3f46_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700/70">
-                      {allSelectedCaseTickets.map((ticket) => (
-                        <button
-                          key={ticket.id}
-                          type="button"
-                          onClick={() => selectTicket(ticket.id)}
-                          className={`mb-1 flex w-full items-center gap-2 rounded-md border px-2 py-2 text-left text-xs transition-colors last:mb-0 ${
-                            selectedTicket?.id === ticket.id
-                              ? 'border-blue-700 bg-blue-950/40 text-blue-100'
-                              : 'border-transparent bg-zinc-950/50 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900'
-                          }`}
-                        >
-                          <span className="font-mono text-[11px] text-zinc-500">{ticket.id}</span>
-                          <UrgencyBadge urgency={ticket.urgency} compact />
-                          <span className="min-w-0 flex-1 truncate">{ticket.location}</span>
-                          <span className="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">
-                            {statusLabels[ticket.status]}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-            {filtered.map((ticket) => (
-              <TicketListItem
-                key={ticket.id}
-                ticket={ticket}
-                selected={selectedTicket?.id === ticket.id}
-                selectable={Boolean(selectedSubjectTag)}
-                checked={selectedCaseTicketIds.includes(ticket.id)}
-                onToggleCheck={() => {
-                  setSelectedCaseTicketIds((current) => (
-                    current.includes(ticket.id)
-                      ? current.filter((id) => id !== ticket.id)
-                      : [...current, ticket.id]
-                  ));
-                }}
-                onSelect={() => selectTicket(ticket.id)}
-              />
-            ))}
           </div>
         </div>
 
@@ -1098,38 +1038,47 @@ export default function GovFormHandling() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => retireSubjectGroup(selectedTicket.subjectTag!)}
+                    onClick={() => archiveSubjectGroup(selectedTicket.subjectTag!)}
                     className="rounded-lg border border-green-900/70 bg-green-950/30 px-3 py-1.5 text-xs text-green-200 hover:bg-green-950/60"
                   >
-                    Mark case done
+                    Archive case
                   </button>
                 </>
+              )}
+              {!selectedTicketResolved && (
+                <button
+                  type="button"
+                  onClick={() => updateStatus(selectedTicket, 'resolved')}
+                  className="rounded-lg border border-green-900/70 bg-green-950/30 px-3 py-1.5 text-xs text-green-200 hover:bg-green-950/60"
+                >
+                  Archive ticket
+                </button>
               )}
             </div>
 
             <div className="flex flex-1 overflow-hidden">
-              <div className="w-56 flex-shrink-0 border-r border-zinc-800 p-4 space-y-4 overflow-y-auto">
-                <Property icon={User} label="Reporter" value={selectedTicket.reporter} />
-                <Property icon={Clock} label="Timestamp" value={selectedTicket.timestamp} />
-                <Property icon={MapPin} label="Location" value={selectedTicket.location} />
-                <Property icon={Tag} label="Assigned Agency" value={selectedTicket.assignedAgency} />
-                <div>
-                  <div className="text-xs text-zinc-500 mb-1">Crisis Type</div>
-                  <div className="text-sm text-zinc-300">{selectedTicket.crisisType}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-zinc-500 mb-1">Case</div>
-                  <div className="text-sm text-zinc-300">{selectedTicket.subjectTag?.label ?? 'Ungrouped'}</div>
-                </div>
-                {detailNavigatorTickets.length > 1 && (
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-2">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <div className="text-xs font-medium text-zinc-300">{detailNavigatorLabel}</div>
-                      <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-500">
-                        {Math.max(detailNavigatorIndex + 1, 1)} / {detailNavigatorTickets.length}
-                      </span>
+              {showTicketNavigator && (
+                <div className="flex w-60 flex-shrink-0 flex-col border-r border-zinc-800 bg-zinc-950/40">
+                  <div className="border-b border-zinc-800 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-xs font-semibold uppercase tracking-wide text-zinc-500">{detailNavigatorLabel}</div>
+                        <div className="mt-0.5 text-[11px] text-zinc-500">{Math.max(detailNavigatorIndex + 1, 1)} / {detailNavigatorTickets.length}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (selectedSubjectTag) setFilterSubjectId(selectedSubjectTag.id);
+                          else if (filterSubjectId === 'Ungrouped') setFilterSubjectId('Ungrouped');
+                          setFilterStatus('All');
+                          setSelectedCaseTicketIds(detailNavigatorTickets.map((ticket) => ticket.id));
+                        }}
+                        className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300 hover:bg-zinc-800"
+                      >
+                        Select all
+                      </button>
                     </div>
-                    <div className="mb-2 grid grid-cols-2 gap-1.5">
+                    <div className="mt-2 grid grid-cols-2 gap-1.5">
                       <button
                         type="button"
                         disabled={!previousNavigatorTicket}
@@ -1147,70 +1096,58 @@ export default function GovFormHandling() {
                         Next
                       </button>
                     </div>
-                    <div className="max-h-40 space-y-1 overflow-y-auto pr-1 [scrollbar-color:#3f3f46_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700/70">
-                      {detailNavigatorTickets.map((caseTicket) => (
-                        <button
-                          key={caseTicket.id}
-                          type="button"
-                          onClick={() => openNavigatorTicket(caseTicket)}
-                          className={`w-full rounded-md border px-2 py-1.5 text-left transition-colors ${
-                            selectedTicket.id === caseTicket.id
-                              ? 'border-blue-700 bg-blue-950/40 text-blue-100'
-                              : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-mono text-[11px] text-zinc-500">{caseTicket.id}</span>
-                            <span className="shrink-0 text-[10px] text-zinc-500">{statusLabels[caseTicket.status]}</span>
-                          </div>
-                          <div className="mt-0.5 truncate text-[11px] text-zinc-400">{caseTicket.location}</div>
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (selectedTicket.subjectTag) setFilterSubjectId(selectedTicket.subjectTag.id);
-                        else setFilterSubjectId('Ungrouped');
-                        setFilterStatus('All');
-                        setSelectedCaseTicketIds(detailNavigatorTickets.map((ticket) => ticket.id));
-                      }}
-                      className="mt-2 w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
-                    >
-                      Select all reports
-                    </button>
                   </div>
-                )}
-                {selectedTicket.startedWorkAt && (
-                  <div>
-                    <div className="text-xs text-zinc-500 mb-1">Current Handler</div>
-                    <div className="text-sm text-zinc-300">{selectedTicket.currentHandler ?? selectedTicket.startedWorkBy ?? 'Started'}</div>
+                  <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-2 [scrollbar-color:#3f3f46_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700/70">
+                    {detailNavigatorTickets.map((caseTicket) => (
+                      <button
+                        key={caseTicket.id}
+                        type="button"
+                        onClick={() => openNavigatorTicket(caseTicket)}
+                        className={`w-full rounded-md border px-2.5 py-2 text-left transition-colors ${
+                          selectedTicket.id === caseTicket.id
+                            ? 'border-blue-700 bg-blue-950/40 text-blue-100'
+                            : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono text-[11px] text-zinc-500">{caseTicket.id}</span>
+                          <span className="shrink-0 text-[10px] text-zinc-500">{statusLabels[caseTicket.status]}</span>
+                        </div>
+                        <div className="mt-1 truncate text-xs font-medium text-zinc-200">{caseTicket.location}</div>
+                        <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-zinc-500">{caseTicket.message}</div>
+                      </button>
+                    ))}
                   </div>
-                )}
-                {selectedTicket.hasImage && (
-                  <div>
-                    <div className="text-xs text-zinc-500 mb-1">Attachment</div>
-                    <div className="flex items-center gap-1.5 text-sm text-blue-400"><Image className="w-3.5 h-3.5" />{selectedTicket.images?.length || 1} photo attached</div>
-                  </div>
-                )}
-                {selectedTicket.pingedAgencies.length > 0 && (
-                  <div>
-                    <div className="text-xs text-zinc-500 mb-1">Pinged Agencies</div>
-                    <div className="flex flex-wrap gap-1">
-                      {selectedTicket.pingedAgencies.map((agency) => <span key={agency} className="rounded bg-blue-950 px-1.5 py-0.5 text-xs text-blue-400">{agency}</span>)}
-                    </div>
-                  </div>
-                )}
-                <div className="pt-2 border-t border-zinc-800">
-                  <div className="text-xs text-zinc-500 mb-2">Route to Broadcast</div>
-                  <button onClick={() => sendTicketToBroadcast(selectedTicket)} className="w-full flex items-center justify-center gap-1.5 text-xs px-2 py-1.5 bg-zinc-950 border border-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-800 transition-colors">
-                    <Radio className="w-3 h-3" />
-                    Send to Broadcast
-                  </button>
                 </div>
-              </div>
+              )}
 
               <div className="min-h-0 flex-1 flex flex-col overflow-hidden">
+                <div className="border-b border-zinc-800 bg-zinc-950/50 px-4 py-2">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                    <span className="text-zinc-400"><span className="text-zinc-600">Reporter:</span> {selectedTicket.reporter}</span>
+                    <span className="text-zinc-400"><span className="text-zinc-600">Time:</span> {selectedTicket.timestamp}</span>
+                    <span className="text-zinc-400"><span className="text-zinc-600">Location:</span> {selectedTicket.location}</span>
+                    <span className="text-zinc-400"><span className="text-zinc-600">Agency:</span> {selectedTicket.assignedAgency}</span>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    <span className="text-zinc-400"><span className="text-zinc-600">Type:</span> {selectedTicket.crisisType}</span>
+                    <span className="text-zinc-400"><span className="text-zinc-600">Case:</span> {selectedTicket.subjectTag?.label ?? 'Ungrouped'}</span>
+                    <span className="text-zinc-400">
+                      <span className="text-zinc-600">Pinged:</span> {selectedTicket.pingedAgencies.length ? selectedTicket.pingedAgencies.join(', ') : 'None'}
+                    </span>
+                    {selectedTicket.startedWorkAt && (
+                      <span className="text-zinc-400"><span className="text-zinc-600">Handler:</span> {selectedTicket.currentHandler ?? selectedTicket.startedWorkBy ?? 'Started'}</span>
+                    )}
+                    {selectedTicket.hasImage && (
+                      <span className="text-blue-300">{selectedTicket.images?.length || 1} photo attached</span>
+                    )}
+                    <button onClick={() => sendTicketToBroadcast(selectedTicket)} className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300 transition-colors hover:bg-zinc-800">
+                      <Radio className="w-3 h-3" />
+                      Broadcast
+                    </button>
+                  </div>
+                </div>
+
                 {selectedTicket.status === 'open' && !selectedTicket.startedWorkAt && !selectedTicketResolved && (
                   <div className="border-b border-blue-900/60 bg-blue-950/30 px-5 py-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">
