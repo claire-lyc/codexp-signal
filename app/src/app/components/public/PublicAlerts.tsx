@@ -1,5 +1,5 @@
 // GET /api/citizen/alerts — linked to Government Broadcast Centre
-import { CheckCircle, AlertTriangle, Bell, Shield, ChevronRight } from 'lucide-react';
+import { Shield } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useApi } from '../../lib/api';
 import { apiUrl } from '../../lib/api';
@@ -26,61 +26,6 @@ type BroadcastAlert = {
   updates: { id: string; body: string; time: string; createdAt: string }[];
 };
 
-const incidents: Incident[] = [
-  {
-    id: 'INC-0041',
-    title: 'Flash Flood Warning — Orchard Road & East Coast',
-    severity: 'critical',
-    type: 'Weather',
-    region: 'Central, East',
-    status: 'active',
-    verified: true,
-    updates: [
-      { time: 'Jun 5, 14:30 SGT', text: 'Update — Water levels rising at Orchard Road underpass. Avoid the area. Alternative routes advised.' },
-      { time: 'Jun 5, 14:10 SGT', text: 'Monitoring — Flash flood risk elevated. PUB drainage teams deployed.' },
-      { time: 'Jun 5, 13:55 SGT', text: 'Investigating — Heavy rainfall reported in multiple zones. Assessing flood risk.' },
-    ],
-  },
-  {
-    id: 'INC-0040',
-    title: 'Dengue Red Zone — Bedok North Ave 1',
-    severity: 'high',
-    type: 'Health',
-    region: 'East',
-    status: 'active',
-    verified: true,
-    updates: [
-      { time: 'Jun 5, 13:00 SGT', text: 'Update — 23 confirmed cases in cluster. NEA fogging operations underway.' },
-      { time: 'Jun 5, 10:30 SGT', text: 'Identified — New dengue red zone declared at Bedok North Ave 1.' },
-    ],
-  },
-  {
-    id: 'INC-0039',
-    title: 'Panadol Menstrual Shortage — Islandwide',
-    severity: 'medium',
-    type: 'Supply',
-    region: 'Nationwide',
-    status: 'monitoring',
-    verified: true,
-    updates: [
-      { time: 'Jun 5, 09:45 SGT', text: 'Update — Alternate suppliers contacted. Estimated restock within 4 days. Pharmacists advised to recommend paracetamol alternatives.' },
-      { time: 'Jun 5, 08:00 SGT', text: 'Identified — Islandwide shortage confirmed at 87 outlets. Enterprise SG coordinating response.' },
-    ],
-  },
-  {
-    id: 'INC-0038',
-    title: 'Air Quality Advisory — PSI at Unhealthy Levels',
-    severity: 'medium',
-    type: 'Weather',
-    region: 'Nationwide',
-    status: 'monitoring',
-    verified: true,
-    updates: [
-      { time: 'Jun 5, 06:30 SGT', text: 'Monitoring — PSI at 156 (Unhealthy). Vulnerable groups should avoid prolonged outdoor activity. Wear N95 masks if going out.' },
-    ],
-  },
-];
-
 const pastIncidents: { date: string; items: { title: string; type: string; note: string }[] }[] = [
   {
     date: 'Jun 4, 2026',
@@ -104,23 +49,16 @@ const severityConfig: Record<string, { banner: string; dot: string; badge: strin
   low: { banner: 'bg-blue-950/40 border-blue-700', dot: 'bg-blue-500', badge: 'bg-blue-900 text-blue-400', label: 'LOW' },
 };
 
-const statusConfig: Record<string, string> = {
-  active: 'text-red-400',
-  monitoring: 'text-yellow-400',
-  resolved: 'text-green-400',
-};
-
 export default function PublicAlerts() {
   const { data, loading, error } = useApi<{ incidents: Incident[]; pastIncidents: typeof pastIncidents }>('/api/citizen/incidents');
   const [broadcasts, setBroadcasts] = useState<BroadcastAlert[]>([]);
-  const incidents = data?.incidents ?? [];
   const pastIncidents = data?.pastIncidents ?? [];
   const [subscribed, setSubscribed] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'active' | 'archive'>('active');
 
-  const activeIncidents = incidents.filter((i) => i.status !== 'resolved');
   const activeBroadcasts = broadcasts.filter((item) => item.status === 'ongoing');
   const resolvedBroadcasts = broadcasts.filter((item) => item.status === 'resolved');
+  const resolvedBroadcastGroups = groupResolvedBroadcastsByDate(resolvedBroadcasts);
 
   useEffect(() => {
     fetch(apiUrl('/api/citizen/broadcasts'))
@@ -134,188 +72,128 @@ export default function PublicAlerts() {
 
   return (
     <div className="space-y-8 max-w-3xl mx-auto">
-      {/* Subscribe bar */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Bell className="w-5 h-5 text-blue-400" />
-            <div>
-              <div className="font-medium text-sm">Subscribe to Alerts</div>
-              <div className="text-xs text-zinc-500">Get notified when new incidents are published</div>
-            </div>
-          </div>
-          <button
-            onClick={() => setSubscribed((s) => !s)}
-            className={`px-4 py-2 rounded-lg text-sm transition-colors whitespace-nowrap ${subscribed ? 'bg-green-700 text-white' : 'bg-red-600 hover:bg-red-700 text-white'}`}
-          >
-            {subscribed ? 'Subscribed' : 'Subscribe to Updates'}
-          </button>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold">Public Alerts</h1>
+          <p className="mt-1 text-sm text-zinc-400">Official government broadcasts and resolved advisories</p>
         </div>
+        <button
+          onClick={() => setSubscribed((s) => !s)}
+          className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${subscribed ? 'bg-green-700 text-white' : 'bg-zinc-100 text-zinc-950 hover:bg-white'}`}
+        >
+          {subscribed ? 'Subscribed' : 'Subscribe to Alerts'}
+        </button>
       </div>
 
       {loading && <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">Loading public incidents...</div>}
       {error && <div className="rounded-lg border border-red-800 bg-red-950/40 p-4 text-sm text-red-300">Public incidents API unavailable: {error}</div>}
 
-      {activeBroadcasts.length > 0 && (
+      {(activeBroadcasts.length > 0 || activeTab === 'archive') && (
         <div id="broadcasts">
-          <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold">Government Broadcasts</h2>
-            <span className="text-sm text-zinc-400">{activeBroadcasts.length} ongoing</span>
+            <span className="text-sm text-zinc-400">
+              {activeTab === 'active' ? `${activeBroadcasts.length} ongoing` : 'Archive'}
+            </span>
           </div>
+          <div className="mb-4 mt-1 text-left text-xs text-zinc-500">
+            <span>Emergency broadcast over past 90 days.</span>{' '}
+            <button
+              type="button"
+              onClick={() => setActiveTab(activeTab === 'archive' ? 'active' : 'archive')}
+              className="text-xs font-semibold text-zinc-200 transition-colors hover:text-white hover:underline"
+            >
+              {activeTab === 'archive' ? 'View active broadcasts.' : 'View historical broadcasts.'}
+            </button>
+          </div>
+
+          {activeTab === 'active' ? (
           <div className="space-y-3">
             {activeBroadcasts.map((broadcast) => {
               const cfg = severityConfig[broadcast.severity];
               return (
-                <div key={broadcast.id} className={`rounded-xl border p-5 ${cfg.banner}`}>
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <AlertTriangle className="h-4 w-4" />
-                    <span className="font-semibold">{broadcast.title}</span>
-                    <span className={`rounded px-1.5 py-0.5 text-xs ${cfg.badge}`}>{broadcast.severity.toUpperCase()}</span>
-                    <span className="text-xs text-zinc-500">{broadcast.time}</span>
+                <div key={broadcast.id} className={`overflow-hidden rounded-xl border ${cfg.banner}`}>
+                  <div className={severityHeaderClass(broadcast.severity)}>
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                      <span className="truncate text-base font-bold">{broadcast.title}</span>
+                      <span className="rounded bg-white/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide">{broadcast.severity}</span>
+                    </div>
+                    <span className="shrink-0 text-xs opacity-80">{broadcast.time}</span>
                   </div>
-                  <p className="text-sm text-zinc-300">{broadcast.message}</p>
-                  {Boolean(broadcast.updates?.length) && (
-                    <div className="mt-4 space-y-2 border-l border-white/15 pl-3">
-                      {broadcast.updates.map((update) => (
-                        <div key={update.id}>
-                          <div className="text-xs text-zinc-500">{update.time}</div>
-                          <p className="text-sm text-zinc-300">{update.body}</p>
-                        </div>
-                      ))}
+                  <div className="space-y-5 bg-zinc-950/85 px-5 py-4">
+                    <div>
+                      <p className="text-sm font-semibold leading-6 text-zinc-100">{broadcast.message}</p>
+                      <div className="mt-1 text-xs text-zinc-500">{broadcast.target} - Government Verified</div>
                     </div>
-                  )}
-                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                    <span>{broadcast.target}</span>
-                    <span>Government Verified</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Current incidents */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold">Current Incidents</h2>
-          <div className="flex items-center gap-2 text-sm">
-            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-zinc-400">{activeIncidents.length} active</span>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          {incidents.map((incident) => {
-            const cfg = severityConfig[incident.severity];
-            const isExpanded = expandedId === incident.id;
-            return (
-              <div key={incident.id} className={`border rounded-xl overflow-hidden ${cfg.banner}`}>
-                {/* Incident header */}
-                <button
-                  className="w-full text-left px-5 py-4"
-                  onClick={() => setExpandedId(isExpanded ? null : incident.id)}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-3 flex-1">
-                      <div className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${cfg.dot} ${incident.status === 'active' ? 'animate-pulse' : ''}`} />
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                          <span className="font-semibold">{incident.title}</span>
-                          {incident.verified && (
-                            <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 bg-green-950 text-green-400 rounded">
-                              <CheckCircle className="w-3 h-3" />Government Verified
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-                          <span className={`px-1.5 py-0.5 rounded ${cfg.badge}`}>{cfg.label}</span>
-                          <span>{incident.type}</span>
-                          <span>·</span>
-                          <span>{incident.region}</span>
-                          <span>·</span>
-                          <span className={statusConfig[incident.status]}>{incident.status.charAt(0).toUpperCase() + incident.status.slice(1)}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <ChevronRight className={`w-5 h-5 text-zinc-500 flex-shrink-0 mt-0.5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                  </div>
-                </button>
-
-                {/* Expanded updates */}
-                {isExpanded && (
-                  <div className="px-5 pb-4 pt-1 border-t border-white/10">
-                    <div className="space-y-3">
-                      {incident.updates.map((update, i) => (
-                        <div key={i} className="flex items-start gap-3">
-                          <div className="w-1 h-1 rounded-full bg-zinc-500 mt-2.5 flex-shrink-0" />
-                          <div>
-                            <div className="text-xs text-zinc-500 mb-0.5">{update.time}</div>
-                            <p className="text-sm text-zinc-300">{update.text}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-3 pt-3 border-t border-white/10 flex items-center gap-2 text-xs text-zinc-500">
-                      <span className="font-mono">{incident.id}</span>
-                      <span>·</span>
-                      <span>Alert ID for verification</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Past incidents */}
-      <div>
-        <h2 className="text-lg font-semibold mb-4 text-zinc-400">Past Incidents</h2>
-        <div className="space-y-6">
-          {resolvedBroadcasts.length > 0 && (
-            <div>
-              <div className="text-sm font-medium text-zinc-500 mb-3 border-b border-zinc-800 pb-2">Resolved broadcasts</div>
-              <div className="space-y-2">
-                {resolvedBroadcasts.map((broadcast) => (
-                  <div key={broadcast.id} className="px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-lg">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-sm">{broadcast.title}</span>
-                      <span className="text-xs px-2 py-0.5 bg-green-900/50 text-green-400 rounded">Resolved</span>
-                    </div>
-                    <div className="text-xs text-zinc-500">{broadcast.target} - {broadcast.message}</div>
                     {Boolean(broadcast.updates?.length) && (
-                      <div className="mt-2 space-y-1 border-l border-zinc-700 pl-3">
+                      <div className="space-y-4">
                         {broadcast.updates.map((update) => (
-                          <div key={update.id} className="text-xs text-zinc-500">
-                            {update.time} - {update.body}
+                          <div key={update.id}>
+                            <p className="text-sm leading-6 text-zinc-200">
+                              <span className="font-bold text-zinc-100">Update</span>
+                              <span className="text-zinc-500"> - </span>
+                              {update.body}
+                            </p>
+                            <div className="mt-1 text-xs text-zinc-500">{update.time}</div>
                           </div>
                         ))}
                       </div>
                     )}
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {pastIncidents.map((group) => (
-            <div key={group.date}>
-              <div className="text-sm font-medium text-zinc-500 mb-3 border-b border-zinc-800 pb-2">{group.date}</div>
-              <div className="space-y-2">
-                {group.items.map((item, i) => (
-                  <div key={i} className="px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-lg">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-sm">{item.title}</span>
-                      <span className="text-xs px-2 py-0.5 bg-green-900/50 text-green-400 rounded">Resolved</span>
-                    </div>
-                    <div className="text-xs text-zinc-500">{item.type} · {item.note}</div>
+                </div>
+              );
+            })}
+          </div>
+          ) : (
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+            <div className="mb-4 text-sm font-semibold text-zinc-200">Historical Broadcasts</div>
+            <div className="space-y-6">
+              {resolvedBroadcastGroups.map((group) => (
+                <div key={group.date}>
+                  <div className="text-sm font-medium text-zinc-500 mb-3 border-b border-zinc-800 pb-2">{group.date}</div>
+                  <div className="space-y-2">
+                    {group.items.map((broadcast) => (
+                      <div key={broadcast.id} className="px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-lg">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-sm">{broadcast.title}</span>
+                          <span className="text-xs px-2 py-0.5 bg-green-900/50 text-green-400 rounded">Resolved</span>
+                        </div>
+                        <div className="text-xs text-zinc-500">{broadcast.target} - {broadcast.message}</div>
+                        {Boolean(broadcast.updates?.length) && (
+                          <div className="mt-2 space-y-1 border-l border-zinc-700 pl-3">
+                            {broadcast.updates.map((update) => (
+                              <div key={update.id} className="text-xs text-zinc-500">
+                                {update.time} - {update.body}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
+              {pastIncidents.map((group) => (
+                <div key={group.date}>
+                  <div className="text-sm font-medium text-zinc-500 mb-3 border-b border-zinc-800 pb-2">{group.date}</div>
+                  <div className="space-y-2">
+                    {group.items.map((item, i) => (
+                      <div key={i} className="px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-lg">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-sm">{item.title}</span>
+                          <span className="text-xs px-2 py-0.5 bg-green-900/50 text-green-400 rounded">Resolved</span>
+                        </div>
+                        <div className="text-xs text-zinc-500">{item.type} - {item.note}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Verification note */}
       <div className="bg-blue-950/30 border border-blue-800 rounded-xl p-5">
@@ -326,6 +204,33 @@ export default function PublicAlerts() {
           </div>
         </div>
       </div>
+
     </div>
   );
+}
+
+function groupResolvedBroadcastsByDate(items: BroadcastAlert[]) {
+  const groups = new Map<string, BroadcastAlert[]>();
+
+  items.forEach((item) => {
+    const dateLabel = archiveDateLabel(item.time);
+    groups.set(dateLabel, [...(groups.get(dateLabel) ?? []), item]);
+  });
+
+  return Array.from(groups.entries()).map(([date, groupItems]) => ({ date, items: groupItems }));
+}
+
+function archiveDateLabel(value: string) {
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  return value.split(',')[0] || 'Resolved broadcasts';
+}
+
+function severityHeaderClass(severity: BroadcastAlert['severity']) {
+  if (severity === 'critical') return 'flex items-center justify-between gap-3 bg-red-600 px-5 py-3 text-white';
+  if (severity === 'high') return 'flex items-center justify-between gap-3 bg-orange-600 px-5 py-3 text-white';
+  if (severity === 'medium') return 'flex items-center justify-between gap-3 bg-yellow-500 px-5 py-3 text-zinc-950';
+  return 'flex items-center justify-between gap-3 bg-blue-600 px-5 py-3 text-white';
 }
