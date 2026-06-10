@@ -139,6 +139,8 @@ export async function listTickets(filters: {
   crisisType?: string;
   query?: string;
 }) {
+  await backfillMissingSubjectTags();
+
   const clauses: string[] = [];
   const values: unknown[] = [];
 
@@ -349,6 +351,12 @@ export async function createCitizenTicket(input: {
     const dbCrisisType = toDbCrisisType(input.crisisType);
     const agency = agencyForReport(input.crisisType, input.reportType, input.message, dbCrisisType);
     const agencyId = await upsertAgency(client, agency);
+    const subjectTagId = input.subjectTagId ?? await subjectTagIdForCitizenReport(client, {
+      title: input.title,
+      reportType: input.reportType,
+      crisisType: input.crisisType,
+      dbCrisisType,
+    });
 
     const reportResult = await client.query<{ id: string }>(
       `
@@ -384,7 +392,7 @@ export async function createCitizenTicket(input: {
         input.longitude ?? null,
         input.urgency,
         agencyId,
-        input.subjectTagId ?? null,
+        subjectTagId,
       ],
     );
 
@@ -442,8 +450,6 @@ export async function updateTicketStatus(id: string, status: TicketStatus) {
       UPDATE citizen.reports
       SET
         status = $2::citizen.report_status,
-        subject_tag_id = CASE WHEN $2::citizen.report_status = 'resolved'::citizen.report_status THEN NULL ELSE subject_tag_id END,
-        grouped_report_id = CASE WHEN $2::citizen.report_status = 'resolved'::citizen.report_status THEN NULL ELSE grouped_report_id END,
         updated_at = now(),
         chat_enabled = CASE WHEN $2::citizen.report_status = 'resolved'::citizen.report_status THEN false ELSE true END,
         chat_closed_at = CASE WHEN $2::citizen.report_status = 'resolved'::citizen.report_status THEN now() ELSE NULL END
@@ -975,6 +981,99 @@ async function upsertAgency(client: { query: typeof pool.query }, agency: { code
     [agency.code, agency.name],
   );
   return result.rows[0].id;
+}
+
+async function subjectTagIdForCitizenReport(
+  client: { query: typeof pool.query },
+  input: { title?: string; reportType?: string; crisisType: string; dbCrisisType: DbCrisisType },
+) {
+  const label = input.title?.trim();
+  if (!label || isOtherSpecificProblem(label) || isOtherSpecificProblem(input.reportType)) return null;
+
+  const categories = [...new Set([
+    input.reportType?.trim().toLowerCase(),
+    categoryForDbCrisisType(input.dbCrisisType),
+  ].filter((category): category is string => Boolean(category)))];
+
+  const result = await client.query<{ id: string }>(
+    `
+      INSERT INTO citizen.report_subject_tags (label, description)
+      VALUES ($1, $2)
+      ON CONFLICT (label)
+      DO UPDATE SET description = COALESCE(citizen.report_subject_tags.description, EXCLUDED.description), updated_at = now()
+      RETURNING id
+    `,
+    [label, `Citizen reports for ${label}.`],
+  );
+  const subjectTagId = result.rows[0]?.id;
+  if (!subjectTagId) return null;
+
+  if (categories.length) {
+    await client.query(
+      `
+        INSERT INTO citizen.report_subject_tag_categories (subject_tag_id, category)
+        SELECT $1, unnest($2::text[])
+        ON CONFLICT (subject_tag_id, category) DO NOTHING
+      `,
+      [subjectTagId, categories],
+    );
+  }
+
+  return subjectTagId;
+}
+
+async function backfillMissingSubjectTags() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const rows = await client.query<{
+      id: string;
+      title: string | null;
+      report_type: string | null;
+      crisis_type: DbCrisisType;
+    }>(
+      `
+        SELECT id, title, report_type, crisis_type
+        FROM citizen.reports
+        WHERE subject_tag_id IS NULL
+          AND title IS NOT NULL
+          AND btrim(title) <> ''
+          AND lower(btrim(title)) NOT LIKE 'other%'
+          AND COALESCE(lower(btrim(report_type)), '') <> 'other'
+        LIMIT 200
+      `,
+    );
+
+    for (const row of rows.rows) {
+      const subjectTagId = await subjectTagIdForCitizenReport(client, {
+        title: row.title ?? undefined,
+        reportType: row.report_type ?? undefined,
+        crisisType: row.report_type ?? row.crisis_type,
+        dbCrisisType: row.crisis_type,
+      });
+      if (!subjectTagId) continue;
+      await client.query(
+        `UPDATE citizen.reports SET subject_tag_id = $1, updated_at = now() WHERE id = $2`,
+        [subjectTagId, row.id],
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+function isOtherSpecificProblem(value?: string | null) {
+  return Boolean(value?.trim().toLowerCase().startsWith('other'));
+}
+
+function categoryForDbCrisisType(value: DbCrisisType) {
+  if (value === 'supply_chain') return 'supply';
+  return value;
 }
 
 function toDbStatus(value?: string | null): ReportStatus | null {
