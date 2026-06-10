@@ -1,0 +1,3778 @@
+{
+  "id": "long-flooding-demo",
+  "title": "Long Flooding Simulated Crisis",
+  "description": "Local demo data for a staged long flooding crisis pitch. Data is not wired into the app yet.",
+  "startsAt": "2026-07-06T00:00:00.000Z",
+  "frames": [
+    {
+      "id": "frame-1",
+      "label": "First signal",
+      "dayRange": [
+        1,
+        1
+      ],
+      "displayGranularity": "hour",
+      "narrative": "Crisis just started. Government has no official picture yet; first indication comes from River Valley citizen forum chatter and one report."
+    },
+    {
+      "id": "frame-2",
+      "label": "Multi-location escalation",
+      "dayRange": [
+        2,
+        3
+      ],
+      "displayGranularity": "hour",
+      "narrative": "Flooding is now visible at River Valley, Orchard, and Marine Parade. Forums show panic, road disruption, and useful citizen advice."
+    },
+    {
+      "id": "frame-3",
+      "label": "Shelter and relief response",
+      "dayRange": [
+        4,
+        11
+      ],
+      "displayGranularity": "day",
+      "narrative": "Flood location tags are superseded by shelter crisis tags. Forum activity focuses on shelter conditions, supplies, comfort, and volunteer support."
+    },
+    {
+      "id": "frame-4",
+      "label": "Subsiding and cleanup",
+      "dayRange": [
+        12,
+        20
+      ],
+      "displayGranularity": "day",
+      "narrative": "Flood is subsiding. Forum activity cools to about one-third of peak and moves toward cleanup help. Forum posts no longer carry crisis tags."
+    }
+  ],
+  "actors": [
+    {
+      "id": "u-amirah",
+      "name": "Amirah N.",
+      "role": "citizen"
+    },
+    {
+      "id": "u-joel",
+      "name": "Joel Tan",
+      "role": "citizen"
+    },
+    {
+      "id": "u-uncle-ray",
+      "name": "Uncle Ray",
+      "role": "citizen"
+    },
+    {
+      "id": "u-mei",
+      "name": "Mei Ling",
+      "role": "citizen"
+    },
+    {
+      "id": "u-arjun",
+      "name": "Arjun K.",
+      "role": "citizen"
+    },
+    {
+      "id": "u-nadya",
+      "name": "Nadya",
+      "role": "citizen"
+    },
+    {
+      "id": "u-shawn",
+      "name": "shawn99",
+      "role": "citizen"
+    },
+    {
+      "id": "u-huiwen",
+      "name": "Hui Wen",
+      "role": "citizen"
+    },
+    {
+      "id": "u-farid",
+      "name": "Farid",
+      "role": "citizen"
+    },
+    {
+      "id": "u-chloe",
+      "name": "Chloe W.",
+      "role": "citizen"
+    },
+    {
+      "id": "u-benny",
+      "name": "Benny",
+      "role": "citizen"
+    },
+    {
+      "id": "u-vanessa",
+      "name": "Vanessa L.",
+      "role": "citizen"
+    },
+    {
+      "id": "u-ryan",
+      "name": "ryan_here",
+      "role": "citizen"
+    },
+    {
+      "id": "u-grace",
+      "name": "Grace Ong",
+      "role": "citizen"
+    },
+    {
+      "id": "u-janice",
+      "name": "Janice P.",
+      "role": "citizen"
+    },
+    {
+      "id": "u-marcus",
+      "name": "Marcus",
+      "role": "citizen"
+    },
+    {
+      "id": "u-siti",
+      "name": "Siti H.",
+      "role": "citizen"
+    },
+    {
+      "id": "u-yx",
+      "name": "yx",
+      "role": "citizen"
+    },
+    {
+      "id": "u-linda",
+      "name": "Linda",
+      "role": "citizen"
+    },
+    {
+      "id": "u-daniel",
+      "name": "Daniel Foo",
+      "role": "citizen"
+    },
+    {
+      "id": "u-kavya",
+      "name": "Kavya",
+      "role": "citizen"
+    },
+    {
+      "id": "u-zhen",
+      "name": "Zhen",
+      "role": "citizen"
+    },
+    {
+      "id": "u-nora",
+      "name": "Nora",
+      "role": "citizen"
+    },
+    {
+      "id": "u-caleb",
+      "name": "Caleb",
+      "role": "citizen"
+    },
+    {
+      "id": "u-sam",
+      "name": "Sam",
+      "role": "citizen"
+    },
+    {
+      "id": "u-viv",
+      "name": "Vivian",
+      "role": "citizen"
+    }
+  ],
+  "crisisTags": [
+    {
+      "id": "tag-flash-flood-rv",
+      "label": "Flash flood",
+      "frameId": "frame-1",
+      "categories": [
+        "Flooding",
+        "Weather"
+      ],
+      "location": {
+        "label": "River Valley",
+        "latitude": 1.2937,
+        "longitude": 103.8351,
+        "planningArea": "River Valley"
+      },
+      "status": "active"
+    },
+    {
+      "id": "tag-rv-flood",
+      "label": "RV flood",
+      "frameId": "frame-2",
+      "categories": [
+        "Flooding",
+        "Weather",
+        "Public Safety"
+      ],
+      "location": {
+        "label": "River Valley",
+        "latitude": 1.2937,
+        "longitude": 103.8351,
+        "planningArea": "River Valley"
+      },
+      "status": "active"
+    },
+    {
+      "id": "tag-orchard-flood",
+      "label": "Orchard flood",
+      "frameId": "frame-2",
+      "categories": [
+        "Flooding",
+        "Transport",
+        "Public Safety"
+      ],
+      "location": {
+        "label": "Orchard Road",
+        "latitude": 1.3048,
+        "longitude": 103.8318,
+        "planningArea": "Orchard"
+      },
+      "status": "active"
+    },
+    {
+      "id": "tag-marine-parade-flood",
+      "label": "Marine Parade flood",
+      "frameId": "frame-2",
+      "categories": [
+        "Flooding",
+        "Weather",
+        "Infrastructure"
+      ],
+      "location": {
+        "label": "Marine Parade",
+        "latitude": 1.3027,
+        "longitude": 103.9063,
+        "planningArea": "Marine Parade"
+      },
+      "status": "active"
+    },
+    {
+      "id": "tag-s-river-valley-cc",
+      "label": "S River Valley CC",
+      "frameId": "frame-3",
+      "categories": [
+        "Shelter",
+        "Flooding",
+        "Relief"
+      ],
+      "location": {
+        "label": "River Valley Community Centre",
+        "latitude": 1.2962,
+        "longitude": 103.8344,
+        "planningArea": "River Valley"
+      },
+      "status": "shelter"
+    },
+    {
+      "id": "tag-s-orchard-library",
+      "label": "S Orchard Library",
+      "frameId": "frame-3",
+      "categories": [
+        "Shelter",
+        "Flooding",
+        "Relief"
+      ],
+      "location": {
+        "label": "Library@Orchard relief point",
+        "latitude": 1.3041,
+        "longitude": 103.8319,
+        "planningArea": "Orchard"
+      },
+      "status": "shelter"
+    },
+    {
+      "id": "tag-s-marine-parade-cc",
+      "label": "S Marine Parade CC",
+      "frameId": "frame-3",
+      "categories": [
+        "Shelter",
+        "Flooding",
+        "Relief"
+      ],
+      "location": {
+        "label": "Marine Parade Community Club",
+        "latitude": 1.3049,
+        "longitude": 103.9074,
+        "planningArea": "Marine Parade"
+      },
+      "status": "shelter"
+    }
+  ],
+  "forumPosts": [
+    {
+      "id": "forum-flood-rv-first-water",
+      "frameId": "frame-1",
+      "title": "River Valley water rising near the side road",
+      "authorId": "u-amirah",
+      "authorName": "Amirah N.",
+      "content": "Anyone else seeing water rushing down River Valley side road? It started as normal rain but now the drain is overflowing and water is coming over the kerb.",
+      "createdAt": "2026-07-06T01:18:00.000Z",
+      "location": "River Valley",
+      "latitude": 1.2937,
+      "longitude": 103.8351,
+      "crisisTagIds": [
+        "tag-flash-flood-rv"
+      ],
+      "likes": 9,
+      "dislikes": 0,
+      "reports": 0,
+      "moderationState": "live",
+      "replies": [
+        {
+          "id": "forum-flood-rv-first-water-reply-01",
+          "authorId": "u-chloe",
+          "authorName": "Chloe W.",
+          "content": "my shoes are fully soaked lol, pavement outside the condo is basically a stream",
+          "createdAt": "2026-07-06T01:20:00.000Z",
+          "likes": 3
+        },
+        {
+          "id": "forum-flood-rv-first-water-reply-02",
+          "authorId": "u-sam",
+          "authorName": "Sam",
+          "content": "please dont drive through if you cant see the kerb, saw one car almost stall",
+          "createdAt": "2026-07-06T03:35:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-flood-rv-first-water-reply-03",
+          "authorId": "u-siti",
+          "authorName": "Siti H.",
+          "content": "take pics and report also, this one looks worse than normal rain",
+          "createdAt": "2026-07-06T05:47:00.000Z",
+          "likes": 3
+        }
+      ]
+    },
+    {
+      "id": "forum-rv-flood-spreading",
+      "frameId": "frame-2",
+      "title": "RV flood moving toward the smaller lanes",
+      "authorId": "u-joel",
+      "authorName": "Joel Tan",
+      "content": "River Valley side streets getting worse. Water is moving toward the shophouses and people are starting to move stuff upstairs.",
+      "createdAt": "2026-07-07T00:12:00.000Z",
+      "location": "River Valley",
+      "latitude": 1.2937,
+      "longitude": 103.8351,
+      "crisisTagIds": [
+        "tag-rv-flood"
+      ],
+      "likes": 137,
+      "dislikes": 4,
+      "reports": 2,
+      "moderationState": "live",
+      "replies": [
+        {
+          "id": "forum-rv-flood-spreading-reply-01",
+          "authorId": "u-yx",
+          "authorName": "yx",
+          "content": "avoid sending rumours pls, just say what you actually see",
+          "createdAt": "2026-07-06T23:10:00.000Z",
+          "likes": 20
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-02",
+          "authorId": "u-siti",
+          "authorName": "Siti H.",
+          "content": "move valuables higher if you are ground floor, sounds obvious but do now not later",
+          "createdAt": "2026-07-06T23:12:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-03",
+          "authorId": "u-farid",
+          "authorName": "Farid",
+          "content": "anyone with boots can help move cartons at the shop row?",
+          "createdAt": "2026-07-06T23:16:00.000Z",
+          "likes": 3
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-04",
+          "authorId": "u-mei",
+          "authorName": "Mei Ling",
+          "content": "i think the canal is near the limit already",
+          "createdAt": "2026-07-06T23:21:00.000Z",
+          "likes": 13
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-05",
+          "authorId": "u-mei",
+          "authorName": "Mei Ling",
+          "content": "water is around ankle height at my side, knee height nearer the crossing",
+          "createdAt": "2026-07-06T23:22:00.000Z",
+          "likes": 0
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-06",
+          "authorId": "u-ryan",
+          "authorName": "ryan_here",
+          "content": "saw one uncle slip, he is okay but the tiles are super slick",
+          "createdAt": "2026-07-06T23:38:00.000Z",
+          "likes": 7
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-07",
+          "authorId": "u-nora",
+          "authorName": "Nora",
+          "content": "move valuables higher if you are ground floor, sounds obvious but do now not later",
+          "createdAt": "2026-07-06T23:42:00.000Z",
+          "likes": 14
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-08",
+          "authorId": "u-amirah",
+          "authorName": "Amirah N.",
+          "content": "if you can, share exact location and depth. saying flood everywhere not helpful",
+          "createdAt": "2026-07-06T23:42:00.000Z",
+          "likes": 6
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-09",
+          "authorId": "u-benny",
+          "authorName": "Benny",
+          "content": "anyone with boots can help move cartons at the shop row?",
+          "createdAt": "2026-07-06T23:46:00.000Z",
+          "likes": 16
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-10",
+          "authorId": "u-kavya",
+          "authorName": "Kavya",
+          "content": "dont open manhole covers please, that is dangerous",
+          "createdAt": "2026-07-06T23:47:00.000Z",
+          "likes": 23
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-11",
+          "authorId": "u-yx",
+          "authorName": "yx",
+          "content": "saw staff putting sandbags near the entrance, so maybe avoid that side",
+          "createdAt": "2026-07-06T23:52:00.000Z",
+          "likes": 22
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-12",
+          "authorId": "u-kavya",
+          "authorName": "Kavya",
+          "content": "dont open manhole covers please, that is dangerous",
+          "createdAt": "2026-07-07T00:04:00.000Z",
+          "likes": 22
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-13",
+          "authorId": "u-janice",
+          "authorName": "Janice P.",
+          "content": "if you can, share exact location and depth. saying flood everywhere not helpful",
+          "createdAt": "2026-07-07T02:17:00.000Z",
+          "likes": 23
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-14",
+          "authorId": "u-siti",
+          "authorName": "Siti H.",
+          "content": "i think the canal is near the limit already",
+          "createdAt": "2026-07-07T03:36:00.000Z",
+          "likes": 2
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-15",
+          "authorId": "u-nadya",
+          "authorName": "Nadya",
+          "content": "keep power banks charged, my block lights flickered twice",
+          "createdAt": "2026-07-07T05:08:00.000Z",
+          "likes": 17
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-16",
+          "authorId": "u-benny",
+          "authorName": "Benny",
+          "content": "i think the canal is near the limit already",
+          "createdAt": "2026-07-07T06:27:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-17",
+          "authorId": "u-grace",
+          "authorName": "Grace Ong",
+          "content": "guys dont crowd the underpass, there is literally nowhere to go if water rises again",
+          "createdAt": "2026-07-07T08:32:00.000Z",
+          "likes": 22
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-18",
+          "authorId": "u-janice",
+          "authorName": "Janice P.",
+          "content": "saw one uncle slip, he is okay but the tiles are super slick",
+          "createdAt": "2026-07-07T10:08:00.000Z",
+          "likes": 17
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-19",
+          "authorId": "u-uncle-ray",
+          "authorName": "Uncle Ray",
+          "content": "guys dont crowd the underpass, there is literally nowhere to go if water rises again",
+          "createdAt": "2026-07-07T13:34:00.000Z",
+          "likes": 7
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-20",
+          "authorId": "u-grace",
+          "authorName": "Grace Ong",
+          "content": "bring umbrella but honestly wind is making it useless",
+          "createdAt": "2026-07-07T15:22:00.000Z",
+          "likes": 17
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-21",
+          "authorId": "u-sam",
+          "authorName": "Sam",
+          "content": "move valuables higher if you are ground floor, sounds obvious but do now not later",
+          "createdAt": "2026-07-07T23:07:00.000Z",
+          "likes": 11
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-22",
+          "authorId": "u-amirah",
+          "authorName": "Amirah N.",
+          "content": "keep power banks charged, my block lights flickered twice",
+          "createdAt": "2026-07-07T23:24:00.000Z",
+          "likes": 23
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-23",
+          "authorId": "u-grace",
+          "authorName": "Grace Ong",
+          "content": "i can shelter two people at the lobby until rain slows",
+          "createdAt": "2026-07-07T23:44:00.000Z",
+          "likes": 21
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-24",
+          "authorId": "u-vanessa",
+          "authorName": "Vanessa L.",
+          "content": "does anyone need a phone charger? i am at the cafe near the corner",
+          "createdAt": "2026-07-08T03:18:00.000Z",
+          "likes": 7
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-25",
+          "authorId": "u-grace",
+          "authorName": "Grace Ong",
+          "content": "i can shelter two people at the lobby until rain slows",
+          "createdAt": "2026-07-08T06:45:00.000Z",
+          "likes": 17
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-26",
+          "authorId": "u-benny",
+          "authorName": "Benny",
+          "content": "traffic police just arrived at the junction",
+          "createdAt": "2026-07-08T10:40:00.000Z",
+          "likes": 7
+        },
+        {
+          "id": "forum-rv-flood-spreading-reply-27",
+          "authorId": "u-marcus",
+          "authorName": "Marcus",
+          "content": "saw staff putting sandbags near the entrance, so maybe avoid that side",
+          "createdAt": "2026-07-08T15:40:00.000Z",
+          "likes": 23
+        }
+      ]
+    },
+    {
+      "id": "forum-orchard-flood-underpass",
+      "frameId": "frame-2",
+      "title": "Orchard underpass water is not normal",
+      "authorId": "u-huiwen",
+      "authorName": "Hui Wen",
+      "content": "Orchard underpass is filling up again. Some people still trying to cross and it is honestly not worth it.",
+      "createdAt": "2026-07-07T03:19:00.000Z",
+      "location": "Orchard Road",
+      "latitude": 1.3048,
+      "longitude": 103.8318,
+      "crisisTagIds": [
+        "tag-orchard-flood"
+      ],
+      "likes": 103,
+      "dislikes": 1,
+      "reports": 1,
+      "moderationState": "live",
+      "replies": [
+        {
+          "id": "forum-orchard-flood-underpass-reply-01",
+          "authorId": "u-siti",
+          "authorName": "Siti H.",
+          "content": "i think the canal is near the limit already",
+          "createdAt": "2026-07-06T23:03:00.000Z",
+          "likes": 8
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-02",
+          "authorId": "u-mei",
+          "authorName": "Mei Ling",
+          "content": "keep power banks charged, my block lights flickered twice",
+          "createdAt": "2026-07-06T23:06:00.000Z",
+          "likes": 13
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-03",
+          "authorId": "u-zhen",
+          "authorName": "Zhen",
+          "content": "my grab driver cancelled and told me orchard is a mess now",
+          "createdAt": "2026-07-06T23:17:00.000Z",
+          "likes": 17
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-04",
+          "authorId": "u-sam",
+          "authorName": "Sam",
+          "content": "saw staff putting sandbags near the entrance, so maybe avoid that side",
+          "createdAt": "2026-07-06T23:20:00.000Z",
+          "likes": 2
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-05",
+          "authorId": "u-farid",
+          "authorName": "Farid",
+          "content": "my grab driver cancelled and told me orchard is a mess now",
+          "createdAt": "2026-07-06T23:24:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-06",
+          "authorId": "u-shawn",
+          "authorName": "shawn99",
+          "content": "bring umbrella but honestly wind is making it useless",
+          "createdAt": "2026-07-06T23:27:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-07",
+          "authorId": "u-ryan",
+          "authorName": "ryan_here",
+          "content": "traffic police just arrived at the junction",
+          "createdAt": "2026-07-06T23:30:00.000Z",
+          "likes": 21
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-08",
+          "authorId": "u-marcus",
+          "authorName": "Marcus",
+          "content": "traffic police just arrived at the junction",
+          "createdAt": "2026-07-06T23:36:00.000Z",
+          "likes": 11
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-09",
+          "authorId": "u-linda",
+          "authorName": "Linda",
+          "content": "avoid sending rumours pls, just say what you actually see",
+          "createdAt": "2026-07-06T23:50:00.000Z",
+          "likes": 2
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-10",
+          "authorId": "u-shawn",
+          "authorName": "shawn99",
+          "content": "move valuables higher if you are ground floor, sounds obvious but do now not later",
+          "createdAt": "2026-07-06T23:51:00.000Z",
+          "likes": 14
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-11",
+          "authorId": "u-mei",
+          "authorName": "Mei Ling",
+          "content": "i think the canal is near the limit already",
+          "createdAt": "2026-07-07T00:12:00.000Z",
+          "likes": 19
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-12",
+          "authorId": "u-farid",
+          "authorName": "Farid",
+          "content": "not to scare people but the water is brown and smells bad, dont let kids play there",
+          "createdAt": "2026-07-07T01:23:00.000Z",
+          "likes": 15
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-13",
+          "authorId": "u-viv",
+          "authorName": "Vivian",
+          "content": "keep power banks charged, my block lights flickered twice",
+          "createdAt": "2026-07-07T02:52:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-14",
+          "authorId": "u-arjun",
+          "authorName": "Arjun K.",
+          "content": "keep power banks charged, my block lights flickered twice",
+          "createdAt": "2026-07-07T04:46:00.000Z",
+          "likes": 7
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-15",
+          "authorId": "u-viv",
+          "authorName": "Vivian",
+          "content": "keep power banks charged, my block lights flickered twice",
+          "createdAt": "2026-07-07T06:40:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-16",
+          "authorId": "u-mei",
+          "authorName": "Mei Ling",
+          "content": "water is around ankle height at my side, knee height nearer the crossing",
+          "createdAt": "2026-07-07T08:30:00.000Z",
+          "likes": 16
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-17",
+          "authorId": "u-farid",
+          "authorName": "Farid",
+          "content": "dont open manhole covers please, that is dangerous",
+          "createdAt": "2026-07-07T10:45:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-18",
+          "authorId": "u-vanessa",
+          "authorName": "Vanessa L.",
+          "content": "avoid sending rumours pls, just say what you actually see",
+          "createdAt": "2026-07-07T12:37:00.000Z",
+          "likes": 18
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-19",
+          "authorId": "u-janice",
+          "authorName": "Janice P.",
+          "content": "if you can, share exact location and depth. saying flood everywhere not helpful",
+          "createdAt": "2026-07-07T14:20:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-20",
+          "authorId": "u-mei",
+          "authorName": "Mei Ling",
+          "content": "dont open manhole covers please, that is dangerous",
+          "createdAt": "2026-07-07T23:16:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-21",
+          "authorId": "u-siti",
+          "authorName": "Siti H.",
+          "content": "for elderly folks please call family now, dont wait until phone battery low",
+          "createdAt": "2026-07-07T23:20:00.000Z",
+          "likes": 19
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-22",
+          "authorId": "u-shawn",
+          "authorName": "shawn99",
+          "content": "for elderly folks please call family now, dont wait until phone battery low",
+          "createdAt": "2026-07-07T23:23:00.000Z",
+          "likes": 20
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-23",
+          "authorId": "u-nadya",
+          "authorName": "Nadya",
+          "content": "guys dont crowd the underpass, there is literally nowhere to go if water rises again",
+          "createdAt": "2026-07-08T02:24:00.000Z",
+          "likes": 0
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-24",
+          "authorId": "u-siti",
+          "authorName": "Siti H.",
+          "content": "does anyone need a phone charger? i am at the cafe near the corner",
+          "createdAt": "2026-07-08T06:54:00.000Z",
+          "likes": 8
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-25",
+          "authorId": "u-ryan",
+          "authorName": "ryan_here",
+          "content": "saw staff putting sandbags near the entrance, so maybe avoid that side",
+          "createdAt": "2026-07-08T10:55:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-orchard-flood-underpass-reply-26",
+          "authorId": "u-caleb",
+          "authorName": "Caleb",
+          "content": "bring umbrella but honestly wind is making it useless",
+          "createdAt": "2026-07-08T15:29:00.000Z",
+          "likes": 18
+        }
+      ]
+    },
+    {
+      "id": "forum-marine-parade-flood-shops",
+      "frameId": "frame-2",
+      "title": "Marine Parade shop row flooding too",
+      "authorId": "u-farid",
+      "authorName": "Farid",
+      "content": "Marine Parade side has water entering the shop row. Not super deep everywhere but the low spots are bad.",
+      "createdAt": "2026-07-07T06:26:00.000Z",
+      "location": "Marine Parade",
+      "latitude": 1.3027,
+      "longitude": 103.9063,
+      "crisisTagIds": [
+        "tag-marine-parade-flood"
+      ],
+      "likes": 95,
+      "dislikes": 1,
+      "reports": 1,
+      "moderationState": "live",
+      "replies": [
+        {
+          "id": "forum-marine-parade-flood-shops-reply-01",
+          "authorId": "u-grace",
+          "authorName": "Grace Ong",
+          "content": "for elderly folks please call family now, dont wait until phone battery low",
+          "createdAt": "2026-07-06T23:08:00.000Z",
+          "likes": 14
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-02",
+          "authorId": "u-mei",
+          "authorName": "Mei Ling",
+          "content": "traffic police just arrived at the junction",
+          "createdAt": "2026-07-06T23:30:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-03",
+          "authorId": "u-shawn",
+          "authorName": "shawn99",
+          "content": "does anyone need a phone charger? i am at the cafe near the corner",
+          "createdAt": "2026-07-06T23:32:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-04",
+          "authorId": "u-marcus",
+          "authorName": "Marcus",
+          "content": "anyone with boots can help move cartons at the shop row?",
+          "createdAt": "2026-07-06T23:40:00.000Z",
+          "likes": 18
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-05",
+          "authorId": "u-uncle-ray",
+          "authorName": "Uncle Ray",
+          "content": "keep power banks charged, my block lights flickered twice",
+          "createdAt": "2026-07-06T23:41:00.000Z",
+          "likes": 22
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-06",
+          "authorId": "u-farid",
+          "authorName": "Farid",
+          "content": "saw one uncle slip, he is okay but the tiles are super slick",
+          "createdAt": "2026-07-06T23:43:00.000Z",
+          "likes": 16
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-07",
+          "authorId": "u-linda",
+          "authorName": "Linda",
+          "content": "please check on basement carparks, that is the scary part",
+          "createdAt": "2026-07-06T23:45:00.000Z",
+          "likes": 18
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-08",
+          "authorId": "u-kavya",
+          "authorName": "Kavya",
+          "content": "keep power banks charged, my block lights flickered twice",
+          "createdAt": "2026-07-06T23:46:00.000Z",
+          "likes": 19
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-09",
+          "authorId": "u-nora",
+          "authorName": "Nora",
+          "content": "does anyone need a phone charger? i am at the cafe near the corner",
+          "createdAt": "2026-07-06T23:47:00.000Z",
+          "likes": 9
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-10",
+          "authorId": "u-chloe",
+          "authorName": "Chloe W.",
+          "content": "if you can, share exact location and depth. saying flood everywhere not helpful",
+          "createdAt": "2026-07-06T23:54:00.000Z",
+          "likes": 12
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-11",
+          "authorId": "u-marcus",
+          "authorName": "Marcus",
+          "content": "dont open manhole covers please, that is dangerous",
+          "createdAt": "2026-07-07T01:26:00.000Z",
+          "likes": 0
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-12",
+          "authorId": "u-yx",
+          "authorName": "yx",
+          "content": "i think the canal is near the limit already",
+          "createdAt": "2026-07-07T02:09:00.000Z",
+          "likes": 12
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-13",
+          "authorId": "u-yx",
+          "authorName": "yx",
+          "content": "water is around ankle height at my side, knee height nearer the crossing",
+          "createdAt": "2026-07-07T04:10:00.000Z",
+          "likes": 13
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-14",
+          "authorId": "u-huiwen",
+          "authorName": "Hui Wen",
+          "content": "i think the canal is near the limit already",
+          "createdAt": "2026-07-07T06:55:00.000Z",
+          "likes": 6
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-15",
+          "authorId": "u-vanessa",
+          "authorName": "Vanessa L.",
+          "content": "bring umbrella but honestly wind is making it useless",
+          "createdAt": "2026-07-07T08:16:00.000Z",
+          "likes": 15
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-16",
+          "authorId": "u-huiwen",
+          "authorName": "Hui Wen",
+          "content": "anyone know if buses are still running from this stop?",
+          "createdAt": "2026-07-07T10:55:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-17",
+          "authorId": "u-arjun",
+          "authorName": "Arjun K.",
+          "content": "dont open manhole covers please, that is dangerous",
+          "createdAt": "2026-07-07T13:37:00.000Z",
+          "likes": 19
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-18",
+          "authorId": "u-vanessa",
+          "authorName": "Vanessa L.",
+          "content": "move valuables higher if you are ground floor, sounds obvious but do now not later",
+          "createdAt": "2026-07-07T15:37:00.000Z",
+          "likes": 17
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-19",
+          "authorId": "u-zhen",
+          "authorName": "Zhen",
+          "content": "anyone with boots can help move cartons at the shop row?",
+          "createdAt": "2026-07-07T23:08:00.000Z",
+          "likes": 6
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-20",
+          "authorId": "u-kavya",
+          "authorName": "Kavya",
+          "content": "move valuables higher if you are ground floor, sounds obvious but do now not later",
+          "createdAt": "2026-07-07T23:26:00.000Z",
+          "likes": 2
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-21",
+          "authorId": "u-siti",
+          "authorName": "Siti H.",
+          "content": "water is around ankle height at my side, knee height nearer the crossing",
+          "createdAt": "2026-07-08T01:13:00.000Z",
+          "likes": 16
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-22",
+          "authorId": "u-uncle-ray",
+          "authorName": "Uncle Ray",
+          "content": "saw one uncle slip, he is okay but the tiles are super slick",
+          "createdAt": "2026-07-08T05:27:00.000Z",
+          "likes": 20
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-23",
+          "authorId": "u-yx",
+          "authorName": "yx",
+          "content": "anyone know if buses are still running from this stop?",
+          "createdAt": "2026-07-08T10:47:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-marine-parade-flood-shops-reply-24",
+          "authorId": "u-uncle-ray",
+          "authorName": "Uncle Ray",
+          "content": "please check on basement carparks, that is the scary part",
+          "createdAt": "2026-07-08T15:56:00.000Z",
+          "likes": 1
+        }
+      ]
+    },
+    {
+      "id": "forum-shelter-rv-cc-supplies",
+      "frameId": "frame-3",
+      "title": "River Valley CC shelter supply updates",
+      "authorId": "u-linda",
+      "authorName": "Linda",
+      "content": "At River Valley CC shelter now. Safe and dry, but towels and hot food are running short. Please update if you are bringing supplies.",
+      "createdAt": "2026-07-09T02:05:00.000Z",
+      "location": "River Valley Community Centre",
+      "latitude": 1.2962,
+      "longitude": 103.8344,
+      "crisisTagIds": [
+        "tag-s-river-valley-cc"
+      ],
+      "likes": 189,
+      "dislikes": 1,
+      "reports": 0,
+      "moderationState": "live",
+      "replies": [
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-01",
+          "authorId": "u-yx",
+          "authorName": "yx",
+          "content": "it is calmer now, people just tired",
+          "createdAt": "2026-07-09T00:20:00.000Z",
+          "likes": 5
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-02",
+          "authorId": "u-grace",
+          "authorName": "Grace Ong",
+          "content": "saw a nurse checking minor cuts near the entrance",
+          "createdAt": "2026-07-09T01:04:00.000Z",
+          "likes": 0
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-03",
+          "authorId": "u-joel",
+          "authorName": "Joel Tan",
+          "content": "not perfect but at least dry and safe here",
+          "createdAt": "2026-07-09T11:08:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-04",
+          "authorId": "u-yx",
+          "authorName": "yx",
+          "content": "there is water but cups are short, bring your bottle",
+          "createdAt": "2026-07-10T00:43:00.000Z",
+          "likes": 11
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-05",
+          "authorId": "u-uncle-ray",
+          "authorName": "Uncle Ray",
+          "content": "my mum got a seat, thanks to whoever helped us earlier",
+          "createdAt": "2026-07-10T06:39:00.000Z",
+          "likes": 13
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-06",
+          "authorId": "u-arjun",
+          "authorName": "Arjun K.",
+          "content": "phone signal inside is weak, step outside if you need to call",
+          "createdAt": "2026-07-10T14:27:00.000Z",
+          "likes": 10
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-07",
+          "authorId": "u-siti",
+          "authorName": "Siti H.",
+          "content": "they need more dry towels, especially for kids",
+          "createdAt": "2026-07-11T00:20:00.000Z",
+          "likes": 7
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-08",
+          "authorId": "u-amirah",
+          "authorName": "Amirah N.",
+          "content": "the staff said next supply run is evening",
+          "createdAt": "2026-07-11T08:09:00.000Z",
+          "likes": 9
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-09",
+          "authorId": "u-kavya",
+          "authorName": "Kavya",
+          "content": "lost and found table has umbrellas and one black backpack",
+          "createdAt": "2026-07-12T00:47:00.000Z",
+          "likes": 0
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-10",
+          "authorId": "u-vanessa",
+          "authorName": "Vanessa L.",
+          "content": "volunteers are doing their best, please be patient with them",
+          "createdAt": "2026-07-12T01:56:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-11",
+          "authorId": "u-zhen",
+          "authorName": "Zhen",
+          "content": "it is calmer now, people just tired",
+          "createdAt": "2026-07-12T08:20:00.000Z",
+          "likes": 14
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-12",
+          "authorId": "u-farid",
+          "authorName": "Farid",
+          "content": "shelter is okay but the queue for hot drinks is pretty long",
+          "createdAt": "2026-07-13T00:31:00.000Z",
+          "likes": 2
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-13",
+          "authorId": "u-joel",
+          "authorName": "Joel Tan",
+          "content": "one more fan would help, it is getting stuffy",
+          "createdAt": "2026-07-13T00:32:00.000Z",
+          "likes": 2
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-14",
+          "authorId": "u-caleb",
+          "authorName": "Caleb",
+          "content": "charging points are all taken, maybe bring extension plugs if you have",
+          "createdAt": "2026-07-13T06:50:00.000Z",
+          "likes": 17
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-15",
+          "authorId": "u-chloe",
+          "authorName": "Chloe W.",
+          "content": "the staff said next supply run is evening",
+          "createdAt": "2026-07-13T13:15:00.000Z",
+          "likes": 10
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-16",
+          "authorId": "u-grace",
+          "authorName": "Grace Ong",
+          "content": "the staff said next supply run is evening",
+          "createdAt": "2026-07-14T00:35:00.000Z",
+          "likes": 3
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-17",
+          "authorId": "u-janice",
+          "authorName": "Janice P.",
+          "content": "volunteers are doing their best, please be patient with them",
+          "createdAt": "2026-07-14T02:12:00.000Z",
+          "likes": 3
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-18",
+          "authorId": "u-amirah",
+          "authorName": "Amirah N.",
+          "content": "lost and found table has umbrellas and one black backpack",
+          "createdAt": "2026-07-14T08:04:00.000Z",
+          "likes": 10
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-19",
+          "authorId": "u-vanessa",
+          "authorName": "Vanessa L.",
+          "content": "anyone going from Queenstown hub to this shelter? need blankets",
+          "createdAt": "2026-07-14T13:51:00.000Z",
+          "likes": 2
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-20",
+          "authorId": "u-mei",
+          "authorName": "Mei Ling",
+          "content": "it is calmer now, people just tired",
+          "createdAt": "2026-07-15T00:04:00.000Z",
+          "likes": 16
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-21",
+          "authorId": "u-ryan",
+          "authorName": "ryan_here",
+          "content": "they need more dry towels, especially for kids",
+          "createdAt": "2026-07-15T00:24:00.000Z",
+          "likes": 6
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-22",
+          "authorId": "u-zhen",
+          "authorName": "Zhen",
+          "content": "phone signal inside is weak, step outside if you need to call",
+          "createdAt": "2026-07-15T05:12:00.000Z",
+          "likes": 12
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-23",
+          "authorId": "u-arjun",
+          "authorName": "Arjun K.",
+          "content": "please dont block the wheelchair ramp",
+          "createdAt": "2026-07-15T09:43:00.000Z",
+          "likes": 6
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-24",
+          "authorId": "u-viv",
+          "authorName": "Vivian",
+          "content": "baby formula running low at the desk from what i heard",
+          "createdAt": "2026-07-15T13:17:00.000Z",
+          "likes": 6
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-25",
+          "authorId": "u-siti",
+          "authorName": "Siti H.",
+          "content": "kids corner is helping a lot, whoever set it up thank you",
+          "createdAt": "2026-07-16T00:38:00.000Z",
+          "likes": 5
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-26",
+          "authorId": "u-shawn",
+          "authorName": "shawn99",
+          "content": "not perfect but at least dry and safe here",
+          "createdAt": "2026-07-16T00:47:00.000Z",
+          "likes": 3
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-27",
+          "authorId": "u-benny",
+          "authorName": "Benny",
+          "content": "anyone going from Queenstown hub to this shelter? need blankets",
+          "createdAt": "2026-07-16T00:48:00.000Z",
+          "likes": 10
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-28",
+          "authorId": "u-yx",
+          "authorName": "yx",
+          "content": "not perfect but at least dry and safe here",
+          "createdAt": "2026-07-16T03:20:00.000Z",
+          "likes": 13
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-29",
+          "authorId": "u-uncle-ray",
+          "authorName": "Uncle Ray",
+          "content": "there is water but cups are short, bring your bottle",
+          "createdAt": "2026-07-16T06:50:00.000Z",
+          "likes": 2
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-30",
+          "authorId": "u-siti",
+          "authorName": "Siti H.",
+          "content": "baby formula running low at the desk from what i heard",
+          "createdAt": "2026-07-16T08:32:00.000Z",
+          "likes": 14
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-31",
+          "authorId": "u-vanessa",
+          "authorName": "Vanessa L.",
+          "content": "they need more dry towels, especially for kids",
+          "createdAt": "2026-07-16T10:26:00.000Z",
+          "likes": 3
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-32",
+          "authorId": "u-benny",
+          "authorName": "Benny",
+          "content": "please dont block the wheelchair ramp",
+          "createdAt": "2026-07-16T12:04:00.000Z",
+          "likes": 17
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-33",
+          "authorId": "u-linda",
+          "authorName": "Linda",
+          "content": "one more fan would help, it is getting stuffy",
+          "createdAt": "2026-07-16T13:45:00.000Z",
+          "likes": 16
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-34",
+          "authorId": "u-nora",
+          "authorName": "Nora",
+          "content": "anyone going from Queenstown hub to this shelter? need blankets",
+          "createdAt": "2026-07-16T14:16:00.000Z",
+          "likes": 5
+        },
+        {
+          "id": "forum-shelter-rv-cc-supplies-reply-35",
+          "authorId": "u-huiwen",
+          "authorName": "Hui Wen",
+          "content": "one more fan would help, it is getting stuffy",
+          "createdAt": "2026-07-16T14:33:00.000Z",
+          "likes": 12
+        }
+      ]
+    },
+    {
+      "id": "forum-shelter-orchard-library",
+      "frameId": "frame-3",
+      "title": "Orchard shelter queue and needs",
+      "authorId": "u-kavya",
+      "authorName": "Kavya",
+      "content": "Library@Orchard relief point is crowded but manageable. Main issue is charging spots and dry clothes.",
+      "createdAt": "2026-07-10T02:16:00.000Z",
+      "location": "Library@Orchard relief point",
+      "latitude": 1.3041,
+      "longitude": 103.8319,
+      "crisisTagIds": [
+        "tag-s-orchard-library"
+      ],
+      "likes": 156,
+      "dislikes": 3,
+      "reports": 0,
+      "moderationState": "live",
+      "replies": [
+        {
+          "id": "forum-shelter-orchard-library-reply-01",
+          "authorId": "u-arjun",
+          "authorName": "Arjun K.",
+          "content": "charging points are all taken, maybe bring extension plugs if you have",
+          "createdAt": "2026-07-09T00:15:00.000Z",
+          "likes": 5
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-02",
+          "authorId": "u-uncle-ray",
+          "authorName": "Uncle Ray",
+          "content": "it is calmer now, people just tired",
+          "createdAt": "2026-07-09T02:31:00.000Z",
+          "likes": 5
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-03",
+          "authorId": "u-marcus",
+          "authorName": "Marcus",
+          "content": "there is water but cups are short, bring your bottle",
+          "createdAt": "2026-07-09T12:52:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-04",
+          "authorId": "u-marcus",
+          "authorName": "Marcus",
+          "content": "lost and found table has umbrellas and one black backpack",
+          "createdAt": "2026-07-10T00:10:00.000Z",
+          "likes": 13
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-05",
+          "authorId": "u-amirah",
+          "authorName": "Amirah N.",
+          "content": "charging points are all taken, maybe bring extension plugs if you have",
+          "createdAt": "2026-07-10T08:48:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-06",
+          "authorId": "u-janice",
+          "authorName": "Janice P.",
+          "content": "they need more dry towels, especially for kids",
+          "createdAt": "2026-07-11T00:14:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-07",
+          "authorId": "u-siti",
+          "authorName": "Siti H.",
+          "content": "there is water but cups are short, bring your bottle",
+          "createdAt": "2026-07-11T03:46:00.000Z",
+          "likes": 14
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-08",
+          "authorId": "u-benny",
+          "authorName": "Benny",
+          "content": "my mum got a seat, thanks to whoever helped us earlier",
+          "createdAt": "2026-07-11T12:27:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-09",
+          "authorId": "u-joel",
+          "authorName": "Joel Tan",
+          "content": "the staff said next supply run is evening",
+          "createdAt": "2026-07-12T00:41:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-10",
+          "authorId": "u-siti",
+          "authorName": "Siti H.",
+          "content": "phone signal inside is weak, step outside if you need to call",
+          "createdAt": "2026-07-12T05:37:00.000Z",
+          "likes": 6
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-11",
+          "authorId": "u-chloe",
+          "authorName": "Chloe W.",
+          "content": "kids corner is helping a lot, whoever set it up thank you",
+          "createdAt": "2026-07-12T13:32:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-12",
+          "authorId": "u-amirah",
+          "authorName": "Amirah N.",
+          "content": "charging points are all taken, maybe bring extension plugs if you have",
+          "createdAt": "2026-07-13T00:18:00.000Z",
+          "likes": 8
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-13",
+          "authorId": "u-caleb",
+          "authorName": "Caleb",
+          "content": "the staff said next supply run is evening",
+          "createdAt": "2026-07-13T05:36:00.000Z",
+          "likes": 11
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-14",
+          "authorId": "u-amirah",
+          "authorName": "Amirah N.",
+          "content": "the staff said next supply run is evening",
+          "createdAt": "2026-07-13T12:26:00.000Z",
+          "likes": 2
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-15",
+          "authorId": "u-grace",
+          "authorName": "Grace Ong",
+          "content": "phone signal inside is weak, step outside if you need to call",
+          "createdAt": "2026-07-14T00:27:00.000Z",
+          "likes": 13
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-16",
+          "authorId": "u-huiwen",
+          "authorName": "Hui Wen",
+          "content": "if you are coming here, use the side gate, front entrance is crowded",
+          "createdAt": "2026-07-14T01:20:00.000Z",
+          "likes": 0
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-17",
+          "authorId": "u-benny",
+          "authorName": "Benny",
+          "content": "food arrived but vegetarian packets disappeared fast",
+          "createdAt": "2026-07-14T08:31:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-18",
+          "authorId": "u-nadya",
+          "authorName": "Nadya",
+          "content": "saw a nurse checking minor cuts near the entrance",
+          "createdAt": "2026-07-14T14:18:00.000Z",
+          "likes": 12
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-19",
+          "authorId": "u-nora",
+          "authorName": "Nora",
+          "content": "they need more dry towels, especially for kids",
+          "createdAt": "2026-07-15T00:28:00.000Z",
+          "likes": 17
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-20",
+          "authorId": "u-viv",
+          "authorName": "Vivian",
+          "content": "anyone going from Queenstown hub to this shelter? need blankets",
+          "createdAt": "2026-07-15T01:49:00.000Z",
+          "likes": 11
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-21",
+          "authorId": "u-yx",
+          "authorName": "yx",
+          "content": "it is calmer now, people just tired",
+          "createdAt": "2026-07-15T06:11:00.000Z",
+          "likes": 2
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-22",
+          "authorId": "u-arjun",
+          "authorName": "Arjun K.",
+          "content": "it is calmer now, people just tired",
+          "createdAt": "2026-07-15T11:45:00.000Z",
+          "likes": 6
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-23",
+          "authorId": "u-joel",
+          "authorName": "Joel Tan",
+          "content": "one more fan would help, it is getting stuffy",
+          "createdAt": "2026-07-15T14:43:00.000Z",
+          "likes": 11
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-24",
+          "authorId": "u-nadya",
+          "authorName": "Nadya",
+          "content": "there is water but cups are short, bring your bottle",
+          "createdAt": "2026-07-16T00:09:00.000Z",
+          "likes": 8
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-25",
+          "authorId": "u-nora",
+          "authorName": "Nora",
+          "content": "shelter is okay but the queue for hot drinks is pretty long",
+          "createdAt": "2026-07-16T00:36:00.000Z",
+          "likes": 8
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-26",
+          "authorId": "u-chloe",
+          "authorName": "Chloe W.",
+          "content": "kids corner is helping a lot, whoever set it up thank you",
+          "createdAt": "2026-07-16T02:06:00.000Z",
+          "likes": 15
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-27",
+          "authorId": "u-uncle-ray",
+          "authorName": "Uncle Ray",
+          "content": "baby formula running low at the desk from what i heard",
+          "createdAt": "2026-07-16T05:47:00.000Z",
+          "likes": 13
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-28",
+          "authorId": "u-yx",
+          "authorName": "yx",
+          "content": "food arrived but vegetarian packets disappeared fast",
+          "createdAt": "2026-07-16T08:32:00.000Z",
+          "likes": 7
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-29",
+          "authorId": "u-caleb",
+          "authorName": "Caleb",
+          "content": "if you are coming here, use the side gate, front entrance is crowded",
+          "createdAt": "2026-07-16T10:14:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-30",
+          "authorId": "u-benny",
+          "authorName": "Benny",
+          "content": "shelter is okay but the queue for hot drinks is pretty long",
+          "createdAt": "2026-07-16T12:16:00.000Z",
+          "likes": 13
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-31",
+          "authorId": "u-vanessa",
+          "authorName": "Vanessa L.",
+          "content": "they need more dry towels, especially for kids",
+          "createdAt": "2026-07-16T13:30:00.000Z",
+          "likes": 17
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-32",
+          "authorId": "u-daniel",
+          "authorName": "Daniel Foo",
+          "content": "lost and found table has umbrellas and one black backpack",
+          "createdAt": "2026-07-16T14:06:00.000Z",
+          "likes": 13
+        },
+        {
+          "id": "forum-shelter-orchard-library-reply-33",
+          "authorId": "u-caleb",
+          "authorName": "Caleb",
+          "content": "please dont block the wheelchair ramp",
+          "createdAt": "2026-07-16T14:42:00.000Z",
+          "likes": 10
+        }
+      ]
+    },
+    {
+      "id": "forum-shelter-marine-parade-cc",
+      "frameId": "frame-3",
+      "title": "Marine Parade CC shelter check-in",
+      "authorId": "u-zhen",
+      "authorName": "Zhen",
+      "content": "Marine Parade CC shelter has families coming in from the lower blocks. They are asking for bottled water and diapers.",
+      "createdAt": "2026-07-11T02:27:00.000Z",
+      "location": "Marine Parade Community Club",
+      "latitude": 1.3049,
+      "longitude": 103.9074,
+      "crisisTagIds": [
+        "tag-s-marine-parade-cc"
+      ],
+      "likes": 150,
+      "dislikes": 2,
+      "reports": 0,
+      "moderationState": "live",
+      "replies": [
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-01",
+          "authorId": "u-uncle-ray",
+          "authorName": "Uncle Ray",
+          "content": "if you are coming here, use the side gate, front entrance is crowded",
+          "createdAt": "2026-07-09T00:45:00.000Z",
+          "likes": 2
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-02",
+          "authorId": "u-sam",
+          "authorName": "Sam",
+          "content": "please label your bags, someone nearly took the wrong one",
+          "createdAt": "2026-07-09T01:38:00.000Z",
+          "likes": 12
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-03",
+          "authorId": "u-viv",
+          "authorName": "Vivian",
+          "content": "anyone going from Queenstown hub to this shelter? need blankets",
+          "createdAt": "2026-07-09T11:20:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-04",
+          "authorId": "u-kavya",
+          "authorName": "Kavya",
+          "content": "shelter is okay but the queue for hot drinks is pretty long",
+          "createdAt": "2026-07-10T00:26:00.000Z",
+          "likes": 14
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-05",
+          "authorId": "u-daniel",
+          "authorName": "Daniel Foo",
+          "content": "phone signal inside is weak, step outside if you need to call",
+          "createdAt": "2026-07-10T05:17:00.000Z",
+          "likes": 12
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-06",
+          "authorId": "u-farid",
+          "authorName": "Farid",
+          "content": "charging points are all taken, maybe bring extension plugs if you have",
+          "createdAt": "2026-07-10T14:35:00.000Z",
+          "likes": 7
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-07",
+          "authorId": "u-shawn",
+          "authorName": "shawn99",
+          "content": "please label your bags, someone nearly took the wrong one",
+          "createdAt": "2026-07-11T00:55:00.000Z",
+          "likes": 5
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-08",
+          "authorId": "u-zhen",
+          "authorName": "Zhen",
+          "content": "phone signal inside is weak, step outside if you need to call",
+          "createdAt": "2026-07-11T07:47:00.000Z",
+          "likes": 14
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-09",
+          "authorId": "u-farid",
+          "authorName": "Farid",
+          "content": "baby formula running low at the desk from what i heard",
+          "createdAt": "2026-07-11T14:18:00.000Z",
+          "likes": 12
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-10",
+          "authorId": "u-siti",
+          "authorName": "Siti H.",
+          "content": "the staff said next supply run is evening",
+          "createdAt": "2026-07-12T00:22:00.000Z",
+          "likes": 11
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-11",
+          "authorId": "u-shawn",
+          "authorName": "shawn99",
+          "content": "shelter is okay but the queue for hot drinks is pretty long",
+          "createdAt": "2026-07-12T06:25:00.000Z",
+          "likes": 17
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-12",
+          "authorId": "u-nadya",
+          "authorName": "Nadya",
+          "content": "phone signal inside is weak, step outside if you need to call",
+          "createdAt": "2026-07-12T14:04:00.000Z",
+          "likes": 13
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-13",
+          "authorId": "u-chloe",
+          "authorName": "Chloe W.",
+          "content": "please label your bags, someone nearly took the wrong one",
+          "createdAt": "2026-07-13T00:53:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-14",
+          "authorId": "u-grace",
+          "authorName": "Grace Ong",
+          "content": "phone signal inside is weak, step outside if you need to call",
+          "createdAt": "2026-07-13T04:16:00.000Z",
+          "likes": 14
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-15",
+          "authorId": "u-zhen",
+          "authorName": "Zhen",
+          "content": "one more fan would help, it is getting stuffy",
+          "createdAt": "2026-07-13T10:17:00.000Z",
+          "likes": 13
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-16",
+          "authorId": "u-viv",
+          "authorName": "Vivian",
+          "content": "phone signal inside is weak, step outside if you need to call",
+          "createdAt": "2026-07-14T00:24:00.000Z",
+          "likes": 5
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-17",
+          "authorId": "u-uncle-ray",
+          "authorName": "Uncle Ray",
+          "content": "please label your bags, someone nearly took the wrong one",
+          "createdAt": "2026-07-14T00:34:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-18",
+          "authorId": "u-janice",
+          "authorName": "Janice P.",
+          "content": "lost and found table has umbrellas and one black backpack",
+          "createdAt": "2026-07-14T05:25:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-19",
+          "authorId": "u-caleb",
+          "authorName": "Caleb",
+          "content": "the staff said next supply run is evening",
+          "createdAt": "2026-07-14T10:18:00.000Z",
+          "likes": 2
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-20",
+          "authorId": "u-huiwen",
+          "authorName": "Hui Wen",
+          "content": "one more fan would help, it is getting stuffy",
+          "createdAt": "2026-07-15T00:08:00.000Z",
+          "likes": 16
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-21",
+          "authorId": "u-vanessa",
+          "authorName": "Vanessa L.",
+          "content": "saw a nurse checking minor cuts near the entrance",
+          "createdAt": "2026-07-15T00:41:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-22",
+          "authorId": "u-farid",
+          "authorName": "Farid",
+          "content": "food arrived but vegetarian packets disappeared fast",
+          "createdAt": "2026-07-15T02:29:00.000Z",
+          "likes": 11
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-23",
+          "authorId": "u-joel",
+          "authorName": "Joel Tan",
+          "content": "my mum got a seat, thanks to whoever helped us earlier",
+          "createdAt": "2026-07-15T06:09:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-24",
+          "authorId": "u-grace",
+          "authorName": "Grace Ong",
+          "content": "if you are coming here, use the side gate, front entrance is crowded",
+          "createdAt": "2026-07-15T11:43:00.000Z",
+          "likes": 3
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-25",
+          "authorId": "u-mei",
+          "authorName": "Mei Ling",
+          "content": "shelter is okay but the queue for hot drinks is pretty long",
+          "createdAt": "2026-07-15T14:31:00.000Z",
+          "likes": 7
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-26",
+          "authorId": "u-zhen",
+          "authorName": "Zhen",
+          "content": "my mum got a seat, thanks to whoever helped us earlier",
+          "createdAt": "2026-07-16T00:16:00.000Z",
+          "likes": 6
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-27",
+          "authorId": "u-siti",
+          "authorName": "Siti H.",
+          "content": "they need more dry towels, especially for kids",
+          "createdAt": "2026-07-16T00:52:00.000Z",
+          "likes": 9
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-28",
+          "authorId": "u-chloe",
+          "authorName": "Chloe W.",
+          "content": "please label your bags, someone nearly took the wrong one",
+          "createdAt": "2026-07-16T01:45:00.000Z",
+          "likes": 3
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-29",
+          "authorId": "u-benny",
+          "authorName": "Benny",
+          "content": "please label your bags, someone nearly took the wrong one",
+          "createdAt": "2026-07-16T04:25:00.000Z",
+          "likes": 13
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-30",
+          "authorId": "u-marcus",
+          "authorName": "Marcus",
+          "content": "volunteers are doing their best, please be patient with them",
+          "createdAt": "2026-07-16T07:22:00.000Z",
+          "likes": 8
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-31",
+          "authorId": "u-sam",
+          "authorName": "Sam",
+          "content": "lost and found table has umbrellas and one black backpack",
+          "createdAt": "2026-07-16T09:29:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-32",
+          "authorId": "u-uncle-ray",
+          "authorName": "Uncle Ray",
+          "content": "phone signal inside is weak, step outside if you need to call",
+          "createdAt": "2026-07-16T11:22:00.000Z",
+          "likes": 14
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-33",
+          "authorId": "u-janice",
+          "authorName": "Janice P.",
+          "content": "baby formula running low at the desk from what i heard",
+          "createdAt": "2026-07-16T12:13:00.000Z",
+          "likes": 11
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-34",
+          "authorId": "u-daniel",
+          "authorName": "Daniel Foo",
+          "content": "phone signal inside is weak, step outside if you need to call",
+          "createdAt": "2026-07-16T13:11:00.000Z",
+          "likes": 3
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-35",
+          "authorId": "u-grace",
+          "authorName": "Grace Ong",
+          "content": "kids corner is helping a lot, whoever set it up thank you",
+          "createdAt": "2026-07-16T14:17:00.000Z",
+          "likes": 3
+        },
+        {
+          "id": "forum-shelter-marine-parade-cc-reply-36",
+          "authorId": "u-vanessa",
+          "authorName": "Vanessa L.",
+          "content": "anyone going from Queenstown hub to this shelter? need blankets",
+          "createdAt": "2026-07-16T14:19:00.000Z",
+          "likes": 0
+        }
+      ]
+    },
+    {
+      "id": "forum-cleanup-rv-mud",
+      "frameId": "frame-4",
+      "title": "River Valley cleanup help this weekend",
+      "authorId": "u-marcus",
+      "authorName": "Marcus",
+      "content": "Flood water mostly gone here. Cleanup is the hard part now. Mud in corridors and some elderly neighbours need help moving wet items.",
+      "createdAt": "2026-07-17T01:20:00.000Z",
+      "location": "River Valley",
+      "latitude": 1.2937,
+      "longitude": 103.8351,
+      "crisisTagIds": [],
+      "likes": 82,
+      "dislikes": 2,
+      "reports": 0,
+      "moderationState": "resolved",
+      "replies": [
+        {
+          "id": "forum-cleanup-rv-mud-reply-01",
+          "authorId": "u-caleb",
+          "authorName": "Caleb",
+          "content": "can we coordinate block by block instead of everyone rushing one place?",
+          "createdAt": "2026-07-17T00:38:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-02",
+          "authorId": "u-shawn",
+          "authorName": "shawn99",
+          "content": "some roads still have hidden debris, cycle slowly",
+          "createdAt": "2026-07-17T02:56:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-03",
+          "authorId": "u-caleb",
+          "authorName": "Caleb",
+          "content": "can we coordinate block by block instead of everyone rushing one place?",
+          "createdAt": "2026-07-17T12:07:00.000Z",
+          "likes": 0
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-04",
+          "authorId": "u-chloe",
+          "authorName": "Chloe W.",
+          "content": "anyone has extra gloves? the cheap ones tear fast",
+          "createdAt": "2026-07-18T00:48:00.000Z",
+          "likes": 9
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-05",
+          "authorId": "u-linda",
+          "authorName": "Linda",
+          "content": "please hydrate, cleanup is hotter than it looks",
+          "createdAt": "2026-07-18T08:03:00.000Z",
+          "likes": 0
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-06",
+          "authorId": "u-zhen",
+          "authorName": "Zhen",
+          "content": "some roads still have hidden debris, cycle slowly",
+          "createdAt": "2026-07-19T00:27:00.000Z",
+          "likes": 16
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-07",
+          "authorId": "u-huiwen",
+          "authorName": "Hui Wen",
+          "content": "anyone has extra gloves? the cheap ones tear fast",
+          "createdAt": "2026-07-19T05:36:00.000Z",
+          "likes": 16
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-08",
+          "authorId": "u-grace",
+          "authorName": "Grace Ong",
+          "content": "my family can help Sunday morning",
+          "createdAt": "2026-07-19T13:53:00.000Z",
+          "likes": 12
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-09",
+          "authorId": "u-farid",
+          "authorName": "Farid",
+          "content": "squeegees are more useful than mops right now",
+          "createdAt": "2026-07-20T01:05:00.000Z",
+          "likes": 15
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-10",
+          "authorId": "u-nadya",
+          "authorName": "Nadya",
+          "content": "saw volunteers clearing leaves from drains, thank you",
+          "createdAt": "2026-07-20T12:47:00.000Z",
+          "likes": 16
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-11",
+          "authorId": "u-grace",
+          "authorName": "Grace Ong",
+          "content": "my family can help Sunday morning",
+          "createdAt": "2026-07-21T00:30:00.000Z",
+          "likes": 13
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-12",
+          "authorId": "u-nora",
+          "authorName": "Nora",
+          "content": "squeegees are more useful than mops right now",
+          "createdAt": "2026-07-21T08:07:00.000Z",
+          "likes": 2
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-13",
+          "authorId": "u-daniel",
+          "authorName": "Daniel Foo",
+          "content": "please dont throw wet electronics into normal bins",
+          "createdAt": "2026-07-22T00:52:00.000Z",
+          "likes": 12
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-14",
+          "authorId": "u-grace",
+          "authorName": "Grace Ong",
+          "content": "keep tetanus risk in mind if you get cut",
+          "createdAt": "2026-07-22T05:44:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-15",
+          "authorId": "u-ryan",
+          "authorName": "ryan_here",
+          "content": "please dont throw wet electronics into normal bins",
+          "createdAt": "2026-07-22T13:19:00.000Z",
+          "likes": 8
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-16",
+          "authorId": "u-janice",
+          "authorName": "Janice P.",
+          "content": "keep tetanus risk in mind if you get cut",
+          "createdAt": "2026-07-23T01:39:00.000Z",
+          "likes": 0
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-17",
+          "authorId": "u-joel",
+          "authorName": "Joel Tan",
+          "content": "shop owners need help moving damaged shelves",
+          "createdAt": "2026-07-23T11:17:00.000Z",
+          "likes": 7
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-18",
+          "authorId": "u-ryan",
+          "authorName": "ryan_here",
+          "content": "the smell is slowly improving at least",
+          "createdAt": "2026-07-24T00:15:00.000Z",
+          "likes": 5
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-19",
+          "authorId": "u-uncle-ray",
+          "authorName": "Uncle Ray",
+          "content": "keep tetanus risk in mind if you get cut",
+          "createdAt": "2026-07-24T08:14:00.000Z",
+          "likes": 7
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-20",
+          "authorId": "u-yx",
+          "authorName": "yx",
+          "content": "saw volunteers clearing leaves from drains, thank you",
+          "createdAt": "2026-07-25T00:08:00.000Z",
+          "likes": 9
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-21",
+          "authorId": "u-vanessa",
+          "authorName": "Vanessa L.",
+          "content": "anyone has extra gloves? the cheap ones tear fast",
+          "createdAt": "2026-07-25T04:24:00.000Z",
+          "likes": 10
+        },
+        {
+          "id": "forum-cleanup-rv-mud-reply-22",
+          "authorId": "u-grace",
+          "authorName": "Grace Ong",
+          "content": "elderly units still need help carrying wet mattresses",
+          "createdAt": "2026-07-25T13:50:00.000Z",
+          "likes": 6
+        }
+      ]
+    },
+    {
+      "id": "forum-cleanup-orchard-basement",
+      "frameId": "frame-4",
+      "title": "Orchard basement cleanup coordination",
+      "authorId": "u-janice",
+      "authorName": "Janice P.",
+      "content": "Basement shops near Orchard still clearing out. Please bring gloves and dont come if you only have slippers, floor is gross.",
+      "createdAt": "2026-07-18T01:28:00.000Z",
+      "location": "Orchard Road",
+      "latitude": 1.3048,
+      "longitude": 103.8318,
+      "crisisTagIds": [],
+      "likes": 58,
+      "dislikes": 3,
+      "reports": 0,
+      "moderationState": "resolved",
+      "replies": [
+        {
+          "id": "forum-cleanup-orchard-basement-reply-01",
+          "authorId": "u-uncle-ray",
+          "authorName": "Uncle Ray",
+          "content": "anyone has extra gloves? the cheap ones tear fast",
+          "createdAt": "2026-07-17T00:39:00.000Z",
+          "likes": 16
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-02",
+          "authorId": "u-arjun",
+          "authorName": "Arjun K.",
+          "content": "saw volunteers clearing leaves from drains, thank you",
+          "createdAt": "2026-07-17T02:04:00.000Z",
+          "likes": 8
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-03",
+          "authorId": "u-grace",
+          "authorName": "Grace Ong",
+          "content": "please dont throw wet electronics into normal bins",
+          "createdAt": "2026-07-17T13:08:00.000Z",
+          "likes": 8
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-04",
+          "authorId": "u-huiwen",
+          "authorName": "Hui Wen",
+          "content": "can we coordinate block by block instead of everyone rushing one place?",
+          "createdAt": "2026-07-18T00:05:00.000Z",
+          "likes": 3
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-05",
+          "authorId": "u-mei",
+          "authorName": "Mei Ling",
+          "content": "lift lobby smells terrible but cleaners are already on it",
+          "createdAt": "2026-07-18T11:37:00.000Z",
+          "likes": 2
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-06",
+          "authorId": "u-sam",
+          "authorName": "Sam",
+          "content": "saw volunteers clearing leaves from drains, thank you",
+          "createdAt": "2026-07-19T00:03:00.000Z",
+          "likes": 16
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-07",
+          "authorId": "u-ryan",
+          "authorName": "ryan_here",
+          "content": "please hydrate, cleanup is hotter than it looks",
+          "createdAt": "2026-07-19T08:15:00.000Z",
+          "likes": 10
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-08",
+          "authorId": "u-mei",
+          "authorName": "Mei Ling",
+          "content": "please dont throw wet electronics into normal bins",
+          "createdAt": "2026-07-20T00:19:00.000Z",
+          "likes": 11
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-09",
+          "authorId": "u-nora",
+          "authorName": "Nora",
+          "content": "my family can help Sunday morning",
+          "createdAt": "2026-07-20T06:42:00.000Z",
+          "likes": 2
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-10",
+          "authorId": "u-nora",
+          "authorName": "Nora",
+          "content": "some roads still have hidden debris, cycle slowly",
+          "createdAt": "2026-07-21T00:06:00.000Z",
+          "likes": 16
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-11",
+          "authorId": "u-caleb",
+          "authorName": "Caleb",
+          "content": "saw volunteers clearing leaves from drains, thank you",
+          "createdAt": "2026-07-21T03:54:00.000Z",
+          "likes": 7
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-12",
+          "authorId": "u-chloe",
+          "authorName": "Chloe W.",
+          "content": "mud is everywhere, wear old shoes if you are helping",
+          "createdAt": "2026-07-21T13:06:00.000Z",
+          "likes": 12
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-13",
+          "authorId": "u-shawn",
+          "authorName": "shawn99",
+          "content": "can we coordinate block by block instead of everyone rushing one place?",
+          "createdAt": "2026-07-22T01:50:00.000Z",
+          "likes": 0
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-14",
+          "authorId": "u-arjun",
+          "authorName": "Arjun K.",
+          "content": "insurance photos first before tossing things",
+          "createdAt": "2026-07-22T11:03:00.000Z",
+          "likes": 5
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-15",
+          "authorId": "u-huiwen",
+          "authorName": "Hui Wen",
+          "content": "saw volunteers clearing leaves from drains, thank you",
+          "createdAt": "2026-07-23T00:07:00.000Z",
+          "likes": 3
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-16",
+          "authorId": "u-caleb",
+          "authorName": "Caleb",
+          "content": "the smell is slowly improving at least",
+          "createdAt": "2026-07-23T09:29:00.000Z",
+          "likes": 13
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-17",
+          "authorId": "u-sam",
+          "authorName": "Sam",
+          "content": "lift lobby smells terrible but cleaners are already on it",
+          "createdAt": "2026-07-24T00:35:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-18",
+          "authorId": "u-caleb",
+          "authorName": "Caleb",
+          "content": "insurance photos first before tossing things",
+          "createdAt": "2026-07-24T06:06:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-19",
+          "authorId": "u-nora",
+          "authorName": "Nora",
+          "content": "lift lobby smells terrible but cleaners are already on it",
+          "createdAt": "2026-07-25T00:12:00.000Z",
+          "likes": 10
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-20",
+          "authorId": "u-mei",
+          "authorName": "Mei Ling",
+          "content": "mud is everywhere, wear old shoes if you are helping",
+          "createdAt": "2026-07-25T04:43:00.000Z",
+          "likes": 5
+        },
+        {
+          "id": "forum-cleanup-orchard-basement-reply-21",
+          "authorId": "u-amirah",
+          "authorName": "Amirah N.",
+          "content": "shop owners need help moving damaged shelves",
+          "createdAt": "2026-07-25T13:48:00.000Z",
+          "likes": 1
+        }
+      ]
+    },
+    {
+      "id": "forum-cleanup-marine-parade-drains",
+      "frameId": "frame-4",
+      "title": "Marine Parade drain and debris cleanup",
+      "authorId": "u-siti",
+      "authorName": "Siti H.",
+      "content": "Marine Parade side is calmer. People are clearing leaves and debris from drains. Need more trash bags, less spectators please.",
+      "createdAt": "2026-07-19T01:36:00.000Z",
+      "location": "Marine Parade",
+      "latitude": 1.3027,
+      "longitude": 103.9063,
+      "crisisTagIds": [],
+      "likes": 61,
+      "dislikes": 2,
+      "reports": 0,
+      "moderationState": "resolved",
+      "replies": [
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-01",
+          "authorId": "u-joel",
+          "authorName": "Joel Tan",
+          "content": "some roads still have hidden debris, cycle slowly",
+          "createdAt": "2026-07-17T00:03:00.000Z",
+          "likes": 16
+        },
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-02",
+          "authorId": "u-uncle-ray",
+          "authorName": "Uncle Ray",
+          "content": "insurance photos first before tossing things",
+          "createdAt": "2026-07-17T03:41:00.000Z",
+          "likes": 10
+        },
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-03",
+          "authorId": "u-huiwen",
+          "authorName": "Hui Wen",
+          "content": "lift lobby smells terrible but cleaners are already on it",
+          "createdAt": "2026-07-17T13:07:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-04",
+          "authorId": "u-nadya",
+          "authorName": "Nadya",
+          "content": "lift lobby smells terrible but cleaners are already on it",
+          "createdAt": "2026-07-18T03:11:00.000Z",
+          "likes": 5
+        },
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-05",
+          "authorId": "u-farid",
+          "authorName": "Farid",
+          "content": "squeegees are more useful than mops right now",
+          "createdAt": "2026-07-18T13:48:00.000Z",
+          "likes": 12
+        },
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-06",
+          "authorId": "u-siti",
+          "authorName": "Siti H.",
+          "content": "shop owners need help moving damaged shelves",
+          "createdAt": "2026-07-19T03:05:00.000Z",
+          "likes": 12
+        },
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-07",
+          "authorId": "u-siti",
+          "authorName": "Siti H.",
+          "content": "my family can help Sunday morning",
+          "createdAt": "2026-07-19T13:46:00.000Z",
+          "likes": 2
+        },
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-08",
+          "authorId": "u-grace",
+          "authorName": "Grace Ong",
+          "content": "please dont throw wet electronics into normal bins",
+          "createdAt": "2026-07-20T03:31:00.000Z",
+          "likes": 6
+        },
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-09",
+          "authorId": "u-mei",
+          "authorName": "Mei Ling",
+          "content": "keep tetanus risk in mind if you get cut",
+          "createdAt": "2026-07-20T13:52:00.000Z",
+          "likes": 0
+        },
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-10",
+          "authorId": "u-chloe",
+          "authorName": "Chloe W.",
+          "content": "mud is everywhere, wear old shoes if you are helping",
+          "createdAt": "2026-07-21T03:39:00.000Z",
+          "likes": 14
+        },
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-11",
+          "authorId": "u-benny",
+          "authorName": "Benny",
+          "content": "saw volunteers clearing leaves from drains, thank you",
+          "createdAt": "2026-07-21T13:29:00.000Z",
+          "likes": 8
+        },
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-12",
+          "authorId": "u-mei",
+          "authorName": "Mei Ling",
+          "content": "can we coordinate block by block instead of everyone rushing one place?",
+          "createdAt": "2026-07-22T03:49:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-13",
+          "authorId": "u-kavya",
+          "authorName": "Kavya",
+          "content": "saw volunteers clearing leaves from drains, thank you",
+          "createdAt": "2026-07-22T13:47:00.000Z",
+          "likes": 8
+        },
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-14",
+          "authorId": "u-janice",
+          "authorName": "Janice P.",
+          "content": "squeegees are more useful than mops right now",
+          "createdAt": "2026-07-23T03:56:00.000Z",
+          "likes": 4
+        },
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-15",
+          "authorId": "u-viv",
+          "authorName": "Vivian",
+          "content": "anyone has extra gloves? the cheap ones tear fast",
+          "createdAt": "2026-07-23T13:28:00.000Z",
+          "likes": 17
+        },
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-16",
+          "authorId": "u-janice",
+          "authorName": "Janice P.",
+          "content": "elderly units still need help carrying wet mattresses",
+          "createdAt": "2026-07-24T03:35:00.000Z",
+          "likes": 13
+        },
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-17",
+          "authorId": "u-farid",
+          "authorName": "Farid",
+          "content": "lift lobby smells terrible but cleaners are already on it",
+          "createdAt": "2026-07-24T13:53:00.000Z",
+          "likes": 5
+        },
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-18",
+          "authorId": "u-caleb",
+          "authorName": "Caleb",
+          "content": "saw volunteers clearing leaves from drains, thank you",
+          "createdAt": "2026-07-25T03:04:00.000Z",
+          "likes": 1
+        },
+        {
+          "id": "forum-cleanup-marine-parade-drains-reply-19",
+          "authorId": "u-daniel",
+          "authorName": "Daniel Foo",
+          "content": "the smell is slowly improving at least",
+          "createdAt": "2026-07-25T13:25:00.000Z",
+          "likes": 0
+        }
+      ]
+    }
+  ],
+  "citizenReports": [
+    {
+      "id": "demo-report-rv-001",
+      "publicReportId": "TKT-FLOOD-0001",
+      "frameId": "frame-1",
+      "reporterId": "u-amirah",
+      "reporterName": "Amirah N.",
+      "title": "River Valley drain overflowing",
+      "description": "Water is flowing over the kerb and pooling outside River Valley side road. Drain looks blocked or overwhelmed.",
+      "crisisType": "Weather",
+      "reportType": "Flooding",
+      "severity": "high",
+      "status": "submitted",
+      "location": "River Valley",
+      "latitude": 1.2937,
+      "longitude": 103.8351,
+      "crisisTagIds": [
+        "tag-flash-flood-rv"
+      ],
+      "createdAt": "2026-07-06T01:25:00.000Z"
+    },
+    {
+      "id": "demo-report-rv-002",
+      "publicReportId": "TKT-FLOOD-0002",
+      "frameId": "frame-2",
+      "reporterId": "u-mei",
+      "reporterName": "Mei Ling",
+      "title": "River Valley water entering shops",
+      "description": "River Valley water entering shops. Water level is spreading into nearby pedestrian areas and people are avoiding the low spots.",
+      "crisisType": "Weather",
+      "reportType": "Flooding",
+      "severity": "critical",
+      "status": "grouped",
+      "location": "River Valley",
+      "latitude": 1.2937,
+      "longitude": 103.8351,
+      "crisisTagIds": [
+        "tag-rv-flood"
+      ],
+      "createdAt": "2026-07-07T03:12:00.000Z"
+    },
+    {
+      "id": "demo-report-orchard-001",
+      "publicReportId": "TKT-FLOOD-0003",
+      "frameId": "frame-2",
+      "reporterId": "u-arjun",
+      "reporterName": "Arjun K.",
+      "title": "Orchard underpass flooding",
+      "description": "Orchard underpass flooding. Water level is spreading into nearby pedestrian areas and people are avoiding the low spots.",
+      "crisisType": "Weather",
+      "reportType": "Flooding",
+      "severity": "critical",
+      "status": "grouped",
+      "location": "Orchard Road",
+      "latitude": 1.3048,
+      "longitude": 103.8318,
+      "crisisTagIds": [
+        "tag-orchard-flood"
+      ],
+      "createdAt": "2026-07-07T05:21:00.000Z"
+    },
+    {
+      "id": "demo-report-mp-001",
+      "publicReportId": "TKT-FLOOD-0004",
+      "frameId": "frame-2",
+      "reporterId": "u-nadya",
+      "reporterName": "Nadya",
+      "title": "Marine Parade shop row flood",
+      "description": "Marine Parade shop row flood. Water level is spreading into nearby pedestrian areas and people are avoiding the low spots.",
+      "crisisType": "Weather",
+      "reportType": "Flooding",
+      "severity": "high",
+      "status": "grouped",
+      "location": "Marine Parade",
+      "latitude": 1.3027,
+      "longitude": 103.9063,
+      "crisisTagIds": [
+        "tag-marine-parade-flood"
+      ],
+      "createdAt": "2026-07-07T07:30:00.000Z"
+    }
+  ],
+  "volunteerProfiles": [
+    {
+      "id": "vol-maya",
+      "name": "Maya Koh",
+      "phone": "+65 84300000",
+      "email": "maya.koh@demo.signal.local",
+      "region": "Central",
+      "skills": [
+        "First Aid",
+        "Healthcare",
+        "Community Outreach"
+      ],
+      "availability": [
+        "Weekdays",
+        "Evenings"
+      ],
+      "certifications": "CPR + AED, clinic volunteer",
+      "status": "verified"
+    },
+    {
+      "id": "vol-isaac",
+      "name": "Isaac Lim",
+      "phone": "+65 84307319",
+      "email": "isaac.lim@demo.signal.local",
+      "region": "East",
+      "skills": [
+        "Driving",
+        "Logistics",
+        "Heavy Lifting"
+      ],
+      "availability": [
+        "Weekends",
+        "Emergency Only"
+      ],
+      "certifications": "Class 3 licence, warehouse ops",
+      "status": "verified"
+    },
+    {
+      "id": "vol-nurul",
+      "name": "Nurul A.",
+      "phone": "+65 84314638",
+      "email": "nurul.a@demo.signal.local",
+      "region": "Central",
+      "skills": [
+        "Translation",
+        "Community Outreach",
+        "Social Work"
+      ],
+      "availability": [
+        "Weekdays"
+      ],
+      "certifications": "Malay-English support, family service volunteer",
+      "status": "verified"
+    },
+    {
+      "id": "vol-terence",
+      "name": "Terence Ng",
+      "phone": "+65 84321957",
+      "email": "terence.ng@demo.signal.local",
+      "region": "West",
+      "skills": [
+        "IT Support",
+        "Logistics"
+      ],
+      "availability": [
+        "Evenings",
+        "Weekends"
+      ],
+      "certifications": "Device setup and inventory tracking",
+      "status": "verified"
+    },
+    {
+      "id": "vol-jiaqi",
+      "name": "Jia Qi",
+      "phone": "+65 84329276",
+      "email": "jia.qi@demo.signal.local",
+      "region": "Central",
+      "skills": [
+        "First Aid",
+        "Social Work"
+      ],
+      "availability": [
+        "Weekends"
+      ],
+      "certifications": "Shelter welfare volunteer",
+      "status": "verified"
+    },
+    {
+      "id": "vol-harish",
+      "name": "Harish Menon",
+      "phone": "+65 84336595",
+      "email": "harish.menon@demo.signal.local",
+      "region": "East",
+      "skills": [
+        "Driving",
+        "Community Outreach"
+      ],
+      "availability": [
+        "Emergency Only"
+      ],
+      "certifications": "Delivery rider, neighbourhood support",
+      "status": "verified"
+    },
+    {
+      "id": "vol-eileen",
+      "name": "Eileen Chua",
+      "phone": "+65 84343914",
+      "email": "eileen.chua@demo.signal.local",
+      "region": "Central",
+      "skills": [
+        "Healthcare",
+        "First Aid"
+      ],
+      "availability": [
+        "Weekdays",
+        "Emergency Only"
+      ],
+      "certifications": "Nursing student, first aid team",
+      "status": "verified"
+    },
+    {
+      "id": "vol-rizal",
+      "name": "Rizal",
+      "phone": "+65 84351233",
+      "email": "rizal@demo.signal.local",
+      "region": "Any Region",
+      "skills": [
+        "Heavy Lifting",
+        "Logistics"
+      ],
+      "availability": [
+        "Weekends",
+        "Evenings"
+      ],
+      "certifications": "Event setup and relief packing",
+      "status": "verified"
+    },
+    {
+      "id": "vol-pearl",
+      "name": "Pearl Wong",
+      "phone": "+65 84358552",
+      "email": "pearl.wong@demo.signal.local",
+      "region": "East",
+      "skills": [
+        "Translation",
+        "Language Support",
+        "Community Outreach"
+      ],
+      "availability": [
+        "Weekdays",
+        "Weekends"
+      ],
+      "certifications": "Mandarin-English outreach",
+      "status": "verified"
+    },
+    {
+      "id": "vol-aaron",
+      "name": "Aaron Teo",
+      "phone": "+65 84365871",
+      "email": "aaron.teo@demo.signal.local",
+      "region": "Central",
+      "skills": [
+        "Driving",
+        "Logistics",
+        "IT Support"
+      ],
+      "availability": [
+        "Evenings"
+      ],
+      "certifications": "Van access after office hours",
+      "status": "verified"
+    }
+  ],
+  "volunteerOpportunities": [
+    {
+      "id": "opp-rv-towels",
+      "frameId": "frame-3",
+      "title": "Deliver towels to River Valley CC",
+      "organization": "Flood Relief Coordination Cell",
+      "location": "River Valley Community Centre",
+      "region": "River Valley",
+      "urgency": "high",
+      "needed": 9,
+      "filled": 5,
+      "requiredSkills": [
+        "Logistics",
+        "Driving"
+      ],
+      "shift": "14:00-20:00",
+      "reportingPoint": "Kallang logistics depot",
+      "crisisTagIds": [
+        "tag-s-river-valley-cc"
+      ],
+      "description": "Active shelter and supply support while flood response is ongoing. Slots are intentionally not full for the demo."
+    },
+    {
+      "id": "opp-orchard-charging",
+      "frameId": "frame-3",
+      "title": "Set up charging corner at Orchard shelter",
+      "organization": "Flood Relief Coordination Cell",
+      "location": "Library@Orchard relief point",
+      "region": "Orchard",
+      "urgency": "medium",
+      "needed": 6,
+      "filled": 3,
+      "requiredSkills": [
+        "IT Support",
+        "Logistics"
+      ],
+      "shift": "14:00-20:00",
+      "reportingPoint": "Orchard relief desk",
+      "crisisTagIds": [
+        "tag-s-orchard-library"
+      ],
+      "description": "Active shelter and supply support while flood response is ongoing. Slots are intentionally not full for the demo."
+    },
+    {
+      "id": "opp-mp-first-aid",
+      "frameId": "frame-3",
+      "title": "Minor wound support at Marine Parade CC",
+      "organization": "Flood Relief Coordination Cell",
+      "location": "Marine Parade Community Club",
+      "region": "Marine Parade",
+      "urgency": "high",
+      "needed": 8,
+      "filled": 4,
+      "requiredSkills": [
+        "First Aid",
+        "Healthcare"
+      ],
+      "shift": "14:00-20:00",
+      "reportingPoint": "Marine Parade CC medical table",
+      "crisisTagIds": [
+        "tag-s-marine-parade-cc"
+      ],
+      "description": "Active shelter and supply support while flood response is ongoing. Slots are intentionally not full for the demo."
+    },
+    {
+      "id": "opp-supply-run-west",
+      "frameId": "frame-3",
+      "title": "Supply run from Queenstown hub to shelters",
+      "organization": "Flood Relief Coordination Cell",
+      "location": "Queenstown supply hub",
+      "region": "Queenstown",
+      "urgency": "high",
+      "needed": 12,
+      "filled": 7,
+      "requiredSkills": [
+        "Driving",
+        "Logistics",
+        "Heavy Lifting"
+      ],
+      "shift": "14:00-20:00",
+      "reportingPoint": "Queenstown supply hub",
+      "crisisTagIds": [
+        "tag-s-river-valley-cc",
+        "tag-s-orchard-library"
+      ],
+      "description": "Active shelter and supply support while flood response is ongoing. Slots are intentionally not full for the demo."
+    },
+    {
+      "id": "opp-shelter-guides",
+      "frameId": "frame-3",
+      "title": "Shelter queue and family guidance",
+      "organization": "Flood Relief Coordination Cell",
+      "location": "River Valley Community Centre",
+      "region": "River Valley",
+      "urgency": "medium",
+      "needed": 10,
+      "filled": 6,
+      "requiredSkills": [
+        "Community Outreach",
+        "Translation",
+        "Social Work"
+      ],
+      "shift": "14:00-20:00",
+      "reportingPoint": "River Valley CC side gate",
+      "crisisTagIds": [
+        "tag-s-river-valley-cc"
+      ],
+      "description": "Active shelter and supply support while flood response is ongoing. Slots are intentionally not full for the demo."
+    },
+    {
+      "id": "opp-cleanup-rv",
+      "frameId": "frame-4",
+      "title": "River Valley corridor cleanup team",
+      "organization": "Community Recovery Team",
+      "location": "River Valley",
+      "region": "River Valley",
+      "urgency": "medium",
+      "needed": 14,
+      "filled": 14,
+      "requiredSkills": [
+        "Heavy Lifting",
+        "Community Outreach"
+      ],
+      "shift": "09:00-15:00",
+      "reportingPoint": "River Valley Community Centre",
+      "crisisTagIds": [],
+      "description": "Cleanup phase support after flood waters receded. Bring covered shoes and avoid handling sharp debris without gloves."
+    },
+    {
+      "id": "opp-cleanup-orchard",
+      "frameId": "frame-4",
+      "title": "Orchard basement cleanup support",
+      "organization": "Community Recovery Team",
+      "location": "Orchard Road",
+      "region": "Orchard",
+      "urgency": "medium",
+      "needed": 16,
+      "filled": 16,
+      "requiredSkills": [
+        "Heavy Lifting",
+        "Logistics"
+      ],
+      "shift": "09:00-15:00",
+      "reportingPoint": "Orchard relief desk",
+      "crisisTagIds": [],
+      "description": "Cleanup phase support after flood waters receded. Bring covered shoes and avoid handling sharp debris without gloves."
+    },
+    {
+      "id": "opp-cleanup-mp",
+      "frameId": "frame-4",
+      "title": "Marine Parade debris and drain clearing",
+      "organization": "Community Recovery Team",
+      "location": "Marine Parade",
+      "region": "Marine Parade",
+      "urgency": "low",
+      "needed": 12,
+      "filled": 12,
+      "requiredSkills": [
+        "Heavy Lifting",
+        "Community Outreach"
+      ],
+      "shift": "09:00-15:00",
+      "reportingPoint": "Marine Parade CC",
+      "crisisTagIds": [],
+      "description": "Cleanup phase support after flood waters receded. Bring covered shoes and avoid handling sharp debris without gloves."
+    }
+  ],
+  "sentimentSeries": [
+    {
+      "frameId": "frame-1",
+      "timestamp": "2026-07-06T00:15:00.000Z",
+      "granularity": "hour",
+      "engagement": 4,
+      "likes": 2,
+      "replies": 1,
+      "posts": 1,
+      "panicScore": 23,
+      "helpfulnessScore": 49
+    },
+    {
+      "frameId": "frame-1",
+      "timestamp": "2026-07-06T01:45:00.000Z",
+      "granularity": "hour",
+      "engagement": 8,
+      "likes": 5,
+      "replies": 3,
+      "posts": 1,
+      "panicScore": 28,
+      "helpfulnessScore": 44
+    },
+    {
+      "frameId": "frame-1",
+      "timestamp": "2026-07-06T02:31:00.000Z",
+      "granularity": "hour",
+      "engagement": 10,
+      "likes": 6,
+      "replies": 3,
+      "posts": 1,
+      "panicScore": 26,
+      "helpfulnessScore": 38
+    },
+    {
+      "frameId": "frame-1",
+      "timestamp": "2026-07-06T03:33:00.000Z",
+      "granularity": "hour",
+      "engagement": 12,
+      "likes": 7,
+      "replies": 4,
+      "posts": 1,
+      "panicScore": 33,
+      "helpfulnessScore": 40
+    },
+    {
+      "frameId": "frame-1",
+      "timestamp": "2026-07-06T04:40:00.000Z",
+      "granularity": "hour",
+      "engagement": 10,
+      "likes": 6,
+      "replies": 3,
+      "posts": 1,
+      "panicScore": 32,
+      "helpfulnessScore": 47
+    },
+    {
+      "frameId": "frame-1",
+      "timestamp": "2026-07-06T05:41:00.000Z",
+      "granularity": "hour",
+      "engagement": 15,
+      "likes": 9,
+      "replies": 5,
+      "posts": 1,
+      "panicScore": 32,
+      "helpfulnessScore": 41
+    },
+    {
+      "frameId": "frame-1",
+      "timestamp": "2026-07-06T06:35:00.000Z",
+      "granularity": "hour",
+      "engagement": 17,
+      "likes": 10,
+      "replies": 6,
+      "posts": 1,
+      "panicScore": 36,
+      "helpfulnessScore": 41
+    },
+    {
+      "frameId": "frame-1",
+      "timestamp": "2026-07-06T07:08:00.000Z",
+      "granularity": "hour",
+      "engagement": 14,
+      "likes": 8,
+      "replies": 5,
+      "posts": 1,
+      "panicScore": 38,
+      "helpfulnessScore": 46
+    },
+    {
+      "frameId": "frame-1",
+      "timestamp": "2026-07-06T08:46:00.000Z",
+      "granularity": "hour",
+      "engagement": 17,
+      "likes": 10,
+      "replies": 6,
+      "posts": 1,
+      "panicScore": 42,
+      "helpfulnessScore": 41
+    },
+    {
+      "frameId": "frame-1",
+      "timestamp": "2026-07-06T09:05:00.000Z",
+      "granularity": "hour",
+      "engagement": 21,
+      "likes": 12,
+      "replies": 7,
+      "posts": 2,
+      "panicScore": 47,
+      "helpfulnessScore": 46
+    },
+    {
+      "frameId": "frame-1",
+      "timestamp": "2026-07-06T10:08:00.000Z",
+      "granularity": "hour",
+      "engagement": 20,
+      "likes": 12,
+      "replies": 7,
+      "posts": 2,
+      "panicScore": 50,
+      "helpfulnessScore": 36
+    },
+    {
+      "frameId": "frame-1",
+      "timestamp": "2026-07-06T11:27:00.000Z",
+      "granularity": "hour",
+      "engagement": 22,
+      "likes": 13,
+      "replies": 7,
+      "posts": 2,
+      "panicScore": 52,
+      "helpfulnessScore": 36
+    },
+    {
+      "frameId": "frame-1",
+      "timestamp": "2026-07-06T12:45:00.000Z",
+      "granularity": "hour",
+      "engagement": 26,
+      "likes": 15,
+      "replies": 9,
+      "posts": 2,
+      "panicScore": 52,
+      "helpfulnessScore": 42
+    },
+    {
+      "frameId": "frame-1",
+      "timestamp": "2026-07-06T13:29:00.000Z",
+      "granularity": "hour",
+      "engagement": 28,
+      "likes": 16,
+      "replies": 10,
+      "posts": 2,
+      "panicScore": 56,
+      "helpfulnessScore": 40
+    },
+    {
+      "frameId": "frame-1",
+      "timestamp": "2026-07-06T14:42:00.000Z",
+      "granularity": "hour",
+      "engagement": 28,
+      "likes": 16,
+      "replies": 10,
+      "posts": 2,
+      "panicScore": 58,
+      "helpfulnessScore": 49
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-06T16:25:00.000Z",
+      "granularity": "hour",
+      "engagement": 42,
+      "likes": 22,
+      "replies": 17,
+      "posts": 3,
+      "panicScore": 53,
+      "helpfulnessScore": 47
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-06T17:35:00.000Z",
+      "granularity": "hour",
+      "engagement": 36,
+      "likes": 19,
+      "replies": 15,
+      "posts": 3,
+      "panicScore": 49,
+      "helpfulnessScore": 50
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-06T18:30:00.000Z",
+      "granularity": "hour",
+      "engagement": 52,
+      "likes": 27,
+      "replies": 21,
+      "posts": 4,
+      "panicScore": 48,
+      "helpfulnessScore": 51
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-06T19:45:00.000Z",
+      "granularity": "hour",
+      "engagement": 59,
+      "likes": 31,
+      "replies": 24,
+      "posts": 4,
+      "panicScore": 54,
+      "helpfulnessScore": 48
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-06T20:12:00.000Z",
+      "granularity": "hour",
+      "engagement": 40,
+      "likes": 21,
+      "replies": 16,
+      "posts": 3,
+      "panicScore": 53,
+      "helpfulnessScore": 46
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-06T21:12:00.000Z",
+      "granularity": "hour",
+      "engagement": 52,
+      "likes": 27,
+      "replies": 21,
+      "posts": 4,
+      "panicScore": 51,
+      "helpfulnessScore": 50
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-06T22:46:00.000Z",
+      "granularity": "hour",
+      "engagement": 57,
+      "likes": 30,
+      "replies": 23,
+      "posts": 4,
+      "panicScore": 56,
+      "helpfulnessScore": 51
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-06T23:45:00.000Z",
+      "granularity": "hour",
+      "engagement": 41,
+      "likes": 21,
+      "replies": 17,
+      "posts": 3,
+      "panicScore": 53,
+      "helpfulnessScore": 48
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T00:22:00.000Z",
+      "granularity": "hour",
+      "engagement": 43,
+      "likes": 22,
+      "replies": 18,
+      "posts": 3,
+      "panicScore": 53,
+      "helpfulnessScore": 44
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T01:14:00.000Z",
+      "granularity": "hour",
+      "engagement": 59,
+      "likes": 31,
+      "replies": 24,
+      "posts": 4,
+      "panicScore": 61,
+      "helpfulnessScore": 46
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T02:48:00.000Z",
+      "granularity": "hour",
+      "engagement": 46,
+      "likes": 24,
+      "replies": 19,
+      "posts": 3,
+      "panicScore": 58,
+      "helpfulnessScore": 50
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T03:45:00.000Z",
+      "granularity": "hour",
+      "engagement": 55,
+      "likes": 29,
+      "replies": 23,
+      "posts": 4,
+      "panicScore": 61,
+      "helpfulnessScore": 54
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T04:20:00.000Z",
+      "granularity": "hour",
+      "engagement": 70,
+      "likes": 36,
+      "replies": 29,
+      "posts": 5,
+      "panicScore": 60,
+      "helpfulnessScore": 46
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T05:29:00.000Z",
+      "granularity": "hour",
+      "engagement": 84,
+      "likes": 44,
+      "replies": 34,
+      "posts": 6,
+      "panicScore": 65,
+      "helpfulnessScore": 45
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T06:35:00.000Z",
+      "granularity": "hour",
+      "engagement": 75,
+      "likes": 39,
+      "replies": 31,
+      "posts": 5,
+      "panicScore": 59,
+      "helpfulnessScore": 53
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T07:21:00.000Z",
+      "granularity": "hour",
+      "engagement": 93,
+      "likes": 48,
+      "replies": 38,
+      "posts": 7,
+      "panicScore": 61,
+      "helpfulnessScore": 51
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T08:06:00.000Z",
+      "granularity": "hour",
+      "engagement": 88,
+      "likes": 46,
+      "replies": 36,
+      "posts": 6,
+      "panicScore": 62,
+      "helpfulnessScore": 56
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T09:00:00.000Z",
+      "granularity": "hour",
+      "engagement": 102,
+      "likes": 53,
+      "replies": 42,
+      "posts": 7,
+      "panicScore": 65,
+      "helpfulnessScore": 57
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T10:41:00.000Z",
+      "granularity": "hour",
+      "engagement": 120,
+      "likes": 62,
+      "replies": 49,
+      "posts": 8,
+      "panicScore": 64,
+      "helpfulnessScore": 57
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T11:29:00.000Z",
+      "granularity": "hour",
+      "engagement": 114,
+      "likes": 59,
+      "replies": 47,
+      "posts": 8,
+      "panicScore": 69,
+      "helpfulnessScore": 57
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T12:12:00.000Z",
+      "granularity": "hour",
+      "engagement": 125,
+      "likes": 65,
+      "replies": 51,
+      "posts": 9,
+      "panicScore": 66,
+      "helpfulnessScore": 50
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T13:22:00.000Z",
+      "granularity": "hour",
+      "engagement": 147,
+      "likes": 76,
+      "replies": 60,
+      "posts": 10,
+      "panicScore": 71,
+      "helpfulnessScore": 49
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T14:38:00.000Z",
+      "granularity": "hour",
+      "engagement": 150,
+      "likes": 78,
+      "replies": 61,
+      "posts": 11,
+      "panicScore": 69,
+      "helpfulnessScore": 59
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T15:07:00.000Z",
+      "granularity": "hour",
+      "engagement": 161,
+      "likes": 84,
+      "replies": 66,
+      "posts": 11,
+      "panicScore": 66,
+      "helpfulnessScore": 58
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T16:12:00.000Z",
+      "granularity": "hour",
+      "engagement": 176,
+      "likes": 92,
+      "replies": 72,
+      "posts": 12,
+      "panicScore": 73,
+      "helpfulnessScore": 55
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T17:01:00.000Z",
+      "granularity": "hour",
+      "engagement": 184,
+      "likes": 96,
+      "replies": 75,
+      "posts": 13,
+      "panicScore": 69,
+      "helpfulnessScore": 53
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T18:39:00.000Z",
+      "granularity": "hour",
+      "engagement": 182,
+      "likes": 95,
+      "replies": 75,
+      "posts": 13,
+      "panicScore": 76,
+      "helpfulnessScore": 60
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T19:28:00.000Z",
+      "granularity": "hour",
+      "engagement": 195,
+      "likes": 101,
+      "replies": 80,
+      "posts": 14,
+      "panicScore": 74,
+      "helpfulnessScore": 53
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T20:21:00.000Z",
+      "granularity": "hour",
+      "engagement": 218,
+      "likes": 113,
+      "replies": 89,
+      "posts": 15,
+      "panicScore": 73,
+      "helpfulnessScore": 59
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T21:03:00.000Z",
+      "granularity": "hour",
+      "engagement": 229,
+      "likes": 119,
+      "replies": 94,
+      "posts": 16,
+      "panicScore": 77,
+      "helpfulnessScore": 62
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T22:00:00.000Z",
+      "granularity": "hour",
+      "engagement": 250,
+      "likes": 130,
+      "replies": 103,
+      "posts": 18,
+      "panicScore": 78,
+      "helpfulnessScore": 62
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-07T23:04:00.000Z",
+      "granularity": "hour",
+      "engagement": 251,
+      "likes": 131,
+      "replies": 103,
+      "posts": 18,
+      "panicScore": 74,
+      "helpfulnessScore": 60
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-08T00:00:00.000Z",
+      "granularity": "hour",
+      "engagement": 287,
+      "likes": 149,
+      "replies": 118,
+      "posts": 20,
+      "panicScore": 75,
+      "helpfulnessScore": 53
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-08T01:11:00.000Z",
+      "granularity": "hour",
+      "engagement": 283,
+      "likes": 147,
+      "replies": 116,
+      "posts": 20,
+      "panicScore": 80,
+      "helpfulnessScore": 61
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-08T02:25:00.000Z",
+      "granularity": "hour",
+      "engagement": 317,
+      "likes": 165,
+      "replies": 130,
+      "posts": 22,
+      "panicScore": 82,
+      "helpfulnessScore": 63
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-08T03:39:00.000Z",
+      "granularity": "hour",
+      "engagement": 337,
+      "likes": 175,
+      "replies": 138,
+      "posts": 24,
+      "panicScore": 77,
+      "helpfulnessScore": 63
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-08T04:09:00.000Z",
+      "granularity": "hour",
+      "engagement": 351,
+      "likes": 183,
+      "replies": 144,
+      "posts": 25,
+      "panicScore": 80,
+      "helpfulnessScore": 64
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-08T05:25:00.000Z",
+      "granularity": "hour",
+      "engagement": 350,
+      "likes": 182,
+      "replies": 144,
+      "posts": 25,
+      "panicScore": 79,
+      "helpfulnessScore": 56
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-08T06:17:00.000Z",
+      "granularity": "hour",
+      "engagement": 383,
+      "likes": 199,
+      "replies": 157,
+      "posts": 27,
+      "panicScore": 83,
+      "helpfulnessScore": 63
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-08T07:28:00.000Z",
+      "granularity": "hour",
+      "engagement": 417,
+      "likes": 217,
+      "replies": 171,
+      "posts": 29,
+      "panicScore": 85,
+      "helpfulnessScore": 65
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-08T08:07:00.000Z",
+      "granularity": "hour",
+      "engagement": 423,
+      "likes": 220,
+      "replies": 173,
+      "posts": 30,
+      "panicScore": 88,
+      "helpfulnessScore": 62
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-08T09:16:00.000Z",
+      "granularity": "hour",
+      "engagement": 441,
+      "likes": 229,
+      "replies": 181,
+      "posts": 31,
+      "panicScore": 82,
+      "helpfulnessScore": 61
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-08T10:32:00.000Z",
+      "granularity": "hour",
+      "engagement": 471,
+      "likes": 245,
+      "replies": 193,
+      "posts": 33,
+      "panicScore": 87,
+      "helpfulnessScore": 57
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-08T11:19:00.000Z",
+      "granularity": "hour",
+      "engagement": 486,
+      "likes": 253,
+      "replies": 199,
+      "posts": 34,
+      "panicScore": 90,
+      "helpfulnessScore": 59
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-08T12:10:00.000Z",
+      "granularity": "hour",
+      "engagement": 507,
+      "likes": 264,
+      "replies": 208,
+      "posts": 35,
+      "panicScore": 92,
+      "helpfulnessScore": 68
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-08T13:29:00.000Z",
+      "granularity": "hour",
+      "engagement": 521,
+      "likes": 271,
+      "replies": 214,
+      "posts": 36,
+      "panicScore": 90,
+      "helpfulnessScore": 64
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-08T14:34:00.000Z",
+      "granularity": "hour",
+      "engagement": 559,
+      "likes": 291,
+      "replies": 229,
+      "posts": 39,
+      "panicScore": 94,
+      "helpfulnessScore": 58
+    },
+    {
+      "frameId": "frame-2",
+      "timestamp": "2026-07-08T15:06:00.000Z",
+      "granularity": "hour",
+      "engagement": 585,
+      "likes": 304,
+      "replies": 240,
+      "posts": 41,
+      "panicScore": 93,
+      "helpfulnessScore": 62
+    },
+    {
+      "frameId": "frame-3",
+      "timestamp": "2026-07-09T04:00:00.000Z",
+      "granularity": "day",
+      "engagement": 610,
+      "likes": 366,
+      "replies": 207,
+      "posts": 37,
+      "panicScore": 70,
+      "helpfulnessScore": 63
+    },
+    {
+      "frameId": "frame-3",
+      "timestamp": "2026-07-10T04:00:00.000Z",
+      "granularity": "day",
+      "engagement": 760,
+      "likes": 456,
+      "replies": 258,
+      "posts": 46,
+      "panicScore": 67,
+      "helpfulnessScore": 62
+    },
+    {
+      "frameId": "frame-3",
+      "timestamp": "2026-07-11T04:00:00.000Z",
+      "granularity": "day",
+      "engagement": 880,
+      "likes": 528,
+      "replies": 299,
+      "posts": 53,
+      "panicScore": 63,
+      "helpfulnessScore": 68
+    },
+    {
+      "frameId": "frame-3",
+      "timestamp": "2026-07-12T04:00:00.000Z",
+      "granularity": "day",
+      "engagement": 820,
+      "likes": 492,
+      "replies": 279,
+      "posts": 49,
+      "panicScore": 60,
+      "helpfulnessScore": 69
+    },
+    {
+      "frameId": "frame-3",
+      "timestamp": "2026-07-13T04:00:00.000Z",
+      "granularity": "day",
+      "engagement": 760,
+      "likes": 456,
+      "replies": 258,
+      "posts": 46,
+      "panicScore": 59,
+      "helpfulnessScore": 75
+    },
+    {
+      "frameId": "frame-3",
+      "timestamp": "2026-07-14T04:00:00.000Z",
+      "granularity": "day",
+      "engagement": 700,
+      "likes": 420,
+      "replies": 238,
+      "posts": 42,
+      "panicScore": 54,
+      "helpfulnessScore": 75
+    },
+    {
+      "frameId": "frame-3",
+      "timestamp": "2026-07-15T04:00:00.000Z",
+      "granularity": "day",
+      "engagement": 640,
+      "likes": 384,
+      "replies": 218,
+      "posts": 38,
+      "panicScore": 49,
+      "helpfulnessScore": 81
+    },
+    {
+      "frameId": "frame-3",
+      "timestamp": "2026-07-16T04:00:00.000Z",
+      "granularity": "day",
+      "engagement": 570,
+      "likes": 342,
+      "replies": 194,
+      "posts": 34,
+      "panicScore": 50,
+      "helpfulnessScore": 84
+    },
+    {
+      "frameId": "frame-4",
+      "timestamp": "2026-07-17T04:00:00.000Z",
+      "granularity": "day",
+      "engagement": 430,
+      "likes": 245,
+      "replies": 151,
+      "posts": 34,
+      "panicScore": 42,
+      "helpfulnessScore": 78
+    },
+    {
+      "frameId": "frame-4",
+      "timestamp": "2026-07-18T04:00:00.000Z",
+      "granularity": "day",
+      "engagement": 390,
+      "likes": 222,
+      "replies": 137,
+      "posts": 31,
+      "panicScore": 38,
+      "helpfulnessScore": 76
+    },
+    {
+      "frameId": "frame-4",
+      "timestamp": "2026-07-19T04:00:00.000Z",
+      "granularity": "day",
+      "engagement": 350,
+      "likes": 199,
+      "replies": 122,
+      "posts": 28,
+      "panicScore": 37,
+      "helpfulnessScore": 79
+    },
+    {
+      "frameId": "frame-4",
+      "timestamp": "2026-07-20T04:00:00.000Z",
+      "granularity": "day",
+      "engagement": 330,
+      "likes": 188,
+      "replies": 115,
+      "posts": 26,
+      "panicScore": 37,
+      "helpfulnessScore": 76
+    },
+    {
+      "frameId": "frame-4",
+      "timestamp": "2026-07-21T04:00:00.000Z",
+      "granularity": "day",
+      "engagement": 305,
+      "likes": 174,
+      "replies": 107,
+      "posts": 24,
+      "panicScore": 31,
+      "helpfulnessScore": 80
+    },
+    {
+      "frameId": "frame-4",
+      "timestamp": "2026-07-22T04:00:00.000Z",
+      "granularity": "day",
+      "engagement": 285,
+      "likes": 162,
+      "replies": 100,
+      "posts": 23,
+      "panicScore": 31,
+      "helpfulnessScore": 74
+    },
+    {
+      "frameId": "frame-4",
+      "timestamp": "2026-07-23T04:00:00.000Z",
+      "granularity": "day",
+      "engagement": 270,
+      "likes": 154,
+      "replies": 95,
+      "posts": 22,
+      "panicScore": 29,
+      "helpfulnessScore": 77
+    },
+    {
+      "frameId": "frame-4",
+      "timestamp": "2026-07-24T04:00:00.000Z",
+      "granularity": "day",
+      "engagement": 250,
+      "likes": 143,
+      "replies": 88,
+      "posts": 20,
+      "panicScore": 28,
+      "helpfulnessScore": 76
+    },
+    {
+      "frameId": "frame-4",
+      "timestamp": "2026-07-25T04:00:00.000Z",
+      "granularity": "day",
+      "engagement": 235,
+      "likes": 134,
+      "replies": 82,
+      "posts": 19,
+      "panicScore": 27,
+      "helpfulnessScore": 79
+    }
+  ]
+}
