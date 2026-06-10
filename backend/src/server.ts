@@ -29,6 +29,7 @@ import {
   listTickets,
   listReportSubjectTags,
   pingTicketAgencies,
+  renameReportSubjectTag,
   setTicketSubjectTag,
   startTicketWork,
   TicketChatClosedError,
@@ -372,9 +373,9 @@ app.patch('/api/gov/volunteers/profiles/:userId', ...requireGovUser, async (requ
   }
 });
 
-app.get('/api/report-subject-tags', authenticateJwt as express.RequestHandler, async (_request, response, next) => {
+app.get('/api/report-subject-tags', authenticateJwt as express.RequestHandler, async (request, response, next) => {
   try {
-    response.json({ items: await listReportSubjectTags() });
+    response.json({ items: await listReportSubjectTags({ activeOnly: request.query.active === 'true' }) });
   } catch (error) {
     next(error);
   }
@@ -407,6 +408,25 @@ app.post('/api/report-subject-tags', ...requireGovUser, async (request: Authenti
       return;
     }
     response.status(201).json({ item });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch('/api/report-subject-tags/:id', ...requireGovUser, async (request, response, next) => {
+  const label = stringBody(request.body?.label);
+  if (!label) {
+    response.status(400).json({ error: 'Subject tag label is required' });
+    return;
+  }
+
+  try {
+    const item = await renameReportSubjectTag(request.params.id, label);
+    if (!item) {
+      response.status(404).json({ error: 'Subject tag not found' });
+      return;
+    }
+    response.json({ item });
   } catch (error) {
     next(error);
   }
@@ -446,7 +466,7 @@ app.get('/api/citizen/reports', authenticateJwt as express.RequestHandler, async
       response.status(401).json({ error: 'Bearer token is required' });
       return;
     }
-    const items = await listTicketsForReporter(request.user.id);
+    const items = await listTicketsForReporter(request.user.id, { visibleFeed: request.query.scope === 'visible' });
     response.json({ items: items.map(redactInternalTicket) });
   } catch (error) {
     next(error);
@@ -1050,7 +1070,7 @@ function parseImageMetadata(value: unknown) {
 }
 
 function isTicketStatus(value: unknown): value is TicketStatus {
-  return value === 'open' || value === 'in-progress' || value === 'resolved' || value === 'grouped';
+  return value === 'open' || value === 'in-progress' || value === 'resolved' || value === 'grouped' || value === 'spam';
 }
 
 function isBroadcastSeverity(value: unknown): value is BroadcastSeverity {

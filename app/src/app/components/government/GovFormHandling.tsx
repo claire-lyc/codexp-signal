@@ -25,7 +25,7 @@ import type { LucideIcon } from 'lucide-react';
 import { API_REFRESH_INTERVAL_MS, apiUrl } from '../../lib/api';
 import { authHeaders } from '../../lib/auth';
 
-type TicketStatus = 'open' | 'in-progress' | 'resolved' | 'grouped';
+type TicketStatus = 'open' | 'in-progress' | 'resolved' | 'grouped' | 'spam';
 type TicketUrgency = 'critical' | 'high' | 'medium' | 'low';
 type TicketComment = {
   id: string;
@@ -77,7 +77,7 @@ type AuthUser = {
   agencyCode: string | null;
 };
 type SortMode = 'priority' | 'newest' | 'oldest' | 'ticket-number';
-type QueueView = 'active' | 'archive';
+type QueueView = 'active' | 'archive' | 'spam';
 
 const agencies = ['All Agencies', 'MOH', 'PUB', 'LTA', 'Enterprise SG', 'SPF', 'SCDF', 'NEA', 'CSA', 'GOV-OPS'];
 const governmentUsers = [
@@ -95,7 +95,7 @@ const governmentUsers = [
   'PUB',
 ];
 const pingableAgencies = ['MOH', 'PUB', 'LTA', 'Enterprise SG', 'SPF', 'SCDF', 'NEA', 'MSF'];
-const statusOptions: Array<'All' | TicketStatus> = ['All', 'open', 'in-progress', 'resolved'];
+const statusOptions: Array<'All' | TicketStatus> = ['All', 'open', 'in-progress', 'resolved', 'spam'];
 const crisisTypes = ['All', 'Health', 'Weather', 'Supply Chain', 'Infrastructure', 'Cybersecurity'];
 const tagCategories = ['health', 'flood', 'supply', 'infrastructure', 'transport', 'environment', 'other'];
 const sortOptions: Array<{ value: SortMode; label: string }> = [
@@ -127,6 +127,7 @@ const statusLabels: Record<TicketStatus, string> = {
   'in-progress': 'In progress',
   grouped: 'Filed',
   resolved: 'Resolved',
+  spam: 'Spam',
 };
 
 function seedSubjectTag(label: string, categories: string[]): SubjectTag {
@@ -249,6 +250,7 @@ const statusColors: Record<TicketStatus, string> = {
   'in-progress': 'bg-blue-900/40 text-blue-400',
   grouped: 'bg-purple-900/40 text-purple-400',
   resolved: 'bg-green-900/40 text-green-400',
+  spam: 'bg-red-950/50 text-red-300 border-red-900',
 };
 
 export default function GovFormHandling() {
@@ -278,6 +280,9 @@ export default function GovFormHandling() {
   const [newSubjectLabel, setNewSubjectLabel] = useState('');
   const [newSubjectCategories, setNewSubjectCategories] = useState<string[]>(['other']);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [caseMenuId, setCaseMenuId] = useState<string | null>(null);
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [autoRegroupedCaseIds, setAutoRegroupedCaseIds] = useState<Set<string>>(new Set());
   const [selectedCaseTicketIds, setSelectedCaseTicketIds] = useState<string[]>([]);
 
   const availableSubjectTags = useMemo(() => {
@@ -296,7 +301,12 @@ export default function GovFormHandling() {
     view: QueueView = queueView,
   ) => {
     const normalizedQuery = query.trim().toLowerCase();
-    const archiveMatch = view === 'archive' ? isResolved(ticket) : !isResolved(ticket);
+    const queueMatch =
+      view === 'archive'
+        ? isResolved(ticket)
+        : view === 'spam'
+          ? isSpam(ticket)
+          : !isResolved(ticket) && !isSpam(ticket);
     const statusMatch = status === 'All' || ticket.status === status;
     const crisisMatch = filterCrisis === 'All' || ticket.crisisType === filterCrisis;
     const agencyMatch = filterAgency === 'All Agencies' || ticket.assignedAgency === filterAgency || ticket.pingedAgencies.includes(filterAgency);
@@ -313,7 +323,7 @@ export default function GovFormHandling() {
       ticket.message.toLowerCase().includes(normalizedQuery) ||
       ticket.location.toLowerCase().includes(normalizedQuery) ||
       ticket.reporter.toLowerCase().includes(normalizedQuery);
-    return archiveMatch && statusMatch && crisisMatch && agencyMatch && governmentUserMatch && subjectMatch && queryMatch;
+    return queueMatch && statusMatch && crisisMatch && agencyMatch && governmentUserMatch && subjectMatch && queryMatch;
   };
 
   const subjectGroupSummaries = useMemo(() => (
@@ -416,7 +426,11 @@ export default function GovFormHandling() {
   };
 
   const visibleStatusOptions: Array<'All' | TicketStatus> =
-    queueView === 'archive' ? ['All', 'resolved'] : statusOptions.filter((status) => status !== 'resolved');
+    queueView === 'archive'
+      ? ['All', 'resolved']
+      : queueView === 'spam'
+        ? ['All', 'spam']
+        : statusOptions.filter((status) => status !== 'resolved' && status !== 'spam');
 
   const statusCounts = useMemo(() => (
     visibleStatusOptions.reduce<Record<string, number>>((counts, status) => {
@@ -429,6 +443,7 @@ export default function GovFormHandling() {
     open: tickets.filter((ticket) => ticketMatchesView(ticket, filterSubjectId, 'open', 'active')).length,
     inProgress: tickets.filter((ticket) => ticketMatchesView(ticket, filterSubjectId, 'in-progress', 'active')).length,
     archived: tickets.filter((ticket) => ticketMatchesView(ticket, filterSubjectId, 'resolved', 'archive')).length,
+    spam: tickets.filter((ticket) => ticketMatchesView(ticket, filterSubjectId, 'spam', 'spam')).length,
   }), [tickets, query, filterAgency, filterCrisis, filterSubjectId]);
 
   const selectedSubjectTag = filterSubjectId === 'All Subjects' || filterSubjectId === 'Ungrouped'
@@ -450,6 +465,8 @@ export default function GovFormHandling() {
     filtered[0] ??
     null;
   const selectedTicketResolved = selectedTicket ? isResolved(selectedTicket) : false;
+  const selectedTicketSpam = selectedTicket ? isSpam(selectedTicket) : false;
+  const selectedTicketAiNote = selectedTicket?.comments.find((item) => item.body.startsWith('AI pre-filter:')) ?? null;
   const detailNavigatorIndex = selectedTicket
     ? detailNavigatorTickets.findIndex((ticket) => ticket.id === selectedTicket.id)
     : -1;
@@ -502,7 +519,7 @@ export default function GovFormHandling() {
       if (ticket.subjectTag) setFilterSubjectId(ticket.subjectTag.id);
       else setFilterSubjectId('Ungrouped');
     }
-    setQueueView(isResolved(ticket) ? 'archive' : 'active');
+    setQueueView(isSpam(ticket) ? 'spam' : isResolved(ticket) ? 'archive' : 'active');
     setFilterStatus('All');
     setSelectedCaseTicketIds([]);
     selectTicket(ticket.id);
@@ -551,11 +568,19 @@ export default function GovFormHandling() {
       };
     }
     if (updatedTicket && isResolved(updatedTicket) && queueView === 'active') {
+      setQueueView('archive');
+      setFilterStatus('All');
       setSelectedTicketId((current) => {
         if (current !== updatedTicket.id) return current;
-        const nextActive = filtered.find((item) => item.id !== updatedTicket.id && !isResolved(item));
-        return nextActive?.id ?? '';
+        return updatedTicket.id;
       });
+    }
+    if (updatedTicket && isSpam(updatedTicket) && queueView !== 'spam') {
+      setQueueView('spam');
+      setFilterStatus('All');
+      setFilterSubjectId('All Subjects');
+      setFilterAgency('All Agencies');
+      setFilterGovernmentUser('All Government Users');
     }
     setNotice(`${ticket.id} marked ${status}.`);
   };
@@ -607,30 +632,22 @@ export default function GovFormHandling() {
     }
   };
 
-  const retireSubjectGroup = (subjectTag: SubjectTag) => {
-    updateLocalTickets(
-      (current) => current.map((ticket) => (
-        ticket.subjectTag?.id === subjectTag.id
-          ? {
-              ...ticket,
-              subjectTag: null,
-              relatedTickets: [],
-              comments: [
-                ...ticket.comments,
-                createComment('internal', `Case "${subjectTag.label}" closed. Ticket moved back to ungrouped.`),
-              ],
-            }
-          : ticket
-      )),
-      setTickets,
-    );
-    setSubjectTags((current) => current.filter((tag) => tag.id !== subjectTag.id));
-    if (filterSubjectId === subjectTag.id) setFilterSubjectId('All Subjects');
-    setNotice(`Closed case: ${subjectTag.label}.`);
-  };
-
-  const archiveSubjectGroup = (subjectTag: SubjectTag) => {
+  const archiveSubjectGroup = async (subjectTag: SubjectTag) => {
     const archivedAt = new Date().toISOString();
+    const caseTickets = tickets.filter((ticket) => ticket.subjectTag?.id === subjectTag.id && !isResolved(ticket));
+    if (caseTickets.length && usingBackend) {
+      const updatedTickets: Ticket[] = [];
+      for (const ticket of caseTickets) {
+        try {
+          const data = await requestJson<{ item: Ticket }>(`/api/tickets/${ticket.id}/status`, 'PATCH', { status: 'resolved' });
+          updatedTickets.push(data.item);
+        } catch {
+          setNotice(`Unable to archive every report in ${subjectTag.label}.`);
+          return;
+        }
+      }
+      setTickets((current) => current.map((ticket) => updatedTickets.find((updated) => updated.id === ticket.id) ?? ticket));
+    } else {
     updateLocalTickets(
       (current) => current.map((ticket) => (
         ticket.subjectTag?.id === subjectTag.id
@@ -648,6 +665,7 @@ export default function GovFormHandling() {
       )),
       setTickets,
     );
+    }
     setQueueView('archive');
     setFilterStatus('All');
     setFilterSubjectId(subjectTag.id);
@@ -655,6 +673,47 @@ export default function GovFormHandling() {
     const firstCaseTicket = tickets.find((ticket) => ticket.subjectTag?.id === subjectTag.id);
     if (firstCaseTicket) setSelectedTicketId(firstCaseTicket.id);
     setNotice(`Archived case: ${subjectTag.label}.`);
+  };
+
+  const restoreSubjectGroup = async (subjectTag: SubjectTag) => {
+    const caseTickets = tickets.filter((ticket) => ticket.subjectTag?.id === subjectTag.id && isResolved(ticket));
+    if (caseTickets.length && usingBackend) {
+      const updatedTickets: Ticket[] = [];
+      for (const ticket of caseTickets) {
+        try {
+          const data = await requestJson<{ item: Ticket }>(`/api/tickets/${ticket.id}/status`, 'PATCH', { status: 'open' });
+          updatedTickets.push(data.item);
+        } catch {
+          setNotice(`Unable to reopen every report in ${subjectTag.label}.`);
+          return;
+        }
+      }
+      setTickets((current) => current.map((ticket) => updatedTickets.find((updated) => updated.id === ticket.id) ?? ticket));
+    } else {
+      updateLocalTickets(
+        (current) => current.map((ticket) => (
+          ticket.subjectTag?.id === subjectTag.id && isResolved(ticket)
+            ? {
+                ...ticket,
+                status: 'open',
+                chatEnabled: true,
+                comments: [
+                  ...ticket.comments,
+                  createComment('internal', `Case "${subjectTag.label}" reopened.`),
+                ],
+              }
+            : ticket
+        )),
+        setTickets,
+      );
+    }
+    setQueueView('active');
+    setFilterStatus('All');
+    setFilterSubjectId(subjectTag.id);
+    setSelectedCaseTicketIds([]);
+    const firstCaseTicket = caseTickets[0];
+    if (firstCaseTicket) setSelectedTicketId(firstCaseTicket.id);
+    setNotice(`Reopened case: ${subjectTag.label}.`);
   };
 
   const createSubjectTag = async () => {
@@ -695,6 +754,69 @@ export default function GovFormHandling() {
       setNotice(`Created local case: ${label}.`);
     }
   };
+
+  const renameSubjectGroup = async (subjectTag: SubjectTag) => {
+    const label = window.prompt('Rename case', subjectTag.label)?.trim();
+    if (!label || label === subjectTag.label) return;
+
+    try {
+      const data = await requestJson<{ item: SubjectTag }>(`/api/report-subject-tags/${subjectTag.id}`, 'PATCH', { label });
+      setSubjectTags((current) => current.map((tag) => (tag.id === data.item.id ? data.item : tag)));
+      setTickets((current) => current.map((ticket) => (
+        ticket.subjectTag?.id === data.item.id ? { ...ticket, subjectTag: data.item } : ticket
+      )));
+      setNotice(`Renamed case to ${data.item.label}.`);
+    } catch {
+      const renamed = { ...subjectTag, label };
+      setSubjectTags((current) => current.map((tag) => (tag.id === subjectTag.id ? renamed : tag)));
+      setTickets((current) => current.map((ticket) => (
+        ticket.subjectTag?.id === subjectTag.id ? { ...ticket, subjectTag: renamed } : ticket
+      )));
+      setNotice(`Renamed case locally to ${label}.`);
+    }
+  };
+
+  const regroupSubjectGroup = async (subjectTag: SubjectTag, options: { automatic?: boolean } = {}) => {
+    const caseTickets = tickets.filter((ticket) => ticket.subjectTag?.id === subjectTag.id && !isResolved(ticket) && !isSpam(ticket));
+    const splitBuckets = groupTicketsForCaseSplit(caseTickets).filter((bucket) => bucket.tickets.length >= 2);
+    if (splitBuckets.length < 2) {
+      if (!options.automatic) setNotice(`No strong split found for ${subjectTag.label}. Try after more related reports arrive.`);
+      return;
+    }
+
+    try {
+      for (const bucket of splitBuckets) {
+        const data = await requestJson<{ item: SubjectTag }>('/api/report-subject-tags', 'POST', {
+          label: `${subjectTag.label} - ${bucket.label}`,
+          categories: subjectTag.categories.length ? subjectTag.categories : ['other'],
+          description: `AI-assisted subgroup for ${subjectTag.label} reports around ${bucket.label}.`,
+        });
+        setSubjectTags((current) => [data.item, ...current.filter((tag) => tag.id !== data.item.id)]);
+
+        for (const ticket of bucket.tickets) {
+          const updated = await requestJson<{ item: Ticket }>(`/api/tickets/${ticket.id}/subject-tag`, 'PATCH', { subjectTagId: data.item.id });
+          syncTicket(updated.item);
+        }
+      }
+      setFilterSubjectId('All Subjects');
+      setNotice(`${options.automatic ? 'Automatic regrouping' : 'AI regroup'} split ${subjectTag.label} into ${splitBuckets.length} more specific cases.`);
+    } catch {
+      setNotice(`Unable to regroup ${subjectTag.label}.`);
+    }
+  };
+
+  useEffect(() => {
+    if (queueView === 'spam') return;
+    const broadCase = subjectGroupSummaries.find((group) => (
+      group.tickets.length >= 50 &&
+      !autoRegroupedCaseIds.has(group.tag.id) &&
+      groupTicketsForCaseSplit(group.tickets).filter((bucket) => bucket.tickets.length >= 2).length >= 2
+    ));
+    if (!broadCase) return;
+
+    setAutoRegroupedCaseIds((current) => new Set([...current, broadCase.tag.id]));
+    void regroupSubjectGroup(broadCase.tag, { automatic: true });
+  }, [autoRegroupedCaseIds, queueView, subjectGroupSummaries]);
 
   const addComment = async () => {
     if (!selectedTicket || !comment.trim() || isResolved(selectedTicket)) return;
@@ -811,6 +933,9 @@ export default function GovFormHandling() {
           <span className="px-2.5 py-1 bg-green-900/40 border border-green-800 text-green-400 rounded-lg">
             {summaryCounts.archived} Archived
           </span>
+          <span className="px-2.5 py-1 bg-red-950/40 border border-red-900 text-red-300 rounded-lg">
+            {summaryCounts.spam} Spam
+          </span>
         </div>
       </div>
 
@@ -844,50 +969,73 @@ export default function GovFormHandling() {
                 <span className="max-w-12 truncate">{sortIconLabels[sortMode]}</span>
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-1 rounded-lg border border-zinc-800 bg-zinc-950 p-1">
-              {(['active', 'archive'] as QueueView[]).map((view) => (
+            <div className="grid grid-cols-3 gap-1 rounded-lg border border-zinc-800 bg-zinc-950 p-1">
+              {(['active', 'archive', 'spam'] as QueueView[]).map((view) => (
                 <button
                   key={view}
                   type="button"
                   onClick={() => {
                     setQueueView(view);
                     setFilterStatus('All');
+                    if (view === 'spam') {
+                      setFilterAgency('All Agencies');
+                      setFilterSubjectId('All Subjects');
+                      setFilterGovernmentUser('All Government Users');
+                    }
                   }}
                   className={`rounded-md px-2 py-1.5 text-xs transition-colors ${
                     queueView === view ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
                   }`}
                 >
-                  {view === 'active' ? 'Active queue' : 'Archive'}
+                  {view === 'active' ? 'Active' : view === 'archive' ? 'Archive' : 'Spam'}
                 </button>
               ))}
             </div>
-            <div className="flex gap-1 flex-wrap">
-              {visibleStatusOptions.map((status) => (
-                <button
-                  key={status}
-                  onClick={() => applyStatusFilter(status)}
-                  className={`px-2 py-0.5 rounded text-xs transition-colors ${
-                    filterStatus === status ? 'bg-zinc-700 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                  }`}
-                >
-                  {status === 'All' ? 'All' : statusLabels[status]} <span className="text-zinc-500">{statusCounts[status] ?? 0}</span>
-                </button>
-              ))}
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950/60">
+              <button
+                type="button"
+                onClick={() => setFilterPanelOpen((open) => !open)}
+                className="flex w-full items-center justify-between px-2.5 py-2 text-left text-xs text-zinc-300 hover:bg-zinc-900"
+              >
+                <span className="font-medium">Filters</span>
+                <span className="text-[11px] text-zinc-500">
+                  {[filterStatus !== 'All' ? statusLabels[filterStatus] : null, filterCrisis !== 'All' ? filterCrisis : null, filterAgency !== 'All Agencies' ? filterAgency : null]
+                    .filter(Boolean)
+                    .join(' · ') || 'None'}
+                </span>
+              </button>
+              {filterPanelOpen && (
+                <div className="space-y-2 border-t border-zinc-800 p-2">
+                  <div className="flex gap-1 flex-wrap">
+                    {visibleStatusOptions.map((status) => (
+                      <button
+                        key={status}
+                        onClick={() => applyStatusFilter(status)}
+                        className={`px-2 py-0.5 rounded text-xs transition-colors ${
+                          filterStatus === status ? 'bg-zinc-700 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                        }`}
+                      >
+                        {status === 'All' ? 'All' : statusLabels[status]} <span className="text-zinc-500">{statusCounts[status] ?? 0}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <select value={filterCrisis} onChange={(event) => setFilterCrisis(event.target.value)} className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-600">
+                    {crisisTypes.map((crisis) => <option key={crisis}>{crisis}</option>)}
+                  </select>
+                  <select value={filterAgency} onChange={(event) => setFilterAgency(event.target.value)} className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-600">
+                    {agencies.map((agency) => <option key={agency}>{agency}</option>)}
+                  </select>
+                  <select
+                    value={filterGovernmentUser}
+                    onChange={(event) => setFilterGovernmentUser(event.target.value)}
+                    className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-600"
+                    aria-label="Filter by government user"
+                  >
+                    {governmentUsers.map((user) => <option key={user}>{user}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
-            <select value={filterCrisis} onChange={(event) => setFilterCrisis(event.target.value)} className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-600">
-              {crisisTypes.map((crisis) => <option key={crisis}>{crisis}</option>)}
-            </select>
-            <select value={filterAgency} onChange={(event) => setFilterAgency(event.target.value)} className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-600">
-              {agencies.map((agency) => <option key={agency}>{agency}</option>)}
-            </select>
-            <select
-              value={filterGovernmentUser}
-              onChange={(event) => setFilterGovernmentUser(event.target.value)}
-              className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-blue-600"
-              aria-label="Filter by government user"
-            >
-              {governmentUsers.map((user) => <option key={user}>{user}</option>)}
-            </select>
             <div className="space-y-1.5 rounded-lg border border-zinc-800 bg-zinc-950 p-2">
               <div className="flex items-center justify-between">
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Report scope</div>
@@ -931,57 +1079,74 @@ export default function GovFormHandling() {
                 <div className="mt-1 text-[11px] text-zinc-500">Needs case decision</div>
               </button>
             </div>
-            <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-zinc-800 bg-zinc-950/50 p-2">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Grouped cases</div>
-                <span className="text-[11px] text-zinc-500">{subjectGroupSummaries.length}</span>
-              </div>
-              <div className="flex min-h-0 flex-1 flex-col gap-1.5">
-                <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1 [scrollbar-color:#3f3f46_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700/70">
-                  {subjectGroupSummaries.map((group) => (
-                    <div
-                      key={group.tag.id}
-                      className={`w-full rounded-lg border px-2.5 py-2 text-left transition-colors ${
-                        filterSubjectId === group.tag.id
-                          ? 'border-blue-700 bg-blue-950/40 text-blue-200'
-                          : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setFilterSubjectId(group.tag.id)}
-                          className="min-w-0 flex-1 text-left"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="truncate text-xs font-medium">{group.tag.label}</span>
-                            <span className="shrink-0 text-[11px] text-zinc-500">{group.tickets.length}</span>
+            {queueView !== 'spam' && (
+              <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-zinc-800 bg-zinc-950/50 p-2">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Grouped cases</div>
+                  <span className="text-[11px] text-zinc-500">{subjectGroupSummaries.length}</span>
+                </div>
+                <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+                  <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1 [scrollbar-color:#3f3f46_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700/70">
+                    {subjectGroupSummaries.map((group) => (
+                      <div
+                        key={group.tag.id}
+                        className={`w-full rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                          filterSubjectId === group.tag.id
+                            ? 'border-blue-700 bg-blue-950/40 text-blue-200'
+                            : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setFilterSubjectId(group.tag.id)}
+                            className="min-w-0 flex-1 text-left"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="truncate text-xs font-medium">{group.tag.label}</span>
+                              <span className="shrink-0 text-[11px] text-zinc-500">{group.tickets.length}</span>
+                            </div>
+                            <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-500">
+                              <span>{queueView === 'archive' ? `${group.tickets.length} resolved` : `${group.tickets.length} current`}</span>
+                              {group.highestUrgency && <span>{group.highestUrgency}</span>}
+                            </div>
+                          </button>
+                          <div className="relative shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setCaseMenuId((current) => current === group.tag.id ? null : group.tag.id)}
+                              className="rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+                              title="Case actions"
+                              aria-label={`Actions for ${group.tag.label}`}
+                            >
+                              <MoreVertical className="h-3.5 w-3.5" />
+                            </button>
+                            {caseMenuId === group.tag.id && (
+                              <div className="absolute right-0 top-full z-30 mt-1 w-40 rounded-lg border border-zinc-800 bg-zinc-950 p-1 shadow-xl">
+                                <CaseMenuButton label="Rename" onClick={() => { setCaseMenuId(null); void renameSubjectGroup(group.tag); }} />
+                                {queueView === 'archive' ? (
+                                  <CaseMenuButton label="Reopen case" onClick={() => { setCaseMenuId(null); void restoreSubjectGroup(group.tag); }} />
+                                ) : (
+                                  <>
+                                    <CaseMenuButton label="AI regroup" onClick={() => { setCaseMenuId(null); void regroupSubjectGroup(group.tag); }} />
+                                    <CaseMenuButton label="Archive case" onClick={() => { setCaseMenuId(null); void archiveSubjectGroup(group.tag); }} />
+                                  </>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-500">
-                            <span>{queueView === 'archive' ? `${group.tickets.length} resolved` : `${group.tickets.length} current`}</span>
-                            {group.highestUrgency && <span>{group.highestUrgency}</span>}
-                          </div>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => retireSubjectGroup(group.tag)}
-                          className="shrink-0 rounded-md p-1 text-zinc-500 hover:bg-red-950/50 hover:text-red-300"
-                          title="Delete case"
-                          aria-label={`Delete ${group.tag.label}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  {!subjectGroupSummaries.length && (
-                    <div className="rounded-lg border border-dashed border-zinc-800 px-2.5 py-3 text-xs text-zinc-500">
-                      No cases yet.
-                    </div>
-                  )}
+                    ))}
+                    {!subjectGroupSummaries.length && (
+                      <div className="rounded-lg border border-dashed border-zinc-800 px-2.5 py-3 text-xs text-zinc-500">
+                        No cases yet.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -1013,39 +1178,61 @@ export default function GovFormHandling() {
                 setActionMenuOpen(false);
                 updateStatus(selectedTicket, 'resolved');
               }}
+              onSpam={() => {
+                setActionMenuOpen(false);
+                updateStatus(selectedTicket, 'spam');
+              }}
+              onRestore={() => {
+                setActionMenuOpen(false);
+                updateStatus(selectedTicket, 'open');
+                setQueueView('active');
+              }}
+              onArchiveCase={selectedTicket.subjectTag ? () => {
+                setActionMenuOpen(false);
+                void archiveSubjectGroup(selectedTicket.subjectTag!);
+              } : undefined}
               onDelete={() => {
                 setActionMenuOpen(false);
                 setDeleteConfirmOpen(true);
               }}
+              canDelete={queueView !== 'archive'}
             />
 
             <div className="flex flex-wrap items-center gap-2 border-b border-zinc-800 bg-zinc-950/50 px-5 py-2.5">
-              <button
-                type="button"
-                onClick={() => setSubjectDialogOpen(true)}
-                className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800"
-              >
-                Move to another case
-              </button>
               {selectedTicket.subjectTag && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => updateSubjectTag(selectedTicket, null)}
-                    className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
-                  >
-                    Remove from case
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => archiveSubjectGroup(selectedTicket.subjectTag!)}
-                    className="rounded-lg border border-green-900/70 bg-green-950/30 px-3 py-1.5 text-xs text-green-200 hover:bg-green-950/60"
-                  >
-                    Archive case
-                  </button>
-                </>
+                <button
+                  type="button"
+                  onClick={() => updateSubjectTag(selectedTicket, null)}
+                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
+                >
+                  Remove from case
+                </button>
               )}
-              {!selectedTicketResolved && (
+              {selectedTicketSpam && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateStatus(selectedTicket, 'open');
+                    setQueueView('active');
+                  }}
+                  className="rounded-lg border border-blue-900/70 bg-blue-950/30 px-3 py-1.5 text-xs text-blue-200 hover:bg-blue-950/60"
+                >
+                  Mark legitimate
+                </button>
+              )}
+              {selectedTicketResolved && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateStatus(selectedTicket, 'open');
+                    setQueueView('active');
+                  }}
+                  className="rounded-lg border border-blue-900/70 bg-blue-950/30 px-3 py-1.5 text-xs text-blue-200 hover:bg-blue-950/60"
+                >
+                  Reopen ticket
+                </button>
+              )}
+              {!selectedTicketResolved && !selectedTicketSpam && (
                 <button
                   type="button"
                   onClick={() => updateStatus(selectedTicket, 'resolved')}
@@ -1146,6 +1333,11 @@ export default function GovFormHandling() {
                       Broadcast
                     </button>
                   </div>
+                  {selectedTicketAiNote && (
+                    <div className="mt-2 rounded-lg border border-blue-900/60 bg-blue-950/20 px-3 py-2 text-xs text-blue-100">
+                      <span className="font-medium text-blue-300">AI review:</span> {selectedTicketAiNote.body}
+                    </div>
+                  )}
                 </div>
 
                 {selectedTicket.status === 'open' && !selectedTicket.startedWorkAt && !selectedTicketResolved && (
@@ -1424,7 +1616,11 @@ function TicketDetailHeader({
   onGroup,
   onPing,
   onResolve,
+  onSpam,
+  onRestore,
+  onArchiveCase,
   onDelete,
+  canDelete,
 }: {
   ticket: Ticket;
   actionMenuOpen: boolean;
@@ -1432,7 +1628,11 @@ function TicketDetailHeader({
   onGroup: () => void;
   onPing: () => void;
   onResolve: () => void;
+  onSpam: () => void;
+  onRestore: () => void;
+  onArchiveCase?: () => void;
   onDelete: () => void;
+  canDelete: boolean;
 }) {
   return (
     <div className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/80">
@@ -1465,8 +1665,12 @@ function TicketDetailHeader({
           <div className="absolute right-0 top-full z-40 mt-2 w-52 rounded-xl border border-zinc-800 bg-zinc-950 p-2 shadow-2xl">
             <ActionMenuButton icon={<Layers className="h-4 w-4" />} label="Move to case" onClick={onGroup} />
             <ActionMenuButton icon={<Bell className="h-4 w-4" />} label="Ping agency" onClick={onPing} />
-            <ActionMenuButton icon={<CheckCircle className="h-4 w-4" />} label="Resolve" onClick={onResolve} />
-            <ActionMenuButton icon={<Trash2 className="h-4 w-4" />} label="Delete" danger onClick={onDelete} />
+            {onArchiveCase && <ActionMenuButton icon={<CheckCircle className="h-4 w-4" />} label="Archive case" onClick={onArchiveCase} />}
+            {isResolved(ticket) || isSpam(ticket)
+              ? <ActionMenuButton icon={<CheckCircle className="h-4 w-4" />} label={isSpam(ticket) ? 'Mark legitimate' : 'Reopen'} onClick={onRestore} />
+              : <ActionMenuButton icon={<CheckCircle className="h-4 w-4" />} label="Resolve" onClick={onResolve} />}
+            {!isSpam(ticket) && <ActionMenuButton icon={<Shield className="h-4 w-4" />} label="Move to spam" onClick={onSpam} />}
+            {canDelete && <ActionMenuButton icon={<Trash2 className="h-4 w-4" />} label="Delete" danger onClick={onDelete} />}
           </div>
         )}
       </div>
@@ -1484,6 +1688,18 @@ function ActionMenuButton({ icon, label, danger = false, onClick }: { icon: Reac
       }`}
     >
       {icon}
+      {label}
+    </button>
+  );
+}
+
+function CaseMenuButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="block w-full rounded-md px-2.5 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800"
+    >
       {label}
     </button>
   );
@@ -1836,7 +2052,39 @@ function groupComments(comments: TicketComment[]): CommentGroup[] {
 }
 
 function isResolved(ticket: Ticket) {
-  return ticket.status === 'resolved' || ticket.chatEnabled === false;
+  return ticket.status === 'resolved';
+}
+
+function isSpam(ticket: Ticket) {
+  return ticket.status === 'spam';
+}
+
+function groupTicketsForCaseSplit(tickets: Ticket[]) {
+  const buckets = new Map<string, Ticket[]>();
+  tickets.forEach((ticket) => {
+    const label = splitBucketLabel(ticket);
+    buckets.set(label, [...(buckets.get(label) ?? []), ticket]);
+  });
+  return Array.from(buckets.entries())
+    .map(([label, bucketTickets]) => ({ label, tickets: bucketTickets }))
+    .sort((a, b) => b.tickets.length - a.tickets.length || a.label.localeCompare(b.label));
+}
+
+function splitBucketLabel(ticket: Ticket) {
+  const locationPart = ticket.location.split(',')[0]?.trim();
+  const locationTokens = locationPart
+    ?.split(/\s+/)
+    .filter((token) => token.length > 2 && !/^(blk|block|road|street|avenue|ave|station|mrt)$/i.test(token));
+  if (locationTokens?.length) return titleCase(locationTokens.slice(0, 2).join(' '));
+
+  const message = ticket.message.toLowerCase();
+  const keywords = ['clinic', 'hospital', 'pharmacy', 'drain', 'platform', 'lift', 'road', 'sms', 'shelf', 'mosquito'];
+  const keyword = keywords.find((item) => message.includes(item));
+  return keyword ? titleCase(keyword) : ticket.assignedAgency;
+}
+
+function titleCase(value: string) {
+  return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function sortTickets(a: Ticket, b: Ticket, sortMode: SortMode) {

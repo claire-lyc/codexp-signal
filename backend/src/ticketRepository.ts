@@ -1,6 +1,7 @@
 import { pool, query } from './db.js';
+import { triageCitizenTicketWithAI, type TicketTriageDecision } from './ticketTriageAI.js';
 
-export type TicketStatus = 'open' | 'in-progress' | 'resolved' | 'grouped';
+export type TicketStatus = 'open' | 'in-progress' | 'resolved' | 'grouped' | 'spam';
 export type TicketUrgency = 'critical' | 'high' | 'medium' | 'low';
 
 export type TicketComment = {
@@ -138,7 +139,8 @@ export async function listTickets(filters: {
   status?: string;
   crisisType?: string;
   query?: string;
-}) {
+} = {}) {
+  await auditExistingReportModeration();
   await backfillMissingSubjectTags();
 
   const clauses: string[] = [];
@@ -277,7 +279,13 @@ export async function getTicketByPublicId(publicReportId: string) {
   return ticket ?? null;
 }
 
-export async function listTicketsForReporter(userId: string) {
+export async function listTicketsForReporter(userId: string, options: { visibleFeed?: boolean } = {}) {
+  await auditExistingReportModeration();
+  const values = options.visibleFeed ? [] : [userId];
+  const ownershipWhere = options.visibleFeed
+    ? `reports.status <> 'rejected'::citizen.report_status`
+    : `reports.reporter_user_id = $1 AND reports.status <> 'rejected'::citizen.report_status`;
+
   const reports = await query<ReportRow>(
     `
       SELECT
@@ -313,10 +321,10 @@ export async function listTicketsForReporter(userId: string) {
       LEFT JOIN citizen.report_subject_tags subject_tags ON subject_tags.id = reports.subject_tag_id
       LEFT JOIN auth.users started_by ON started_by.id = reports.started_work_by_user_id
       LEFT JOIN auth.users current_handler ON current_handler.id = reports.current_handler_user_id
-      WHERE reports.reporter_user_id = $1
+      WHERE ${ownershipWhere}
       ORDER BY reports.created_at DESC
     `,
-    [userId],
+    values,
   );
 
   return hydrateTickets(reports, { includeImages: false });
@@ -351,11 +359,22 @@ export async function createCitizenTicket(input: {
     const dbCrisisType = toDbCrisisType(input.crisisType);
     const agency = agencyForReport(input.crisisType, input.reportType, input.message, dbCrisisType);
     const agencyId = await upsertAgency(client, agency);
-    const subjectTagId = input.subjectTagId ?? await subjectTagIdForCitizenReport(client, {
+    const aiDecision = await triageCitizenTicketWithAI({
+      reportType: input.reportType ?? input.crisisType,
+      selectedIssue: input.title ?? null,
+      description: input.message,
+      location: input.location ?? null,
+    });
+    const moderation = moderateCitizenReport(input, aiDecision);
+    const subjectTagId = moderation.status === 'rejected'
+      ? null
+      : input.subjectTagId ?? await subjectTagIdForCitizenReport(client, {
       title: input.title,
       reportType: input.reportType,
       crisisType: input.crisisType,
+      message: input.message,
       dbCrisisType,
+      aiDecision,
     });
 
     const reportResult = await client.query<{ id: string }>(
@@ -376,7 +395,7 @@ export async function createCitizenTicket(input: {
           assigned_agency_id,
           subject_tag_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'submitted', $12, $13)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::citizen.report_status, $13, $14)
         RETURNING id
       `,
       [
@@ -391,6 +410,7 @@ export async function createCitizenTicket(input: {
         input.latitude ?? null,
         input.longitude ?? null,
         input.urgency,
+        moderation.status,
         agencyId,
         subjectTagId,
       ],
@@ -405,6 +425,19 @@ export async function createCitizenTicket(input: {
       `,
       [reportId, 'New citizen ticket opened from public report form.'],
     );
+
+    if (aiDecision) {
+      await client.query(
+        `
+          INSERT INTO citizen.report_comments (report_id, author_user_id, author_type, visibility, body)
+          VALUES ($1, NULL, 'system', 'internal', $2)
+        `,
+        [
+          reportId,
+          `AI pre-filter: ${aiDecision.spam ? 'spam' : 'not spam'}, ${aiDecision.relevantToSelectedIssue ? 'case relevant' : 'case not relevant'} (${Math.round(aiDecision.confidence * 100)}%). ${aiDecision.reason}`,
+        ],
+      );
+    }
 
     for (const image of input.images ?? []) {
       await client.query(
@@ -466,7 +499,18 @@ export async function updateTicketStatus(id: string, status: TicketStatus) {
   return getTicketByPublicId(id);
 }
 
-export async function listReportSubjectTags() {
+export async function listReportSubjectTags(options: { activeOnly?: boolean } = {}) {
+  const activeWhere = options.activeOnly
+    ? `
+      WHERE EXISTS (
+        SELECT 1
+        FROM citizen.reports active_reports
+        WHERE active_reports.subject_tag_id = tags.id
+          AND active_reports.status <> 'rejected'::citizen.report_status
+          AND active_reports.status <> 'resolved'::citizen.report_status
+      )
+    `
+    : '';
   const rows = await query<SubjectTagRow>(
     `
       SELECT
@@ -476,6 +520,7 @@ export async function listReportSubjectTags() {
         COALESCE(array_agg(categories.category ORDER BY categories.category) FILTER (WHERE categories.category IS NOT NULL), ARRAY[]::text[]) AS categories
       FROM citizen.report_subject_tags tags
       LEFT JOIN citizen.report_subject_tag_categories categories ON categories.subject_tag_id = tags.id
+      ${activeWhere}
       GROUP BY tags.id, tags.label, tags.description
       ORDER BY tags.label ASC
     `,
@@ -533,6 +578,25 @@ export async function createReportSubjectTag(input: {
   } finally {
     client.release();
   }
+}
+
+export async function renameReportSubjectTag(id: string, label: string) {
+  const nextLabel = label.trim();
+  if (!nextLabel) return null;
+
+  const result = await query<{ id: string }>(
+    `
+      UPDATE citizen.report_subject_tags
+      SET label = $2, updated_at = now()
+      WHERE id = $1
+      RETURNING id
+    `,
+    [id, nextLabel],
+  );
+  if (!result[0]) return null;
+
+  const tags = await listReportSubjectTags();
+  return tags.find((tag) => tag.id === id) ?? null;
 }
 
 export async function setTicketSubjectTag(id: string, subjectTagId: string | null, userId?: string | null) {
@@ -985,10 +1049,18 @@ async function upsertAgency(client: { query: typeof pool.query }, agency: { code
 
 async function subjectTagIdForCitizenReport(
   client: { query: typeof pool.query },
-  input: { title?: string; reportType?: string; crisisType: string; dbCrisisType: DbCrisisType },
+  input: { title?: string; reportType?: string; crisisType: string; message?: string; dbCrisisType: DbCrisisType; aiDecision?: TicketTriageDecision | null },
 ) {
   const label = input.title?.trim();
   if (!label || isOtherSpecificProblem(label) || isOtherSpecificProblem(input.reportType)) return null;
+  if (input.aiDecision && input.aiDecision.confidence >= 0.55 && !input.aiDecision.relevantToSelectedIssue) return null;
+  if (!isCitizenIssueRelevant({
+    label,
+    reportType: input.reportType,
+    crisisType: input.crisisType,
+    message: input.message,
+    dbCrisisType: input.dbCrisisType,
+  })) return null;
 
   const categories = [...new Set([
     input.reportType?.trim().toLowerCase(),
@@ -1022,6 +1094,326 @@ async function subjectTagIdForCitizenReport(
   return subjectTagId;
 }
 
+function moderateCitizenReport(input: {
+  title?: string;
+  reportType?: string;
+  crisisType: string;
+  message: string;
+  location?: string;
+}, aiDecision?: TicketTriageDecision | null): { status: ReportStatus; reason: string | null } {
+  if (aiDecision && aiDecision.confidence >= 0.55) {
+    return aiDecision.spam
+      ? { status: 'rejected', reason: aiDecision.reason }
+      : { status: 'submitted', reason: aiDecision.reason };
+  }
+
+  const text = normalizeModerationText(`${input.title ?? ''} ${input.reportType ?? ''} ${input.crisisType} ${input.message} ${input.location ?? ''}`);
+  const reportText = normalizeModerationText(`${input.message} ${input.location ?? ''}`);
+  const message = normalizeModerationText(input.message);
+  const words = message.split(/\s+/).filter(Boolean);
+  const uniqueWords = new Set(words);
+  const hasEmergencySignal = emergencyKeywords.some((keyword) => reportText.includes(keyword));
+  const hasCivicSignal = civicReportKeywords.some((keyword) => reportText.includes(keyword));
+  const spamPhrases = [
+    'asdf',
+    'qwerty',
+    'test test',
+    'fake report',
+    'not real',
+    'just testing',
+    'lol',
+    'lmao',
+    'haha',
+    'free money',
+    'click here',
+    'buy now',
+    'subscribe',
+    'idiot',
+    'stupid',
+  ];
+
+  const mostlyRepeated = words.length >= 8 && uniqueWords.size <= Math.max(2, Math.floor(words.length / 4));
+  const hasLongNonsenseRun = /([a-z])\1{5,}/.test(text) || /\b[a-z]{18,}\b/.test(text);
+  const tooShortToAction = message.length > 0 && message.length < 12 && !hasEmergencySignal;
+  const hasSpamPhrase = spamPhrases.some((phrase) => text.includes(phrase));
+  const notPublicCrisisRelated = !hasCivicSignal && !hasEmergencySignal;
+
+  if (hasSpamPhrase || mostlyRepeated || hasLongNonsenseRun || tooShortToAction || notPublicCrisisRelated) {
+    return { status: 'rejected', reason: 'spam' };
+  }
+
+  return { status: 'submitted', reason: null };
+}
+
+function isCitizenIssueRelevant(input: {
+  label: string;
+  reportType?: string;
+  crisisType: string;
+  message?: string;
+  dbCrisisType: DbCrisisType;
+}) {
+  const label = normalizeModerationText(input.label);
+  const reportType = normalizeModerationText(input.reportType ?? input.crisisType);
+  const text = normalizeModerationText(input.message ?? '');
+  const expectedCategories = categoryAliasesForReportType(reportType, input.dbCrisisType);
+  const issueCategories = issueCategoriesForLabel(label);
+  const relevanceScore = issueRelevanceScore(label, text, issueCategories);
+
+  if (issueCategories.length && expectedCategories.length && !issueCategories.some((category) => expectedCategories.includes(category))) {
+    return false;
+  }
+
+  if (issueCategories.length && expectedCategories.length) return relevanceScore >= 2;
+
+  const labelTokens = [...normalizedTokens(label)];
+  const textTokens = normalizedTokens(text);
+  return labelTokens.length === 0 || labelTokens.some((token) => textTokens.has(token)) || relevanceScore >= 2;
+}
+
+function issueRelevanceScore(label: string, message: string, issueCategories: string[]) {
+  const labelTokens = [...normalizedTokens(label)];
+  const messageTokens = normalizedTokens(message);
+  let score = 0;
+
+  if (labelTokens.some((token) => messageTokens.has(token))) score += 2;
+
+  const keywordGroups = issueCategories.flatMap((category) => categoryKeywords[category] ?? []);
+  const matchedKeywords = new Set(keywordGroups.filter((keyword) => message.includes(keyword)));
+  score += Math.min(matchedKeywords.size, 3);
+
+  if (label.includes('outage') && ['blackout', 'electricity', 'lights'].some((keyword) => message.includes(keyword))) score += 2;
+  if (label.includes('dengue') && ['mosquito', 'fever', 'bite', 'rash'].some((keyword) => message.includes(keyword))) score += 2;
+  if (label.includes('flood') && ['ankle', 'knee', 'water', 'ponding'].some((keyword) => message.includes(keyword))) score += 2;
+  if (label.includes('shortage') && ['stock', 'empty', 'shelf', 'unavailable', 'queue'].some((keyword) => message.includes(keyword))) score += 2;
+
+  return score;
+}
+
+function issueCategoriesForLabel(label: string) {
+  const categories: string[] = [];
+  const rules: Array<[string[], string]> = [
+    [['covid', 'hantavirus', 'dengue', 'health', 'medical', 'clinic', 'hospital', 'symptom'], 'health'],
+    [['flood', 'drain', 'water', 'rain'], 'weather'],
+    [['medicine', 'food', 'goods', 'fuel', 'shortage', 'supply'], 'supply'],
+    [['power', 'outage', 'road', 'transport', 'facility', 'lift', 'infrastructure'], 'infrastructure'],
+    [['cyber', 'phishing', 'scam', 'malware'], 'cybersecurity'],
+    [['safety', 'crime', 'police', 'crowd', 'noise', 'nuisance'], 'general'],
+  ];
+  rules.forEach(([keywords, category]) => {
+    if (keywords.some((keyword) => label.includes(keyword))) categories.push(category);
+  });
+  return [...new Set(categories)];
+}
+
+function categoryAliasesForReportType(reportType: string, dbCrisisType: DbCrisisType) {
+  const categories = new Set<string>([dbCrisisType, categoryForDbCrisisType(dbCrisisType)]);
+  if (reportType.includes('health') || reportType.includes('medical')) categories.add('health');
+  if (reportType.includes('flood') || reportType.includes('weather')) {
+    categories.add('weather');
+    categories.add('flood');
+  }
+  if (reportType.includes('supply') || reportType.includes('shortage')) {
+    categories.add('supply');
+    categories.add('supply_chain');
+  }
+  if (reportType.includes('transport') || reportType.includes('infrastructure')) categories.add('infrastructure');
+  if (reportType.includes('cyber')) categories.add('cybersecurity');
+  if (reportType.includes('other') || reportType.includes('general')) categories.add('general');
+  return [...categories];
+}
+
+function normalizeModerationText(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+const emergencyKeywords = [
+  'emergency',
+  'urgent',
+  'danger',
+  'injured',
+  'injury',
+  'fire',
+  'smoke',
+  'flood',
+  'collapse',
+  'accident',
+  'blocked',
+  'outage',
+  'shortage',
+  'sick',
+  'fever',
+  'panadol',
+  'salbutamol',
+  'inhaler',
+  'inhalers',
+  'menstrual',
+  'medication',
+  'pharmacy',
+  'pharmacies',
+  'heat',
+  'hot',
+  'burning',
+  'dengue',
+  'covid',
+  'hantavirus',
+];
+
+const civicReportKeywords = [
+  'hospital',
+  'clinic',
+  'medicine',
+  'medication',
+  'panadol',
+  'menstrual',
+  'pharmacy',
+  'pharmacies',
+  'salbutamol',
+  'inhaler',
+  'inhalers',
+  'food',
+  'water',
+  'drain',
+  'road',
+  'traffic',
+  'train',
+  'bus',
+  'power',
+  'electricity',
+  'lift',
+  'facility',
+  'shelter',
+  'crowd',
+  'noise',
+  'mosquito',
+  'haze',
+  'heat',
+  'hot',
+  'burning',
+  'scam',
+  'phishing',
+  'sms',
+  'singpass',
+  'relief',
+  'payout',
+  'link',
+  'public',
+  'unsafe',
+  'leak',
+  'tree',
+  'fallen',
+  'blocked',
+  'queue',
+  'stock',
+  'empty',
+];
+
+const categoryKeywords: Record<string, string[]> = {
+  health: ['hospital', 'clinic', 'medical', 'medicine', 'medication', 'panadol', 'salbutamol', 'inhaler', 'inhalers', 'menstrual', 'pharmacy', 'pharmacies', 'sick', 'fever', 'rash', 'cough', 'symptom', 'mosquito', 'dengue', 'covid', 'hantavirus'],
+  weather: ['flood', 'drain', 'water', 'rain', 'ponding', 'haze', 'heat', 'hot', 'burning', 'wind', 'tree', 'fallen'],
+  flood: ['flood', 'drain', 'water', 'rain', 'ponding', 'ankle', 'knee'],
+  supply: ['medicine', 'medication', 'panadol', 'salbutamol', 'inhaler', 'inhalers', 'menstrual', 'pharmacy', 'pharmacies', 'food', 'goods', 'fuel', 'shortage', 'stock', 'shelf', 'queue', 'unavailable'],
+  infrastructure: ['power', 'outage', 'electricity', 'road', 'traffic', 'train', 'bus', 'lift', 'facility', 'blocked', 'leak'],
+  cybersecurity: ['cyber', 'phishing', 'scam', 'malware', 'hack', 'password', 'sms', 'singpass', 'relief', 'payout', 'link'],
+  general: ['safety', 'crime', 'police', 'crowd', 'noise', 'nuisance', 'unsafe', 'public'],
+};
+
+async function auditExistingReportModeration() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const rows = await client.query<{
+      id: string;
+      title: string | null;
+      report_type: string | null;
+      crisis_type: DbCrisisType;
+      description: string;
+      location_text: string | null;
+      status: ReportStatus;
+      subject_tag_id: string | null;
+      subject_tag_label: string | null;
+    }>(
+      `
+        SELECT
+          reports.id,
+          reports.title,
+          reports.report_type,
+          reports.crisis_type,
+          reports.description,
+          reports.location_text,
+          reports.status,
+          reports.subject_tag_id,
+          subject_tags.label AS subject_tag_label
+        FROM citizen.reports reports
+        LEFT JOIN citizen.report_subject_tags subject_tags ON subject_tags.id = reports.subject_tag_id
+        WHERE reports.status <> 'resolved'::citizen.report_status
+        ORDER BY reports.created_at DESC
+        LIMIT 250
+      `,
+    );
+
+    for (const row of rows.rows) {
+      const moderation = moderateCitizenReport({
+        title: row.title ?? undefined,
+        reportType: row.report_type ?? undefined,
+        crisisType: row.report_type ?? row.crisis_type,
+        message: row.description,
+        location: row.location_text ?? undefined,
+      });
+
+      if (moderation.status === 'rejected') {
+        await client.query(
+          `
+            UPDATE citizen.reports
+            SET status = 'rejected'::citizen.report_status,
+                subject_tag_id = NULL,
+                updated_at = now()
+            WHERE id = $1
+              AND status <> 'rejected'::citizen.report_status
+          `,
+          [row.id],
+        );
+        continue;
+      }
+
+      if (row.status === 'rejected') {
+        await client.query(
+          `
+            UPDATE citizen.reports
+            SET status = 'submitted'::citizen.report_status,
+                updated_at = now()
+            WHERE id = $1
+          `,
+          [row.id],
+        );
+      }
+
+      if (
+        row.subject_tag_id &&
+        row.subject_tag_label &&
+        !isCitizenIssueRelevant({
+          label: row.subject_tag_label,
+          reportType: row.report_type ?? undefined,
+          crisisType: row.report_type ?? row.crisis_type,
+          message: row.description,
+          dbCrisisType: row.crisis_type,
+        })
+      ) {
+        await client.query(
+          `UPDATE citizen.reports SET subject_tag_id = NULL, updated_at = now() WHERE id = $1`,
+          [row.id],
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function backfillMissingSubjectTags() {
   const client = await pool.connect();
   try {
@@ -1036,6 +1428,7 @@ async function backfillMissingSubjectTags() {
         SELECT id, title, report_type, crisis_type
         FROM citizen.reports
         WHERE subject_tag_id IS NULL
+          AND status <> 'rejected'::citizen.report_status
           AND title IS NOT NULL
           AND btrim(title) <> ''
           AND lower(btrim(title)) NOT LIKE 'other%'
@@ -1082,6 +1475,7 @@ function toDbStatus(value?: string | null): ReportStatus | null {
   if (value === 'in-progress') return 'in_progress';
   if (value === 'grouped') return 'grouped';
   if (value === 'resolved') return 'resolved';
+  if (value === 'spam') return 'rejected';
   return null;
 }
 
@@ -1089,6 +1483,7 @@ function fromDbStatus(value: ReportStatus): TicketStatus {
   if (value === 'in_progress') return 'in-progress';
   if (value === 'grouped') return 'grouped';
   if (value === 'resolved') return 'resolved';
+  if (value === 'rejected') return 'spam';
   return 'open';
 }
 
