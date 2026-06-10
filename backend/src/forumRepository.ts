@@ -6,6 +6,7 @@ export type ForumReply = {
   content: string;
   createdAt: string;
   official?: boolean;
+  similarReport?: boolean;
 };
 
 export type ForumImage = {
@@ -31,6 +32,13 @@ export type ForumPost = {
   replies: ForumReply[];
   images: ForumImage[];
   category: string;
+  location: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  sourceReportId: string | null;
+  similarReports: number;
+  distanceKm?: number | null;
+  rankingScore?: number;
 };
 
 const forumPosts: ForumPost[] = [
@@ -62,6 +70,11 @@ const forumPosts: ForumPost[] = [
       },
     ],
     category: 'Health',
+    location: 'Tampines',
+    latitude: 1.3521,
+    longitude: 103.9442,
+    sourceReportId: null,
+    similarReports: 0,
   },
   {
     id: 'forum-3',
@@ -77,6 +90,11 @@ const forumPosts: ForumPost[] = [
     images: [],
     replies: [],
     category: 'Weather',
+    location: 'East Coast',
+    latitude: 1.3008,
+    longitude: 103.9122,
+    sourceReportId: null,
+    similarReports: 0,
   },
   {
     id: 'forum-4',
@@ -92,6 +110,11 @@ const forumPosts: ForumPost[] = [
     images: [],
     replies: [],
     category: 'Health',
+    location: null,
+    latitude: null,
+    longitude: null,
+    sourceReportId: null,
+    similarReports: 0,
   },
 ];
 
@@ -99,13 +122,16 @@ const forumLikes = new Map<string, Set<string>>();
 const forumDislikes = new Map<string, Set<string>>();
 const bannedForumAuthors = new Set<string>();
 
-export function listForumPosts(options: { includeHidden?: boolean } = {}) {
+export function listForumPosts(options: {
+  includeHidden?: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
+} = {}) {
   return [...forumPosts].filter((post) => {
     if (options.includeHidden) return true;
     return post.moderationState !== 'hidden' && post.moderationState !== 'misleading' && !bannedForumAuthors.has(normalizeAuthor(post.author));
-  }).sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
+  }).map((post) => rankForumPost(post, options.latitude, options.longitude))
+    .sort((a, b) => (b.rankingScore ?? 0) - (a.rankingScore ?? 0));
 }
 
 export function createForumPost(input: {
@@ -116,6 +142,10 @@ export function createForumPost(input: {
   verified?: boolean;
   moderationState?: ForumModerationState;
   images?: Array<{ filename?: string | null; mimeType?: string | null; previewUrl?: string | null }>;
+  location?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  sourceReportId?: string | null;
 }) {
   const content = input.content.trim();
   const author = input.author?.trim() || 'Anonymous User';
@@ -145,9 +175,32 @@ export function createForumPost(input: {
         previewUrl: image.previewUrl as string,
       })),
     category: input.category?.trim() || inferCategory(content),
+    location: input.location?.trim() || null,
+    latitude: input.latitude ?? null,
+    longitude: input.longitude ?? null,
+    sourceReportId: input.sourceReportId?.trim() || null,
+    similarReports: 0,
   };
   forumPosts.unshift(post);
   return post;
+}
+
+export function createOrMergeForumPost(input: Parameters<typeof createForumPost>[0]) {
+  const match = findSimilarForumPost(input);
+  if (!match) {
+    return { post: createForumPost(input), merged: false, similarityScore: 0 };
+  }
+
+  match.post.replies.push({
+    id: randomUUID(),
+    author: input.author?.trim() || 'Anonymous User',
+    content: input.content.trim(),
+    createdAt: new Date().toISOString(),
+    similarReport: true,
+  });
+  match.post.similarReports += 1;
+  likeForumPost(match.post.id, `similar:${normalizeAuthor(input.author ?? 'anonymous')}:${match.post.similarReports}`);
+  return { post: match.post, merged: true, similarityScore: match.score };
 }
 
 export function likeForumPost(id: string, likerKey = 'anonymous') {
@@ -321,4 +374,65 @@ function inferCategory(content: string) {
 
 function normalizeAuthor(author: string) {
   return author.trim().toLowerCase();
+}
+
+function findSimilarForumPost(input: Parameters<typeof createForumPost>[0]) {
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const inputCategory = input.category?.trim() || inferCategory(input.content);
+  const inputTokens = normalizedTokens(input.content);
+  const inputLocation = normalizeLocation(input.location);
+
+  return forumPosts
+    .filter((post) => new Date(post.createdAt).getTime() >= cutoff && post.category === inputCategory)
+    .map((post) => {
+      const postTokens = normalizedTokens(post.content);
+      const shared = [...inputTokens].filter((token) => postTokens.has(token)).length;
+      const union = new Set([...inputTokens, ...postTokens]).size || 1;
+      let score = shared / union;
+      const postLocation = normalizeLocation(post.location);
+      if (inputLocation && postLocation && (inputLocation.includes(postLocation) || postLocation.includes(inputLocation))) {
+        score += 0.25;
+      }
+      return { post, score };
+    })
+    .filter((item) => item.score >= 0.42)
+    .sort((left, right) =>
+      new Date(left.post.createdAt).getTime() - new Date(right.post.createdAt).getTime() || right.score - left.score,
+    )[0] ?? null;
+}
+
+function normalizedTokens(value: string) {
+  const stopwords = new Set(['about', 'after', 'again', 'from', 'have', 'near', 'that', 'the', 'this', 'with']);
+  return new Set(
+    value.toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((token) => token.length > 3 && !stopwords.has(token)),
+  );
+}
+
+function normalizeLocation(value: string | null | undefined) {
+  return (value ?? '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function rankForumPost(post: ForumPost, latitude?: number | null, longitude?: number | null): ForumPost {
+  const ageHours = Math.max(0, (Date.now() - new Date(post.createdAt).getTime()) / 3_600_000);
+  const recencyScore = Math.max(0, 20 - ageHours / 6);
+  const voteScore = Math.min(30, post.likes * 2 - post.dislikes);
+  const hasViewerLocation = Number.isFinite(latitude) && Number.isFinite(longitude);
+  const hasPostLocation = Number.isFinite(post.latitude) && Number.isFinite(post.longitude);
+  const distanceKm = hasViewerLocation && hasPostLocation
+    ? haversineKm(latitude as number, longitude as number, post.latitude as number, post.longitude as number)
+    : null;
+  const proximityScore = distanceKm === null ? 0 : Math.max(0, 70 - distanceKm * 3.5);
+  return { ...post, distanceKm, rankingScore: proximityScore + voteScore + recencyScore };
+}
+
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const radians = (degrees: number) => degrees * Math.PI / 180;
+  const dLat = radians(lat2 - lat1);
+  const dLon = radians(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(radians(lat1)) * Math.cos(radians(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }

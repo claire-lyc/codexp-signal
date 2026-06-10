@@ -48,6 +48,7 @@ type ForumPost = {
   replies: ForumReply[];
   images?: ForumImage[];
   category: string;
+  similarReports?: number;
 };
 
 type SentimentPayload = {
@@ -81,6 +82,8 @@ export default function GovPublicSentiment() {
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  const [postAnalyticsMetric, setPostAnalyticsMetric] = useState<'rate' | 'upvotes' | 'engagement'>('rate');
+  const [postAnalyticsVisible, setPostAnalyticsVisible] = useState(false);
 
   useEffect(() => {
     setActiveTab(location.pathname.endsWith('/forum') ? 'forum' : 'overview');
@@ -88,6 +91,7 @@ export default function GovPublicSentiment() {
 
   useEffect(() => {
     setSelectedImageOpen(true);
+    setPostAnalyticsVisible(false);
   }, [selectedPostId]);
 
   useEffect(() => {
@@ -549,6 +553,27 @@ export default function GovPublicSentiment() {
                         {selectedPost.reports ? <span className="inline-flex items-center gap-1 text-red-400"><Flag className="h-3.5 w-3.5" />{selectedPost.reports} reports</span> : null}
                       </div>
 
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => setPostAnalyticsVisible((visible) => !visible)}
+                          className="inline-flex items-center gap-2 rounded-lg border border-blue-800 bg-blue-950/30 px-3 py-2 text-sm font-medium text-blue-200 transition-colors hover:bg-blue-900/40"
+                          aria-expanded={postAnalyticsVisible}
+                        >
+                          <ThumbsUp className="h-4 w-4" />
+                          {postAnalyticsVisible ? 'Hide analytics' : 'Show analytics'}
+                        </button>
+                        {postAnalyticsVisible ? (
+                          <div className="mt-3">
+                            <PostAnalytics
+                              post={selectedPost}
+                              metric={postAnalyticsMetric}
+                              onMetricChange={setPostAnalyticsMetric}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+
                       <div className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-4">
                         <div className="mb-3 text-sm font-medium text-zinc-200">Moderation</div>
                         <div className="flex flex-wrap gap-2">
@@ -630,6 +655,130 @@ function SentimentStatCard({ label, value, tone }: { label: string; value: strin
       <div className="text-2xl font-bold">{value}</div>
     </div>
   );
+}
+
+function PostAnalytics({
+  post,
+  metric,
+  onMetricChange,
+}: {
+  post: ForumPost;
+  metric: 'rate' | 'upvotes' | 'engagement';
+  onMetricChange: (metric: 'rate' | 'upvotes' | 'engagement') => void;
+}) {
+  const dislikes = post.dislikes ?? 0;
+  const voteCount = post.likes + dislikes;
+  const upvoteRate = voteCount ? Math.round((post.likes / voteCount) * 100) : 0;
+  const engagement = voteCount + post.replies.length + post.reports;
+  const timeline = postEngagementTimeline(post);
+  const values = {
+    rate: { value: `${upvoteRate}%`, label: `${post.likes} of ${voteCount} votes were upvotes` },
+    upvotes: { value: String(post.likes), label: `${post.similarReports ?? 0} came from similar reports` },
+    engagement: { value: String(engagement), label: 'Votes, replies, and reports combined' },
+  };
+  const selected = values[metric];
+
+  return (
+    <div className="rounded-lg border border-blue-900/60 bg-blue-950/20 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-xs font-medium uppercase tracking-wide text-blue-300">Post analytics</div>
+          <div className="mt-1 text-3xl font-bold text-zinc-100">{selected.value}</div>
+          <div className="mt-1 text-xs text-zinc-400">{selected.label}</div>
+        </div>
+        <select
+          value={metric}
+          onChange={(event) => onMetricChange(event.target.value as 'rate' | 'upvotes' | 'engagement')}
+          className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200"
+          aria-label="Post analytics metric"
+        >
+          <option value="rate">Upvote rate</option>
+          <option value="upvotes">Total upvotes</option>
+          <option value="engagement">Total engagement</option>
+        </select>
+      </div>
+      <div className="mt-5 border-t border-blue-900/50 pt-4">
+        <div className="mb-4 text-sm font-medium text-zinc-300">Engagement over time</div>
+        <EngagementTimeChart points={timeline} />
+      </div>
+    </div>
+  );
+}
+
+function EngagementTimeChart({ points }: { points: Array<{ timestamp: number; value: number; label: string }> }) {
+  const width = 620;
+  const height = 220;
+  const padding = { top: 16, right: 18, bottom: 42, left: 44 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  const minTime = points[0]?.timestamp ?? Date.now();
+  const maxTime = points.at(-1)?.timestamp ?? minTime;
+  const timeRange = Math.max(1, maxTime - minTime);
+  const maxValue = Math.max(1, ...points.map((point) => point.value));
+  const plotted = points.map((point) => ({
+    ...point,
+    x: padding.left + ((point.timestamp - minTime) / timeRange) * chartWidth,
+    y: padding.top + chartHeight - (point.value / maxValue) * chartHeight,
+  }));
+  const path = plotted.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ');
+  const yTicks = [0, Math.ceil(maxValue / 2), maxValue].filter((value, index, all) => all.indexOf(value) === index);
+
+  return (
+    <div className="overflow-x-auto">
+      <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[520px] w-full" role="img" aria-label="Cumulative engagement against time">
+        {yTicks.map((tick) => {
+          const y = padding.top + chartHeight - (tick / maxValue) * chartHeight;
+          return (
+            <g key={tick}>
+              <line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke="#3f3f46" strokeDasharray="4 4" />
+              <text x={padding.left - 10} y={y + 4} textAnchor="end" fill="#a1a1aa" fontSize="11">{tick}</text>
+            </g>
+          );
+        })}
+        <line x1={padding.left} x2={padding.left} y1={padding.top} y2={padding.top + chartHeight} stroke="#71717a" />
+        <line x1={padding.left} x2={width - padding.right} y1={padding.top + chartHeight} y2={padding.top + chartHeight} stroke="#71717a" />
+        <path d={path} fill="none" stroke="#3b82f6" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+        {plotted.map((point) => (
+          <g key={`${point.timestamp}-${point.label}`}>
+            <circle cx={point.x} cy={point.y} r="4" fill="#60a5fa">
+              <title>{`${point.label}: ${point.value} engagement`}</title>
+            </circle>
+          </g>
+        ))}
+        <text x={padding.left} y={height - 16} fill="#a1a1aa" fontSize="11">{formatChartTime(minTime)}</text>
+        <text x={width - padding.right} y={height - 16} textAnchor="end" fill="#a1a1aa" fontSize="11">{formatChartTime(maxTime)}</text>
+        <text x={width / 2} y={height - 2} textAnchor="middle" fill="#d4d4d8" fontSize="12">Time</text>
+        <text transform={`translate(13 ${height / 2}) rotate(-90)`} textAnchor="middle" fill="#d4d4d8" fontSize="12">Cumulative engagement</text>
+      </svg>
+      <div className="mt-2 text-xs text-zinc-500">
+        Timeline uses the post and reply timestamps; current votes and reports are reflected at the latest point.
+      </div>
+    </div>
+  );
+}
+
+function postEngagementTimeline(post: ForumPost) {
+  const startTime = new Date(post.createdAt).getTime();
+  const safeStart = Number.isNaN(startTime) ? Date.now() : startTime;
+  const replyEvents = post.replies
+    .map((reply) => ({ timestamp: new Date(reply.createdAt).getTime(), label: 'Reply' }))
+    .filter((event) => !Number.isNaN(event.timestamp))
+    .sort((left, right) => left.timestamp - right.timestamp);
+  let cumulative = 0;
+  const points = [{ timestamp: safeStart, value: 0, label: 'Post created' }];
+  for (const reply of replyEvents) {
+    cumulative += 1;
+    points.push({ timestamp: reply.timestamp, value: cumulative, label: reply.label });
+  }
+  cumulative += post.likes + (post.dislikes ?? 0) + post.reports;
+  const latestTime = Math.max(Date.now(), points.at(-1)?.timestamp ?? safeStart);
+  points.push({ timestamp: latestTime, value: cumulative, label: 'Current total' });
+  return points;
+}
+
+function formatChartTime(timestamp: number) {
+  const date = new Date(timestamp);
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function ForumPostButton({ post, selected, onClick }: { post: ForumPost; selected: boolean; onClick: () => void }) {

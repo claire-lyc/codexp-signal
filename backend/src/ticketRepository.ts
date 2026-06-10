@@ -282,7 +282,13 @@ export async function getTicketByPublicId(publicReportId: string) {
 export async function listTicketsForReporter(userId: string, options: { visibleFeed?: boolean } = {}) {
   if (options.visibleFeed) {
     const allTickets = await listTickets();
-    return allTickets.filter((ticket) => ticket.status !== 'spam');
+    return allTickets.filter((ticket) => ticket.status !== 'spam' && moderateCitizenReport({
+      title: ticket.specificCrisis ?? undefined,
+      reportType: ticket.crisisType,
+      crisisType: ticket.crisisType,
+      message: ticket.message,
+      location: ticket.location ?? undefined,
+    }).status !== 'rejected');
   }
 
   await auditExistingReportModeration();
@@ -1348,6 +1354,7 @@ async function auditExistingReportModeration() {
         FROM citizen.reports reports
         LEFT JOIN citizen.report_subject_tags subject_tags ON subject_tags.id = reports.subject_tag_id
         WHERE reports.status <> 'resolved'::citizen.report_status
+           OR reports.description ~* '(test|testing|qwerty|asdf|hello lovelle|free money|click here|urmama)'
         ORDER BY reports.created_at DESC
         LIMIT 250
       `,

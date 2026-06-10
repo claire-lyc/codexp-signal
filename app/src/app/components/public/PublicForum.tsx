@@ -3,6 +3,7 @@ import {
   CheckCircle,
   Flag,
   Image as ImageIcon,
+  MapPin,
   MessageSquare,
   Plus,
   Reply,
@@ -16,6 +17,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { API_REFRESH_INTERVAL_MS, apiUrl } from '../../lib/api';
+import { authHeaders } from '../../lib/auth';
 
 type ForumReply = {
   id: string;
@@ -30,6 +32,7 @@ type ForumImage = {
   filename: string | null;
   mimeType: string | null;
   previewUrl: string;
+  byteSize?: number | null;
 };
 
 type ForumPost = {
@@ -46,6 +49,12 @@ type ForumPost = {
   replies: ForumReply[];
   images?: ForumImage[];
   category: string;
+  location?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  sourceReportId?: string | null;
+  similarReports?: number;
+  distanceKm?: number | null;
 };
 
 const storageKey = 'signal-forum-posts';
@@ -54,6 +63,22 @@ const likedPostsStorageKey = 'signal-forum-liked-posts';
 const dislikedPostsStorageKey = 'signal-forum-disliked-posts';
 const forumCooldownMs = Number(import.meta.env.VITE_FORUM_POST_COOLDOWN_MS ?? 60_000);
 const categories = ['All', 'Health', 'Weather', 'Infrastructure', 'Supply', 'Community'];
+const reportTypes = [
+  { value: 'health', label: 'Health' },
+  { value: 'environment', label: 'Weather & Environment' },
+  { value: 'supply', label: 'Supply Shortage' },
+  { value: 'infrastructure', label: 'Infrastructure' },
+  { value: 'transport', label: 'Transport' },
+  { value: 'other', label: 'Other' },
+];
+const reportIssues: Record<string, string[]> = {
+  health: ['COVID-19', 'Hantavirus', 'Dengue', 'Other health issue'],
+  environment: ['Flash flood', 'Drain overflow', 'Rising water level', 'Haze', 'Air pollution', 'Water pollution', 'Other weather or environment issue'],
+  supply: ['Medicine shortage', 'Food shortage', 'Essential goods shortage', 'Fuel shortage'],
+  infrastructure: ['Power outage', 'Water supply disruption', 'Building or road damage', 'Telecommunications outage'],
+  transport: ['Train disruption', 'Bus disruption', 'Traffic incident', 'Road obstruction'],
+  other: ['Community safety issue', 'Public facility issue', 'Noise or nuisance', 'Other issue'],
+};
 
 const welcomePost: ForumPost = {
   id: 'signal-welcome-post',
@@ -145,6 +170,11 @@ export default function PublicForum() {
   const [dislikedPostIds, setDislikedPostIds] = useState<Set<string>>(() => loadDislikedPostIds());
   const [selectedImageOpen, setSelectedImageOpen] = useState(true);
   const [now, setNow] = useState(Date.now());
+  const [location, setLocation] = useState('');
+  const [postAsReport, setPostAsReport] = useState(false);
+  const [reportType, setReportType] = useState('other');
+  const [specificIssue, setSpecificIssue] = useState('Other issue');
+  const [viewerLocation, setViewerLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const communityUpdatesRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -173,7 +203,10 @@ export default function PublicForum() {
     let active = true;
 
     const loadForumPosts = () => {
-      fetch(apiUrl('/api/forum/posts'))
+      const params = viewerLocation
+        ? `?latitude=${viewerLocation.latitude}&longitude=${viewerLocation.longitude}`
+        : '';
+      fetch(apiUrl(`/api/forum/posts${params}`))
         .then((response) => {
           if (!response.ok) throw new Error('Forum API unavailable');
           return response.json() as Promise<{ items: ForumPost[] }>;
@@ -197,7 +230,7 @@ export default function PublicForum() {
       active = false;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [viewerLocation]);
 
   const filteredPosts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -270,6 +303,10 @@ export default function PublicForum() {
       setStatus({ tone: 'error', message: 'Write something before posting.' });
       return;
     }
+    if (postAsReport && (!reportType || !specificIssue)) {
+      setStatus({ tone: 'error', message: 'Choose a report type and specific issue.' });
+      return;
+    }
 
     setPosting(true);
     setNewPost('');
@@ -283,22 +320,37 @@ export default function PublicForum() {
     });
 
     try {
-      const data = await postJson<{ item: ForumPost }>('/api/forum/posts', {
+      const data = await postJson<{
+        item: ForumPost;
+        merged?: boolean;
+        linkedReportId?: string | null;
+      }>('/api/forum/posts', {
         author: optimisticPost.author,
         content,
         category,
         images: postImages,
+        location,
+        latitude: viewerLocation?.latitude ?? null,
+        longitude: viewerLocation?.longitude ?? null,
+        createReport: postAsReport,
+        reportType,
+        title: specificIssue,
       });
       setPosts((current) => [data.item, ...current.filter((post) => post.id !== data.item.id)]);
       setExpandedPostId(data.item.id);
       setPostImages([]);
       setComposerOpen(false);
+      setLocation('');
+      setReportType('other');
+      setSpecificIssue('Other issue');
       setUsingBackend(true);
       setStatus({
-        tone: data.item.aiFlag ? 'warning' : 'success',
-        message: data.item.aiFlag
+        tone: data.item.aiFlag || data.merged ? 'warning' : 'success',
+        message: data.merged
+          ? `This was very similar to a recent post, so it was added beneath the original and automatically upvoted it.${data.linkedReportId ? ` Government report ${data.linkedReportId} was also created.` : ''}`
+          : data.item.aiFlag
           ? 'Post submitted, but it was flagged for moderator review.'
-          : 'Post published to the community forum.',
+          : `Post published to the community forum.${data.linkedReportId ? ` Government report ${data.linkedReportId} was also created.` : ''}`,
       });
     } catch (error) {
       if (error instanceof CooldownError) {
@@ -308,6 +360,15 @@ export default function PublicForum() {
         setStatus({
           tone: 'warning',
           message: `Please wait ${error.retryAfterSeconds} seconds before posting again.`,
+        });
+        return;
+      }
+
+      if (postAsReport) {
+        setNewPost(content);
+        setStatus({
+          tone: 'error',
+          message: error instanceof Error ? error.message : 'Unable to create the linked government report.',
         });
         return;
       }
@@ -432,15 +493,31 @@ export default function PublicForum() {
           <h1 className="mb-2 text-3xl font-bold">Community Forum</h1>
           <p className="text-zinc-400">Share updates, ask for help, reply, and flag suspicious posts</p>
         </div>
-        <button
-          type="button"
-          data-tour="compose-post"
-          onClick={() => setComposerOpen((open) => !open)}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-700"
-        >
-          <Plus className="h-4 w-4" />
-          {composerOpen ? 'Close Compose' : 'Compose Post'}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => navigator.geolocation?.getCurrentPosition((position) => {
+              setViewerLocation({
+                latitude: Number(position.coords.latitude.toFixed(6)),
+                longitude: Number(position.coords.longitude.toFixed(6)),
+              });
+              setStatus({ tone: 'success', message: 'Nearby posts are now weighted more heavily in your feed.' });
+            })}
+            className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800"
+          >
+            <MapPin className="h-4 w-4" />
+            {viewerLocation ? 'Nearby ranking on' : 'Prioritize nearby'}
+          </button>
+          <button
+            type="button"
+            data-tour="compose-post"
+            onClick={() => setComposerOpen((open) => !open)}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-700"
+          >
+            <Plus className="h-4 w-4" />
+            {composerOpen ? 'Close Compose' : 'Compose Post'}
+          </button>
+        </div>
       </div>
 
       {status && (
@@ -501,6 +578,62 @@ export default function PublicForum() {
                 rows={4}
                 className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600"
               />
+
+              <input
+                value={location}
+                onChange={(event) => setLocation(event.target.value)}
+                placeholder="Location or landmark, optional"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              />
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-blue-900/60 bg-blue-950/20 p-3">
+                <input
+                  type="checkbox"
+                  checked={postAsReport}
+                  onChange={(event) => setPostAsReport(event.target.checked)}
+                  className="mt-1 h-4 w-4 accent-blue-600"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-zinc-200">Also send this as a government report</span>
+                  <span className="block text-xs text-zinc-500">You must be signed in. The forum post and ticket will be linked.</span>
+                </span>
+              </label>
+
+              {postAsReport ? (
+                <div className="grid gap-3 rounded-lg border border-zinc-700 bg-zinc-950/40 p-4 sm:grid-cols-2">
+                  <label className="text-sm text-zinc-300">
+                    Report type
+                    <select
+                      value={reportType}
+                      onChange={(event) => {
+                        const nextType = event.target.value;
+                        setReportType(nextType);
+                        setSpecificIssue(reportIssues[nextType]?.[0] ?? '');
+                      }}
+                      className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
+                    >
+                      {reportTypes.map((item) => (
+                        <option key={item.value} value={item.value}>{item.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-sm text-zinc-300">
+                    Specific issue
+                    <select
+                      value={specificIssue}
+                      onChange={(event) => setSpecificIssue(event.target.value)}
+                      className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm"
+                    >
+                      {(reportIssues[reportType] ?? []).map((issue) => (
+                        <option key={issue} value={issue}>{issue}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="text-xs text-zinc-500 sm:col-span-2">
+                    The government report stores the selected issue, description, location, coordinates, reporter, images, severity, agency, triage status, and subject grouping.
+                  </div>
+                </div>
+              ) : null}
 
               {postImages.length > 0 && (
                 <div className="flex flex-wrap gap-2">
@@ -605,6 +738,7 @@ export default function PublicForum() {
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                         <span className="rounded bg-zinc-800 px-2 py-0.5">{post.category}</span>
                         <span>{relativeTime(post.createdAt)}</span>
+                        {post.distanceKm != null && <span>{post.distanceKm.toFixed(1)} km away</span>}
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1 rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-400">
@@ -624,6 +758,7 @@ export default function PublicForum() {
                     <span className={`inline-flex items-center gap-1 ${likedPostIds.has(post.id) ? 'text-blue-400' : ''}`}><ThumbsUp className="h-3.5 w-3.5" />{post.likes}</span>
                     <span className={`inline-flex items-center gap-1 ${dislikedPostIds.has(post.id) ? 'text-red-400' : ''}`}><ThumbsDown className="h-3.5 w-3.5" />{post.dislikes ?? 0}</span>
                     {post.reports ? <span className="inline-flex items-center gap-1 text-red-400"><Flag className="h-3.5 w-3.5" />{post.reports}</span> : null}
+                    {post.similarReports ? <span>{post.similarReports} similar reports</span> : null}
                   </div>
                 </button>
               );
@@ -952,7 +1087,7 @@ export default function PublicForum() {
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(apiUrl(path), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
   });
 
@@ -1060,6 +1195,7 @@ function readForumImage(file: File): Promise<ForumImage> {
       filename: file.name,
       mimeType: file.type,
       previewUrl: String(reader.result),
+      byteSize: file.size,
     });
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
