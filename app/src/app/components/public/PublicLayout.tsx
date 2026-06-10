@@ -216,7 +216,7 @@ export default function PublicLayout() {
         </div>
       </footer>
 
-      <PublicCrisisAssistant />
+      {location.pathname === '/public' && <PublicCrisisAssistant />}
     </div>
   );
 }

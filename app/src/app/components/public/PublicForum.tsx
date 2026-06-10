@@ -630,7 +630,7 @@ export default function PublicForum() {
             })}
           </div>
 
-          <aside className="min-h-[560px] rounded-lg border border-zinc-800 bg-zinc-950">
+          <aside className="hidden min-h-[560px] rounded-lg border border-zinc-800 bg-zinc-950 lg:block">
             {selectedPost ? (
               <div className="flex h-full flex-col">
                 <div className="border-b border-zinc-800 px-5 py-4">
@@ -791,6 +791,142 @@ export default function PublicForum() {
             )}
           </aside>
         </div>
+
+        {selectedPost && (
+          <div className="fixed inset-0 z-50 flex items-end bg-zinc-950/70 p-0 backdrop-blur-sm lg:hidden">
+            <section className="flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-xl border border-zinc-700 bg-zinc-950 shadow-2xl">
+              <div className="border-b border-zinc-800 px-4 py-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">{selectedPost.category}</span>
+                      {selectedPost.verified && (
+                        <span className="inline-flex items-center gap-1 rounded bg-green-950 px-2 py-0.5 text-xs text-green-400">
+                          <CheckCircle className="h-3 w-3" />
+                          Official
+                        </span>
+                      )}
+                      {selectedPost.aiFlag && (
+                        <span className="inline-flex items-center gap-1 rounded bg-red-950 px-2 py-0.5 text-xs text-red-400">
+                          <AlertTriangle className="h-3 w-3" />
+                          Under review
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="text-lg font-semibold leading-6">{threadTitle(selectedPost.content)}</h3>
+                    <div className="mt-1 text-xs text-zinc-500">Started by {selectedPost.author} - {relativeTime(selectedPost.createdAt)}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedPostId(null)}
+                    className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+                    aria-label="Close discussion"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleLike(selectedPost.id)}
+                    disabled={likedPostIds.has(selectedPost.id)}
+                    data-tour={selectedPost.id === welcomePost.id ? 'welcome-like' : undefined}
+                    className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-blue-400 disabled:cursor-not-allowed disabled:text-blue-500"
+                    aria-label="Like post"
+                  >
+                    <ThumbsUp className="h-4 w-4" />
+                    Like
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDislike(selectedPost.id)}
+                    disabled={dislikedPostIds.has(selectedPost.id)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-red-400 disabled:cursor-not-allowed disabled:text-red-500"
+                    aria-label="Dislike post"
+                  >
+                    <ThumbsDown className="h-4 w-4" />
+                    Dislike
+                  </button>
+                  {!selectedPost.verified && (
+                    <button
+                      type="button"
+                      onClick={() => handleReport(selectedPost.id)}
+                      className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-red-400"
+                      aria-label="Report post"
+                    >
+                      <Flag className="h-4 w-4" />
+                      Report
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex-1 space-y-4 overflow-y-auto p-4">
+                <div className={`rounded-lg border p-4 ${selectedPost.aiFlag ? 'border-red-900/70 bg-red-950/20' : 'border-zinc-800 bg-zinc-900'}`}>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium">{selectedPost.author}</span>
+                    <span className="text-xs text-zinc-600">{new Date(selectedPost.createdAt).toLocaleString()}</span>
+                  </div>
+                  <p className={`whitespace-pre-wrap text-sm leading-6 ${selectedPost.aiFlag ? 'select-none blur-sm' : 'text-zinc-300'}`}>
+                    {selectedPost.content}
+                  </p>
+                </div>
+
+                {selectedPost.aiFlag && (
+                  <div className="rounded-lg border border-red-800 bg-red-950/30 p-3">
+                    <div className="flex items-start gap-2 text-xs text-red-400">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <div>
+                        <strong>{selectedPost.moderationState === 'hidden' ? 'Content hidden:' : 'Content flagged:'}</strong>{' '}
+                        {selectedPost.moderationState === 'hidden'
+                          ? 'this post was removed from normal view while moderators investigate it.'
+                          : 'this post is hidden while a moderator verifies the claim.'}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3 border-y border-zinc-800 py-3 text-xs text-zinc-500">
+                  <span>{selectedPost.likes} likes</span>
+                  <span>{selectedPost.dislikes ?? 0} dislikes</span>
+                  <span>{selectedPost.replies.length} replies</span>
+                  {selectedPost.reports ? <span className="text-red-400">{selectedPost.reports} reports</span> : null}
+                </div>
+
+                <div className="space-y-3">
+                  {selectedPost.replies.length === 0 && (
+                    <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 text-sm text-zinc-500">
+                      No replies yet.
+                    </div>
+                  )}
+                  {selectedPost.replies.map((reply) => (
+                    <div key={reply.id} className={`rounded-lg p-3 ${reply.official ? 'border border-blue-800 bg-blue-950/30' : 'bg-zinc-900/70'}`}>
+                      <div className="mb-1 flex items-center justify-between gap-3">
+                        <span className={`text-sm font-medium ${reply.official ? 'text-blue-300' : ''}`}>{reply.author}</span>
+                        <span className="text-xs text-zinc-600">{relativeTime(reply.createdAt)}</span>
+                      </div>
+                      <p className="text-sm leading-6 text-zinc-300">{reply.content}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t border-zinc-800 p-4">
+                <div className="flex gap-2">
+                  <input
+                    value={replyText}
+                    onChange={(event) => setReplyText(event.target.value)}
+                    placeholder={`Reply to ${selectedPost.author}...`}
+                    className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  />
+                  <button type="button" onClick={() => handleReply(selectedPost.id)} className="rounded-lg bg-blue-600 px-3 py-2 text-sm transition-colors hover:bg-blue-700">
+                    Reply
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
       </div>
 
       <div className="rounded-xl border border-purple-900/50 bg-gradient-to-r from-purple-950/50 to-blue-950/50 p-6">
