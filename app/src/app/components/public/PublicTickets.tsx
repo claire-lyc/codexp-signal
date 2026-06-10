@@ -428,6 +428,7 @@ export default function PublicTickets() {
           </div>
           <button
             type="button"
+            data-tour="submit-report"
             onClick={() => setReportComposerOpen(true)}
             className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-700"
           >
@@ -454,6 +455,7 @@ export default function PublicTickets() {
                   <div className="text-xs text-zinc-500">{authUser.username ?? authUser.email}</div>
                   <button
                     type="button"
+                    data-tour="close-report"
                     onClick={() => setReportComposerOpen(false)}
                     className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
                     aria-label="Close submit report"
@@ -668,8 +670,8 @@ function EmergencyBanner() {
             <a href="tel:1777" className="inline-flex items-center gap-2 rounded-lg bg-zinc-700 px-4 py-2 text-sm transition-colors hover:bg-zinc-600">
               Non-Emergency: 1777
             </a>
-            <a href="tel:18002550000" className="inline-flex items-center gap-2 rounded-lg bg-zinc-700 px-4 py-2 text-sm transition-colors hover:bg-zinc-600">
-              Police: 1800-255-0000
+            <a href="tel:999" className="inline-flex items-center gap-2 rounded-lg bg-zinc-700 px-4 py-2 text-sm transition-colors hover:bg-zinc-600">
+              Police: 999
             </a>
             <a href="tel:1767" className="inline-flex items-center gap-2 rounded-lg bg-zinc-700 px-4 py-2 text-sm transition-colors hover:bg-zinc-600">
               Crisis Hotline: 1767

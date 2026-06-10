@@ -265,7 +265,7 @@ export default function PublicHome() {
             {broadcastStyle.label} severity
           </span>
         </div>
-        <div className={`overflow-hidden rounded-xl border ${broadcastStyle.shell}`}>
+        <div data-tour="alert-bar" className={`overflow-hidden rounded-xl border ${broadcastStyle.shell}`}>
         <div className="flex items-stretch">
           <div className={`flex items-center px-4 ${broadcastStyle.rail}`}>
             <AlertTriangle className={`h-6 w-6 ${broadcastStyle.icon}`} />
@@ -296,7 +296,7 @@ export default function PublicHome() {
                   +{liveBroadcasts.length - 1} more
                 </span>
               )}
-              <Link to="/public/alerts" className="rounded-lg bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-950 transition-colors hover:bg-white">
+              <Link data-tour="view-alerts" to="/public/alerts" className="rounded-lg bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-950 transition-colors hover:bg-white">
                 View Alerts
               </Link>
             </div>
@@ -325,6 +325,7 @@ export default function PublicHome() {
                 <button
                   key={card.id}
                   type="button"
+                  data-tour={card.id === staticCrisisCards[0].id ? 'first-situation' : undefined}
                   onClick={() => setSelectedCrisisId((current) => current === card.id ? null : card.id)}
                   className={`w-full rounded-lg border bg-zinc-950/40 p-3 text-left transition-colors hover:bg-zinc-800/80 ${active ? 'border-red-600 ring-1 ring-red-600/60' : 'border-zinc-800'}`}
                 >
@@ -354,7 +355,7 @@ export default function PublicHome() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+        <section data-tour="situation-map" className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-base font-semibold flex items-center gap-2">
               <MapPin className="w-4 h-4 text-red-600" />

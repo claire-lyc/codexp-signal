@@ -55,7 +55,31 @@ const dislikedPostsStorageKey = 'signal-forum-disliked-posts';
 const forumCooldownMs = Number(import.meta.env.VITE_FORUM_POST_COOLDOWN_MS ?? 60_000);
 const categories = ['All', 'Health', 'Weather', 'Infrastructure', 'Supply', 'Community'];
 
+const welcomePost: ForumPost = {
+  id: 'signal-welcome-post',
+  author: 'SiGnal Team',
+  createdAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+  content:
+    'Welcome to the SiGnal community forum. Like this post to confirm you have found the official welcome thread, and use reports for urgent on-ground issues.',
+  verified: true,
+  aiFlag: false,
+  likes: 24,
+  dislikes: 0,
+  reports: 0,
+  replies: [
+    {
+      id: 'signal-welcome-reply',
+      author: 'SiGnal Team',
+      content: 'Helpful local updates are welcome. Report suspicious or harmful claims so moderators can review them quickly.',
+      createdAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+      official: true,
+    },
+  ],
+  category: 'Community',
+};
+
 const seedPosts: ForumPost[] = [
+  welcomePost,
   {
     id: 'forum-1',
     author: 'Sarah T.',
@@ -157,7 +181,7 @@ export default function PublicForum() {
         .then((data) => {
           if (!active) return;
           setUsingBackend(true);
-          setPosts(sanitizeForumPosts(data.items));
+          setPosts(withWelcomePost(sanitizeForumPosts(data.items)));
         })
         .catch(() => {
           if (!active) return;
@@ -410,6 +434,7 @@ export default function PublicForum() {
         </div>
         <button
           type="button"
+          data-tour="compose-post"
           onClick={() => setComposerOpen((open) => !open)}
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-700"
         >
@@ -441,6 +466,7 @@ export default function PublicForum() {
               </h2>
               <button
                 type="button"
+                data-tour="close-compose"
                 onClick={() => setComposerOpen(false)}
                 className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
                 aria-label="Close compose post"
@@ -559,6 +585,7 @@ export default function PublicForum() {
                 <button
                   key={post.id}
                   type="button"
+                  data-tour={post.id === welcomePost.id ? 'welcome-post' : undefined}
                   onClick={() => setExpandedPostId(post.id)}
                   className={`w-full rounded-lg border p-4 text-left transition-colors ${
                     selected
@@ -632,6 +659,7 @@ export default function PublicForum() {
                         type="button"
                         onClick={() => handleLike(selectedPost.id)}
                         disabled={likedPostIds.has(selectedPost.id)}
+                        data-tour={selectedPost.id === welcomePost.id ? 'welcome-like' : undefined}
                         className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-blue-400 disabled:cursor-not-allowed disabled:text-blue-500"
                         aria-label="Like post"
                       >
@@ -813,7 +841,7 @@ function loadLocalPosts() {
     const stored = localStorage.getItem(storageKey);
     if (!stored) return seedPosts;
     const parsed = JSON.parse(stored) as ForumPost[];
-    return Array.isArray(parsed) ? sanitizeForumPosts(parsed) : seedPosts;
+    return Array.isArray(parsed) ? withWelcomePost(sanitizeForumPosts(parsed)) : seedPosts;
   } catch {
     return seedPosts;
   }
@@ -823,6 +851,14 @@ function sanitizeForumPosts(posts: ForumPost[]) {
   return posts
     .filter((post) => post.author !== 'MOH Official')
     .map((post) => ({ ...post, dislikes: post.dislikes ?? 0, images: post.images ?? [] }));
+}
+
+function withWelcomePost(posts: ForumPost[]) {
+  const existing = posts.find((post) => post.id === welcomePost.id);
+  return [
+    existing ? { ...welcomePost, ...existing, verified: true, aiFlag: false } : welcomePost,
+    ...posts.filter((post) => post.id !== welcomePost.id),
+  ];
 }
 
 function loadLikedPostIds() {

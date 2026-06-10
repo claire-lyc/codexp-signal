@@ -15,6 +15,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { fetchWithAuth } from '../../lib/api';
+import CitizenOnboarding from './CitizenOnboarding';
 
 const navItems = [
   { path: '/public', label: 'Home', icon: Home },
@@ -81,6 +82,7 @@ export default function PublicLayout() {
               <div className="relative">
                 <button
                   type="button"
+                  data-tour="notification-bell"
                   onClick={() => {
                     setNotificationsOpen((open) => !open);
                     void loadCitizenNotifications()
@@ -127,6 +129,7 @@ export default function PublicLayout() {
               <div className="relative hidden md:block">
                 <button
                   type="button"
+                  data-tour="profile-menu"
                   onClick={() => setProfileOpen((open) => !open)}
                   className="inline-flex rounded-lg p-2 text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
                   aria-label="Open profile menu"
@@ -200,6 +203,8 @@ export default function PublicLayout() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Outlet />
       </main>
+
+      <CitizenOnboarding />
 
       <footer className="bg-zinc-900 border-t border-zinc-800 mt-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

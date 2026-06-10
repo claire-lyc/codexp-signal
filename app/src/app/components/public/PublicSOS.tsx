@@ -180,7 +180,7 @@ export default function PublicReport() {
           <h3 className="font-semibold mb-3 text-sm">Emergency Hotlines</h3>
           <div className="space-y-2 text-sm">
             <Hotline label="Police / Ambulance / Fire" phone="995" colour="text-red-400" />
-            <Hotline label="Non-Emergency Police" phone="1800-255-0000" colour="text-blue-400" />
+            <Hotline label="Police" phone="999" colour="text-blue-400" />
             <Hotline label="Crisis Hotline (24h)" phone="1767" colour="text-purple-400" />
           </div>
         </div>

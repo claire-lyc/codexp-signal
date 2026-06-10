@@ -6,6 +6,7 @@ import {
   Shield,
   Upload,
   Users,
+  X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { apiUrl } from '../../lib/api';
@@ -67,6 +68,8 @@ const emptyForm: FormState = {
   emergencyContact: '',
 };
 
+const volunteerPromptDismissedKey = 'signal-volunteer-login-prompt-dismissed';
+
 export default function PublicVolunteer() {
   const [authenticated, setAuthenticated] = useState(true);
   const [profile, setProfile] = useState<VolunteerProfile | null>(null);
@@ -82,6 +85,9 @@ export default function PublicVolunteer() {
   const [slotTab, setSlotTab] = useState<'available' | 'unavailable'>('available');
   const [opportunities, setOpportunities] = useState<VolunteerOpportunity[]>(() => readVolunteerOpportunities());
   const [notifications, setNotifications] = useState<VolunteerNotification[]>(() => readVolunteerNotifications());
+  const [showVolunteerPrompt, setShowVolunteerPrompt] = useState(
+    () => localStorage.getItem(volunteerPromptDismissedKey) !== 'true',
+  );
 
   const loadRemoteVolunteerProfile = (quiet = false) =>
     fetch(apiUrl('/api/volunteers/profile'), { headers: authHeaders() })
@@ -386,6 +392,11 @@ export default function PublicVolunteer() {
     setSlotTab('available');
   };
 
+  const closeVolunteerPrompt = () => {
+    localStorage.setItem(volunteerPromptDismissedKey, 'true');
+    setShowVolunteerPrompt(false);
+  };
+
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -410,6 +421,44 @@ export default function PublicVolunteer() {
 
       {pageTab === 'volunteer' && (
         <>
+          {showVolunteerPrompt && (
+            <section data-tour="volunteer-entry" className="rounded-xl border border-blue-800 bg-blue-950/20 p-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-lg bg-blue-900/50 p-3">
+                    <Shield className="h-5 w-5 text-blue-300" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-zinc-100">Login as a volunteer</h2>
+                    <p className="mt-1 text-sm leading-6 text-zinc-300">
+                      Optional: sign in or continue with your saved volunteer profile to apply for opportunities.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthenticated(true);
+                      closeVolunteerPrompt();
+                    }}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                  >
+                    Login as Volunteer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeVolunteerPrompt}
+                    className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                    aria-label="Close volunteer login prompt"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+
           {!authenticated && (
             <section className="rounded-xl border border-blue-900/50 bg-blue-950/20 p-6">
               <div className="flex items-start gap-4">
@@ -429,7 +478,7 @@ export default function PublicVolunteer() {
           )}
 
           {authenticated && !profile && !showProfileForm && (
-            <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+            <section data-tour="volunteer-entry" className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
               <h2 className="mb-2 text-lg font-semibold">Volunteer Readiness Profile</h2>
               <p className="mb-4 text-sm text-zinc-400">First-time volunteers submit skills and availability once. Returning verified volunteers would be let into the opportunities page immediately.</p>
               <button onClick={() => setShowProfileForm(true)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-700">
@@ -452,7 +501,7 @@ export default function PublicVolunteer() {
           )}
 
           {profile && (
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div data-tour="volunteer-entry" className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
               <section className="space-y-4">
                 <DashboardSummary pending={pendingApplications.length} offers={offers.length} upcoming={upcoming.length} completed={completed.length} onReset={resetDemoProfile} />
                 <NotificationPanel notifications={myNotifications} opportunities={opportunities} />

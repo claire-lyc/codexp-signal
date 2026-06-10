@@ -227,7 +227,7 @@ export default function PublicProfile() {
         )}
 
         {activeTab === 'notifications' && preferences && (
-          <section className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+          <section data-tour="notification-types" className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
             <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold"><Bell className="h-5 w-5 text-blue-400" />Notifications</h2>
             <div className="grid gap-3 sm:grid-cols-2">
               <Toggle label="Alerts" checked={preferences.alertNotifications} onChange={(value) => setPreferences({ ...preferences, alertNotifications: value })} />
