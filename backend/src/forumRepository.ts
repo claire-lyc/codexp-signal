@@ -87,7 +87,6 @@ export function listForumPosts(options: {
   latitude?: number | null;
   longitude?: number | null;
 } = {}) {
-  consolidateExactDuplicateThreads();
   return [...forumPosts].filter((post) => {
     if (options.includeHidden) return true;
     return post.moderationState !== 'hidden' && post.moderationState !== 'misleading' && !bannedForumAuthors.has(normalizeAuthor(post.author));
