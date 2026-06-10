@@ -713,7 +713,13 @@ export function readVolunteerProfile(): VolunteerProfile | null {
   const raw = window.localStorage.getItem(volunteerStorageKey);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as VolunteerProfile;
+    const profile = JSON.parse(raw) as VolunteerProfile;
+    if (profile.status === 'pending_review') {
+      const activeProfile = { ...profile, status: 'verified' as const };
+      window.localStorage.setItem(volunteerStorageKey, JSON.stringify(activeProfile));
+      return activeProfile;
+    }
+    return profile;
   } catch {
     window.localStorage.removeItem(volunteerStorageKey);
     return null;

@@ -307,8 +307,11 @@ app.get('/api/volunteers/profile', authenticateJwt as express.RequestHandler, as
     }
 
     const item = await getVolunteerProfile(request.user.id);
+    const profile = item?.profile?.status === 'pending_review'
+      ? { ...item.profile, status: 'verified' }
+      : item?.profile;
     response.json({
-      item: item ? { userId: item.user_id, profile: item.profile } : null,
+      item: item ? { userId: item.user_id, profile } : null,
     });
   } catch (error) {
     next(error);
@@ -327,6 +330,9 @@ app.put('/api/volunteers/profile', authenticateJwt as express.RequestHandler, as
       ...body,
       name: stringBody(body.name) ?? request.user.display_name ?? request.user.username ?? 'Citizen Volunteer',
       email: stringBody(body.email) ?? request.user.email ?? '',
+      status: body.status === 'assigned' || body.status === 'checked_in' || body.status === 'completed'
+        ? body.status
+        : 'verified',
     };
     const item = await upsertVolunteerProfile(request.user.id, profile);
     response.json({
@@ -341,7 +347,12 @@ app.get('/api/gov/volunteers/profiles', ...requireGovUser, async (_request, resp
   try {
     const items = await listVolunteerProfiles();
     response.json({
-      items: items.map((item) => ({ userId: item.user_id, profile: item.profile })),
+      items: items.map((item) => ({
+        userId: item.user_id,
+        profile: item.profile?.status === 'pending_review'
+          ? { ...item.profile, status: 'verified' }
+          : item.profile,
+      })),
     });
   } catch (error) {
     next(error);

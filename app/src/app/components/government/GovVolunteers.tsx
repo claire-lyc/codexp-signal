@@ -210,7 +210,10 @@ export default function GovVolunteers() {
       ...remoteProfiles,
       ...(citizenProfile ? [citizenProfile] : []),
       ...demoProfiles,
-    ].filter((profile) => {
+    ].map((profile) => profile.status === 'pending_review'
+      ? { ...profile, status: 'verified' as const }
+      : profile
+    ).filter((profile) => {
       const key = volunteerIdentity(profile);
       if (seen.has(key)) return false;
       seen.add(key);
@@ -261,13 +264,6 @@ export default function GovVolunteers() {
       .length
   ), 0), [agencyOpportunities, rawApplicants]);
 
-  const skillVerificationProfiles = useMemo(() => (
-    rawApplicants
-      .filter((profile) => profile.status === 'pending_review')
-      .filter((profile) => currentAgency === 'All agencies' || agencyOpportunities.some((opportunity) => hasSkillOverlap(profile, opportunity)))
-      .sort((a, b) => a.registeredAt.localeCompare(b.registeredAt))
-  ), [agencyOpportunities, currentAgency, rawApplicants]);
-
   const openOpportunities = opportunities.filter((opportunity) => opportunity.filled < opportunity.needed);
   const fullOpportunities = opportunities.filter((opportunity) => opportunity.filled >= opportunity.needed);
   const visibleOpportunities = boardTab === 'open' ? openOpportunities : fullOpportunities;
@@ -275,14 +271,12 @@ export default function GovVolunteers() {
   const selectedRole = selectedOpportunity?.roleSlots.find((role) => role.id === selectedRoleId) ?? selectedOpportunity?.roleSlots[0] ?? null;
   const visibleOpportunityIds = new Set(agencyOpportunities.map((opportunity) => opportunity.id));
 
-  const pendingVerification = applicants.filter((profile) => profile.status === 'pending_review');
-  const waitingList = applicants.filter((profile) => profile.status !== 'pending_review' && countPendingApplications(profile, visibleOpportunityIds) > 0);
+  const waitingList = applicants.filter((profile) => countPendingApplications(profile, visibleOpportunityIds) > 0);
   const readyPool = applicants.filter((profile) => profile.status === 'verified' && countPendingApplications(profile, visibleOpportunityIds) === 0);
   const deployed = applicants.filter((profile) => profile.status === 'assigned' || profile.status === 'checked_in');
 
   const stats = {
     ready: readyPool.length,
-    pending: pendingVerification.length,
     waiting: waitingList.length,
     deployed: deployed.length,
   };
@@ -296,7 +290,7 @@ export default function GovVolunteers() {
         return opportunity && (assignment.status === 'accepted' || assignment.status === 'checked_in' || assignment.status === 'completed');
       }).length
     ), 0),
-    pendingSkills: skillVerificationProfiles.length,
+    registered: rawApplicants.length,
   };
 
   const verifyVolunteer = (profile: VolunteerProfile) => {
@@ -457,7 +451,6 @@ export default function GovVolunteers() {
   useEffect(() => {
     const autoAcceptCandidate = agencyOpportunities.flatMap((opportunity) => (
       rawApplicants
-        .filter((profile) => profile.status !== 'pending_review')
         .filter((profile) => profile.appliedOpportunityIds.includes(opportunity.id))
         .filter((profile) => !profile.assignments.some((assignment) => assignment.opportunityId === opportunity.id))
         .map((profile) => {
@@ -514,7 +507,7 @@ export default function GovVolunteers() {
       <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
         <Metric icon={<MapPin className="h-5 w-5 text-blue-500" />} label="Open Needs" value={agencyStats.needs} badge="Events" />
         <Metric icon={<Users className="h-5 w-5 text-orange-500" />} label="Manual Approvals" value={agencyStats.applications} badge="Review" />
-        <Metric icon={<AlertCircle className="h-5 w-5 text-yellow-500" />} label="Pending Verification" value={agencyStats.pendingSkills} badge="Review" />
+        <Metric icon={<AlertCircle className="h-5 w-5 text-yellow-500" />} label="Registered Volunteers" value={agencyStats.registered} badge="Ready" />
         <Metric icon={<ShieldCheck className="h-5 w-5 text-green-500" />} label="Accepted" value={agencyStats.accepted} badge="Assigned" />
         <Metric icon={<UserCheck className="h-5 w-5 text-purple-500" />} label="Deployed" value={stats.deployed} badge="Live" />
       </div>
@@ -681,25 +674,16 @@ export default function GovVolunteers() {
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-4">
           <ActionSection
-            title="Volunteer Verification"
-            description="Review volunteer skills, certification notes, contact details, and profile readiness in one place."
-            emptyMessage="No volunteer profiles are awaiting approval."
+            title="Registered volunteers"
+            description="Everyone who signs up is immediately available for skills-based matching and opportunity assignment."
+            emptyMessage="No volunteer profiles have registered yet."
           >
-            {pendingVerification.map((profile) => (
-              <SkillVerificationCard key={profile.id} profile={profile} canVerify onVerify={verifyVolunteer} />
+            {applicants.map((profile) => (
+              <VolunteerProfileCard key={profile.id} profile={profile} />
             ))}
           </ActionSection>
         </div>
         <aside className="space-y-4">
-          <ActionSection
-            title="Verified volunteers"
-            description="Approved volunteers stay searchable here even when they are not currently on the waiting list."
-            emptyMessage="No verified volunteer profiles yet."
-          >
-            {readyPool.concat(deployed).slice(0, 8).map((profile) => (
-              <VolunteerProfileCard key={profile.id} profile={profile} />
-            ))}
-          </ActionSection>
           <RecentActivity items={activityLog} />
         </aside>
       </section>
@@ -1099,11 +1083,10 @@ function CandidateRow({
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-green-400">{candidate.match}% match</span>
-          {profile.status === 'pending_review' && <button onClick={() => onVerify(profile)} className="rounded bg-green-600 px-2.5 py-1 text-xs hover:bg-green-700">Verify</button>}
           {!canAssign && <span className="inline-flex items-center gap-1 text-xs text-zinc-600"><Lock className="h-3 w-3" />No permission</span>}
         </div>
       </div>
-      {profile.status !== 'pending_review' && canAssign && !candidate.assigned && (
+      {canAssign && !candidate.assigned && (
         <div className="mt-3 space-y-2 border-t border-zinc-800 pt-3">
           <div className="rounded-lg bg-zinc-950/50 p-2">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">

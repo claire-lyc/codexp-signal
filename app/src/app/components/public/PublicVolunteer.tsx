@@ -3,6 +3,7 @@ import {
   CheckCircle,
   Loader2,
   MapPin,
+  Search,
   Shield,
   Upload,
   Users,
@@ -19,6 +20,7 @@ import {
   readVolunteerNotifications,
   readVolunteerProfile,
   saveVolunteerProfile,
+  scoreVolunteerBreakdown,
   scoreVolunteerForOpportunity,
   volunteerAvailability,
   volunteerSkills,
@@ -161,14 +163,38 @@ export default function PublicVolunteer() {
       availability: form.availability,
     };
     return opportunities
-      .map((opportunity) => ({
-        ...opportunity,
-        match: scoreVolunteerForOpportunity(candidate, opportunity),
-        assignment: profile?.assignments.find((assignment) => assignment.opportunityId === opportunity.id),
-        applied: profile?.appliedOpportunityIds.includes(opportunity.id) ?? false,
-        filled: opportunityCapacity(opportunity, profile),
-      }))
-      .sort((a, b) => b.match - a.match);
+      .map((opportunity) => {
+        const breakdown = scoreVolunteerBreakdown(candidate, opportunity);
+        const requiredSkills = [...new Set([
+          ...opportunity.requiredSkills,
+          ...opportunity.roleSlots.flatMap((role) => role.requiredSkills),
+        ])];
+        const matchedSkills = requiredSkills.filter((skill) => candidate.skills.includes(skill));
+        const nearby = candidate.region === 'Any Region' || candidate.region === opportunity.region;
+        const priorityScore =
+          breakdown.skills * 2 +
+          breakdown.availability +
+          (nearby ? 25 : 0) +
+          volunteerUrgencyBonus(opportunity.urgency);
+
+        return {
+          ...opportunity,
+          match: scoreVolunteerForOpportunity(candidate, opportunity),
+          skillScore: breakdown.skills,
+          matchedSkills,
+          requiredSkillCount: requiredSkills.length,
+          priorityScore,
+          assignment: profile?.assignments.find((assignment) => assignment.opportunityId === opportunity.id),
+          applied: profile?.appliedOpportunityIds.includes(opportunity.id) ?? false,
+          filled: opportunityCapacity(opportunity, profile),
+          nearby,
+        };
+      })
+      .sort((a, b) =>
+        b.priorityScore - a.priorityScore ||
+        b.skillScore - a.skillScore ||
+        b.match - a.match,
+      );
   }, [form.availability, form.region, form.skills, opportunities, profile]);
 
   const offers = profile?.assignments.filter((assignment) => assignment.status === 'offered') ?? [];
@@ -209,7 +235,7 @@ export default function PublicVolunteer() {
       availability: form.availability,
       certifications: form.certifications.trim(),
       emergencyContact: form.emergencyContact.trim(),
-      status: profile?.status === 'verified' || profile?.status === 'assigned' || profile?.status === 'checked_in' ? profile.status : 'pending_review',
+      status: profile?.status === 'assigned' || profile?.status === 'checked_in' ? profile.status : 'verified',
       registeredAt: profile?.registeredAt ?? new Date().toISOString(),
       appliedOpportunityIds: profile?.appliedOpportunityIds ?? [],
       assignments: profile?.assignments ?? [],
@@ -218,34 +244,13 @@ export default function PublicVolunteer() {
     saveVolunteerRemote(nextProfile)
       .then(() => {
         setShowProfileForm(false);
-        setMessage(profile ? 'Volunteer details updated.' : 'Readiness profile submitted for government verification.');
+        setMessage(profile ? 'Volunteer details updated.' : 'Volunteer profile created. You can start participating now.');
       })
       .catch(() => {
         persistVolunteerProfile(nextProfile, profile ? 'Volunteer details updated on this device.' : 'Readiness profile saved on this device. Start the backend to sync it across operators.');
         setShowProfileForm(false);
       })
       .finally(() => setSubmitting(false));
-  };
-
-  const quickVerify = () => {
-    if (!profile) return;
-    fetch(apiUrl('/api/volunteers/profile'), { headers: authHeaders() })
-      .then((response) => {
-        if (!response.ok) throw new Error('Volunteer profile unavailable');
-        return response.json() as Promise<{ item: { userId: string; profile: VolunteerProfile } | null }>;
-      })
-      .then((data) => {
-        if (data.item?.profile) {
-          saveVolunteerProfile(data.item.profile);
-          hydrateProfile(data.item.profile);
-          setMessage(data.item.profile.status === 'verified' ? 'Your profile has been approved and is ready for matching.' : 'Your profile is still under review.');
-          return;
-        }
-        setMessage('We could not find a synced volunteer profile yet.');
-      })
-      .catch(() => {
-        setMessage('Unable to refresh status right now. Please try again once the backend is available.');
-      });
   };
 
   const applyForOpportunity = (opportunityId: number) => {
@@ -345,7 +350,7 @@ export default function PublicVolunteer() {
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Volunteer & Support</h1>
-          <p className="text-zinc-400">Keep one verified profile, apply to multiple opportunities, and accept offers when agencies confirm you.</p>
+          <p className="text-zinc-400">Create one volunteer profile, join suitable opportunities, and manage your upcoming shifts.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-lg border border-zinc-800 bg-zinc-900 p-1">
@@ -690,14 +695,34 @@ function OpportunityList({
     assignment?: VolunteerAssignment;
     applied: boolean;
     filled: number;
+    nearby: boolean;
+    skillScore: number;
+    matchedSkills: string[];
+    requiredSkillCount: number;
+    priorityScore: number;
   }>;
   tab: 'available' | 'unavailable';
   setTab: (tab: 'available' | 'unavailable') => void;
   onApply: (id: number) => void;
 }) {
+  const [query, setQuery] = useState('');
+  const [urgencyFilter, setUrgencyFilter] = useState<'all' | VolunteerOpportunity['urgency']>('all');
+  const [regionFilter, setRegionFilter] = useState('All regions');
   const available = opportunities.filter((opportunity) => opportunity.filled < opportunity.needed);
   const unavailable = opportunities.filter((opportunity) => opportunity.filled >= opportunity.needed);
-  const visible = tab === 'available' ? available : unavailable;
+  const regions = ['All regions', ...new Set(opportunities.map((opportunity) => opportunity.region))];
+  const normalizedQuery = query.trim().toLowerCase();
+  const visible = (tab === 'available' ? available : unavailable).filter((opportunity) => {
+    const queryMatch =
+      !normalizedQuery ||
+      opportunity.title.toLowerCase().includes(normalizedQuery) ||
+      opportunity.organization.toLowerCase().includes(normalizedQuery) ||
+      opportunity.location.toLowerCase().includes(normalizedQuery) ||
+      opportunity.requiredSkills.some((skill) => skill.toLowerCase().includes(normalizedQuery));
+    const urgencyMatch = urgencyFilter === 'all' || opportunity.urgency === urgencyFilter;
+    const regionMatch = regionFilter === 'All regions' || opportunity.region === regionFilter;
+    return queryMatch && urgencyMatch && regionMatch;
+  });
 
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
@@ -711,9 +736,41 @@ function OpportunityList({
           <button onClick={() => setTab('unavailable')} className={`rounded-md px-3 py-1.5 text-sm ${tab === 'unavailable' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}>Unavailable ({unavailable.length})</button>
         </div>
       </div>
+      <div className="mb-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_150px_150px]">
+        <div className="relative">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search roles, locations, or skills..."
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 py-2 pl-9 pr-3 text-sm text-zinc-100 outline-none focus:border-blue-600"
+          />
+        </div>
+        <select
+          value={urgencyFilter}
+          onChange={(event) => setUrgencyFilter(event.target.value as 'all' | VolunteerOpportunity['urgency'])}
+          className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 outline-none focus:border-blue-600"
+          aria-label="Filter by urgency"
+        >
+          <option value="all">All urgency</option>
+          <option value="high">High urgency</option>
+          <option value="medium">Medium urgency</option>
+          <option value="low">Low urgency</option>
+        </select>
+        <select
+          value={regionFilter}
+          onChange={(event) => setRegionFilter(event.target.value)}
+          className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 outline-none focus:border-blue-600"
+          aria-label="Filter by region"
+        >
+          {regions.map((region) => <option key={region}>{region}</option>)}
+        </select>
+      </div>
+      <div className="mb-4 text-xs text-zinc-500">
+        Ranked by your skills first, with extra priority for high urgency and opportunities near {profile.region === 'Any Region' ? 'your selected regions' : profile.region}.
+      </div>
       <div className="space-y-4">
         {visible.map((opportunity) => {
-          const canApply = profile.status !== 'pending_review' && !opportunity.applied && !opportunity.assignment && opportunity.filled < opportunity.needed;
           return (
             <div key={opportunity.id} className={`rounded-lg border p-5 ${opportunity.urgency === 'high' ? 'border-red-800 bg-red-950/20' : opportunity.urgency === 'medium' ? 'border-yellow-800 bg-yellow-950/20' : 'border-green-800 bg-green-950/20'}`}>
               <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -721,6 +778,14 @@ function OpportunityList({
                   <div className="mb-1 flex flex-wrap items-center gap-2">
                     <h3 className="text-lg font-semibold">{opportunity.title}</h3>
                     <span className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">{opportunity.match}% fit</span>
+                    <span className={`rounded px-2 py-1 text-xs ${
+                      opportunity.matchedSkills.length
+                        ? 'bg-emerald-950 text-emerald-300'
+                        : 'bg-zinc-800 text-zinc-500'
+                    }`}>
+                      {opportunity.matchedSkills.length}/{opportunity.requiredSkillCount} skills
+                    </span>
+                    {opportunity.nearby ? <span className="rounded bg-blue-950 px-2 py-1 text-xs text-blue-300">Near you</span> : null}
                   </div>
                   <div className="flex flex-wrap gap-4 text-sm text-zinc-400">
                     <span>{opportunity.organization}</span>
@@ -732,7 +797,18 @@ function OpportunityList({
               </div>
               <p className="mb-3 text-sm text-zinc-300">{opportunity.description}</p>
               <div className="mb-3 flex flex-wrap gap-2">
-                {opportunity.requiredSkills.map((skill) => <span key={skill} className="rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300">{skill}</span>)}
+                {opportunity.requiredSkills.map((skill) => (
+                  <span
+                    key={skill}
+                    className={`rounded px-2 py-1 text-xs ${
+                      profile.skills.includes(skill)
+                        ? 'bg-emerald-950 text-emerald-300 ring-1 ring-emerald-800'
+                        : 'bg-zinc-800 text-zinc-400'
+                    }`}
+                  >
+                    {skill}
+                  </span>
+                ))}
               </div>
               <div className="mb-3 space-y-2">
                 {opportunity.roleSlots.map((role) => (
@@ -756,9 +832,13 @@ function OpportunityList({
                   </span>
                 ) : opportunity.applied ? (
                   <span className="rounded-lg bg-blue-950 px-3 py-2 text-sm text-blue-300">Pending application</span>
+                ) : opportunity.filled >= opportunity.needed ? (
+                  <span className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm font-medium text-zinc-300">
+                    Fully staffed
+                  </span>
                 ) : (
-                  <button onClick={() => onApply(opportunity.id)} disabled={!canApply} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-500">
-                    {profile.status === 'pending_review' ? 'Verification required' : opportunity.filled >= opportunity.needed ? 'Fully staffed' : 'Apply'}
+                  <button onClick={() => onApply(opportunity.id)} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700">
+                    Apply
                   </button>
                 )}
               </div>
@@ -767,12 +847,20 @@ function OpportunityList({
         })}
         {!visible.length && (
           <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-5 text-sm text-zinc-500">
-            {tab === 'available' ? 'No open volunteer slots right now.' : 'No fully staffed opportunities yet.'}
+            {query || urgencyFilter !== 'all' || regionFilter !== 'All regions'
+              ? 'No volunteer opportunities match these filters.'
+              : tab === 'available' ? 'No open volunteer slots right now.' : 'No fully staffed opportunities yet.'}
           </div>
         )}
       </div>
     </div>
   );
+}
+
+function volunteerUrgencyBonus(urgency: VolunteerOpportunity['urgency']) {
+  if (urgency === 'high') return 30;
+  if (urgency === 'medium') return 15;
+  return 0;
 }
 
 function ApplicationsList({
@@ -857,7 +945,7 @@ function UpcomingList({
 }
 
 function ProfileSummary({ profile }: { profile: VolunteerProfile }) {
-  const readiness = profile.status === 'pending_review' ? 'Pending verification' : 'Verified';
+  const readiness = profile.status === 'assigned' || profile.status === 'checked_in' ? 'Active' : 'Ready to volunteer';
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
       <h2 className="mb-4 text-lg font-semibold">Volunteer Profile</h2>
@@ -935,8 +1023,6 @@ function DonationPanel({ authenticated }: { authenticated: boolean }) {
 }
 
 function findImmediateMatch(profile: VolunteerProfile, opportunity: VolunteerOpportunity): VolunteerRoleSlot | null {
-  if (profile.status === 'pending_review') return null;
-
   return opportunity.roleSlots.find((role) => {
     const slotOpen = role.assigned < role.needed;
     const hasAllSkills = role.requiredSkills.every((skill) => profile.skills.includes(skill));
