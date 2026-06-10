@@ -883,6 +883,7 @@ export default function SingaporeRegionMap({
             const isActive = isGrouped ? activeClusterId === cluster.id : activeMarkerId === marker.id;
             const style = riskStyleFor(cluster.severity ?? marker.severity);
             const clusterRadius = clamp(13 + Math.log2(cluster.markers.length) * 2.5, 14, 22);
+            const needsHeatmapContrast = Boolean(heatmapLayer);
 
             if (isGrouped) {
               return (
@@ -907,19 +908,27 @@ export default function SingaporeRegionMap({
                   onBlur={() => setActiveClusterId(null)}
                 >
                   <circle
-                    r={clusterRadius + 5}
-                    fill={style.dot}
-                    fillOpacity="0.2"
-                    stroke={style.dot}
-                    strokeWidth="1.5"
+                    r={clusterRadius + (needsHeatmapContrast ? 9 : 5)}
+                    fill="#0f172a"
+                    fillOpacity={needsHeatmapContrast ? 0.72 : 0}
+                    stroke="#ffffff"
+                    strokeOpacity={needsHeatmapContrast ? 0.9 : 0}
+                    strokeWidth={needsHeatmapContrast ? 3 : 0}
                   />
                   <circle
-                    r={clusterRadius}
+                    r={clusterRadius + (needsHeatmapContrast ? 13 : 5)}
+                    fill={style.dot}
+                    fillOpacity={needsHeatmapContrast ? 0.22 : 0.2}
+                    stroke={style.dot}
+                    strokeWidth={needsHeatmapContrast ? 2 : 1.5}
+                  />
+                  <circle
+                    r={clusterRadius + (needsHeatmapContrast ? 2 : 0)}
                     fill={style.dot}
                     fillOpacity={isActive ? 1 : 0.9}
                     stroke="#fafafa"
-                    strokeWidth={isActive ? 3 : 2}
-                    style={{ filter: isActive ? `drop-shadow(0 0 6px ${style.dot})` : 'none' }}
+                    strokeWidth={isActive || needsHeatmapContrast ? 3 : 2}
+                    style={{ filter: isActive || needsHeatmapContrast ? `drop-shadow(0 0 8px ${style.dot}) drop-shadow(0 1px 3px rgba(0,0,0,0.8))` : 'none' }}
                   />
                   <text
                     y="4"
@@ -936,6 +945,10 @@ export default function SingaporeRegionMap({
               );
             }
 
+            const markerLabel = needsHeatmapContrast ? marker.name : marker.value;
+            const showMarkerLabel = needsHeatmapContrast || isActive;
+            const labelWidth = clamp(markerLabel.length * 6.2 + 14, 44, 150);
+
             return (
               <g
                 key={marker.id}
@@ -951,25 +964,55 @@ export default function SingaporeRegionMap({
                 onBlur={() => setActiveMarkerId(null)}
               >
                 <circle
-                  r={isActive ? 9 : 6}
-                  fill={style.dot}
-                  fillOpacity={isActive ? 1 : 0.82}
-                  stroke="#fafafa"
-                  strokeWidth={isActive ? 2.5 : 1.5}
-                  style={{ filter: isActive ? `drop-shadow(0 0 5px ${style.dot})` : 'none' }}
+                  r={needsHeatmapContrast ? (isActive ? 16 : 14) : isActive ? 9 : 6}
+                  fill="#020617"
+                  fillOpacity={needsHeatmapContrast ? 0.82 : 0}
+                  stroke="#ffffff"
+                  strokeOpacity={needsHeatmapContrast ? 0.95 : 0}
+                  strokeWidth={needsHeatmapContrast ? 3 : 0}
+                  style={{ filter: needsHeatmapContrast ? 'drop-shadow(0 1px 4px rgba(0,0,0,0.85))' : 'none' }}
                 />
-                {isActive && (
-                  <text
-                    x="12"
-                    y="4"
-                    fill="#ffffff"
-                    fontSize="11"
-                    fontWeight="700"
-                    className="pointer-events-none"
-                    style={{ paintOrder: 'stroke', stroke: '#18181b', strokeWidth: 3 }}
-                  >
-                    {marker.value}
-                  </text>
+                {needsHeatmapContrast && (
+                  <circle
+                    r={isActive ? 22 : 19}
+                    fill={style.dot}
+                    fillOpacity="0.18"
+                    stroke={style.dot}
+                    strokeWidth="2"
+                  />
+                )}
+                <circle
+                  r={needsHeatmapContrast ? (isActive ? 9 : 7.5) : isActive ? 9 : 6}
+                  fill={style.dot}
+                  fillOpacity={isActive ? 1 : needsHeatmapContrast ? 0.96 : 0.82}
+                  stroke="#fafafa"
+                  strokeWidth={isActive || needsHeatmapContrast ? 2.5 : 1.5}
+                  style={{ filter: isActive || needsHeatmapContrast ? `drop-shadow(0 0 7px ${style.dot})` : 'none' }}
+                />
+                {showMarkerLabel && (
+                  <g className="pointer-events-none" transform="translate(13 -17)">
+                    <rect
+                      x="0"
+                      y="0"
+                      width={labelWidth}
+                      height="19"
+                      rx="9.5"
+                      fill="#09090b"
+                      fillOpacity={needsHeatmapContrast ? 0.92 : 0}
+                      stroke="#ffffff"
+                      strokeOpacity={needsHeatmapContrast ? 0.22 : 0}
+                    />
+                    <text
+                      x="8"
+                      y="13"
+                      fill="#ffffff"
+                      fontSize="10.5"
+                      fontWeight="800"
+                      style={{ paintOrder: 'stroke', stroke: '#18181b', strokeWidth: needsHeatmapContrast ? 0 : 3 }}
+                    >
+                      {markerLabel}
+                    </text>
+                  </g>
                 )}
               </g>
             );

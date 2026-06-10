@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
+import { useSearchParams } from 'react-router';
 import { API_REFRESH_INTERVAL_MS, apiUrl } from '../../lib/api';
 import { authHeaders } from '../../lib/auth';
 
@@ -73,6 +74,12 @@ const likedPostsStorageKey = 'signal-forum-liked-posts';
 const dislikedPostsStorageKey = 'signal-forum-disliked-posts';
 const forumCooldownMs = Number(import.meta.env.VITE_FORUM_POST_COOLDOWN_MS ?? 60_000);
 const categories = ['All', 'Health', 'Weather', 'Infrastructure', 'Supply', 'Community'];
+const activeSituationTopics = [
+  { id: 'covid-watch', label: 'Covid-19 Watch', category: 'Health' },
+  { id: 'rainfall-risk', label: 'Elevated Flood Risk', category: 'Weather' },
+  { id: 'air-quality', label: 'Air Quality Advisory', category: 'Weather' },
+];
+const activeSituationTopicIds = new Set(activeSituationTopics.map((topic) => topic.id));
 const reportTypes = [
   { value: 'health', label: 'Health' },
   { value: 'environment', label: 'Weather & Environment' },
@@ -114,16 +121,345 @@ const welcomePost: ForumPost = {
 };
 
 const seedPosts: ForumPost[] = [welcomePost];
+const activeSituationSeedPosts: ForumPost[] = [
+  {
+    id: 'covid-watch-bedok-symptoms',
+    author: 'Nadia - Bedok North',
+    createdAt: minutesAgo(18),
+    content: 'My dad and I both developed fever and sore throat after visiting Bedok market. We tested negative once but symptoms are getting worse, so we are isolating and checking again tonight.',
+    verified: false,
+    aiFlag: false,
+    likes: 18,
+    dislikes: 1,
+    reports: 0,
+    replies: [{ id: 'covid-watch-bedok-reply', author: 'Community volunteer', content: 'Thanks for isolating. If breathing worsens or fever remains high, call a clinic before heading down.', createdAt: minutesAgo(11), official: false }],
+    category: 'Health',
+    topicTag: 'covid-watch',
+    crisisTag: 'Covid-19 Watch',
+    location: 'Bedok North',
+    latitude: 1.324,
+    longitude: 103.93,
+  },
+  {
+    id: 'covid-watch-jurong-clinic',
+    author: 'Jurong West GP Clinic',
+    createdAt: minutesAgo(28),
+    content: 'We are seeing a clear increase in respiratory cases today. Most are mild, but seniors with breathlessness should seek care early instead of waiting overnight.',
+    verified: true,
+    aiFlag: false,
+    likes: 42,
+    dislikes: 0,
+    reports: 0,
+    replies: [],
+    category: 'Health',
+    topicTag: 'covid-watch',
+    crisisTag: 'Covid-19 Watch',
+    location: 'Jurong West',
+    latitude: 1.3404,
+    longitude: 103.7058,
+  },
+  {
+    id: 'covid-watch-tampines-school',
+    author: 'TampinesParent92',
+    createdAt: minutesAgo(43),
+    content: 'Several kids in my child care centre are coughing. Not sure if it is Covid but the centre asked parents to monitor temperature and keep sick children home.',
+    verified: false,
+    aiFlag: false,
+    likes: 13,
+    dislikes: 2,
+    reports: 0,
+    replies: [],
+    category: 'Health',
+    topicTag: 'covid-watch',
+    crisisTag: 'Covid-19 Watch',
+    location: 'Tampines',
+    latitude: 1.3547,
+    longitude: 103.9436,
+  },
+  {
+    id: 'covid-watch-woodlands',
+    author: 'Woodlands Resident',
+    createdAt: minutesAgo(56),
+    content: 'Block group chat has a few families reporting fever and body aches. We are not sure if linked, but masks are back on for lift/common areas.',
+    verified: false,
+    aiFlag: false,
+    likes: 9,
+    dislikes: 0,
+    reports: 0,
+    replies: [],
+    category: 'Health',
+    topicTag: 'covid-watch',
+    crisisTag: 'Covid-19 Watch',
+    location: 'Woodlands',
+    latitude: 1.436,
+    longitude: 103.786,
+  },
+  {
+    id: 'covid-watch-bishan-pharmacy',
+    author: 'Bishan Pharmacy Counter',
+    createdAt: minutesAgo(72),
+    content: 'More people buying ART kits and cough medicine this afternoon. Stock is still available but moving faster than usual.',
+    verified: true,
+    aiFlag: false,
+    likes: 21,
+    dislikes: 1,
+    reports: 0,
+    replies: [],
+    category: 'Health',
+    topicTag: 'covid-watch',
+    crisisTag: 'Covid-19 Watch',
+    location: 'Bishan',
+    latitude: 1.3508,
+    longitude: 103.8485,
+  },
+  {
+    id: 'covid-watch-queenstown',
+    author: 'QueenstownCaregiver',
+    createdAt: minutesAgo(84),
+    content: 'My mum has mild fever after a clinic visit. Doctor said monitor symptoms and avoid crowded places. Posting in case others nearby are seeing the same.',
+    verified: false,
+    aiFlag: false,
+    likes: 7,
+    dislikes: 0,
+    reports: 0,
+    replies: [],
+    category: 'Health',
+    topicTag: 'covid-watch',
+    crisisTag: 'Covid-19 Watch',
+    location: 'Queenstown',
+    latitude: 1.2942,
+    longitude: 103.7861,
+  },
+  {
+    id: 'covid-watch-low-confidence',
+    author: 'AnonymousForward',
+    createdAt: minutesAgo(96),
+    content: 'Breaking: heard every clinic in the west is full and nobody should go out!!! Can anyone confirm?',
+    verified: false,
+    aiFlag: true,
+    likes: 2,
+    dislikes: 15,
+    reports: 5,
+    replies: [{ id: 'covid-watch-low-confidence-reply', author: 'SiGnal Team', content: 'This claim is not verified. Please rely on official advisories and report exact locations only.', createdAt: minutesAgo(88), official: true }],
+    moderationState: 'under_review',
+    category: 'Health',
+    topicTag: 'covid-watch',
+    crisisTag: 'Covid-19 Watch',
+    location: 'Jurong West',
+    latitude: 1.3404,
+    longitude: 103.7058,
+  },
+  {
+    id: 'flood-risk-orchard',
+    author: 'Orchard Commuter',
+    createdAt: minutesAgo(14),
+    content: 'Water is pooling quickly near the underpass entrance. Still passable but ankle-deep in parts. Please slow down if driving through.',
+    verified: false,
+    aiFlag: false,
+    likes: 31,
+    dislikes: 0,
+    reports: 0,
+    replies: [],
+    category: 'Weather',
+    topicTag: 'rainfall-risk',
+    crisisTag: 'Elevated Flood Risk',
+    location: 'Orchard underpass',
+    latitude: 1.3048,
+    longitude: 103.8318,
+  },
+  {
+    id: 'flood-risk-east-coast',
+    author: 'East Coast Cyclist',
+    createdAt: minutesAgo(32),
+    content: 'Heavy rain around East Coast. Park connector has several puddles and one low point is almost overflowing.',
+    verified: false,
+    aiFlag: false,
+    likes: 17,
+    dislikes: 1,
+    reports: 0,
+    replies: [],
+    category: 'Weather',
+    topicTag: 'rainfall-risk',
+    crisisTag: 'Elevated Flood Risk',
+    location: 'East Coast',
+    latitude: 1.305,
+    longitude: 103.912,
+  },
+  {
+    id: 'flood-risk-bedok',
+    author: 'Bedok Shopowner',
+    createdAt: minutesAgo(49),
+    content: 'Drain outside our row is backing up again. We moved goods away from the entrance just in case.',
+    verified: false,
+    aiFlag: false,
+    likes: 12,
+    dislikes: 0,
+    reports: 0,
+    replies: [],
+    category: 'Weather',
+    topicTag: 'rainfall-risk',
+    crisisTag: 'Elevated Flood Risk',
+    location: 'Bedok',
+    latitude: 1.324,
+    longitude: 103.93,
+  },
+  {
+    id: 'flood-risk-bishan',
+    author: 'Bishan MRT Staff',
+    createdAt: minutesAgo(63),
+    content: 'Crowd control is normal, but rainwater is gathering near the sheltered walkway. Cleaning team has been informed.',
+    verified: true,
+    aiFlag: false,
+    likes: 24,
+    dislikes: 0,
+    reports: 0,
+    replies: [],
+    category: 'Weather',
+    topicTag: 'rainfall-risk',
+    crisisTag: 'Elevated Flood Risk',
+    location: 'Bishan',
+    latitude: 1.3508,
+    longitude: 103.8485,
+  },
+  {
+    id: 'flood-risk-jurong',
+    author: 'Jurong West Resident',
+    createdAt: minutesAgo(77),
+    content: 'Rain has eased here but roadside drains are still fast-flowing. Parents should watch kids around open drains.',
+    verified: false,
+    aiFlag: false,
+    likes: 8,
+    dislikes: 0,
+    reports: 0,
+    replies: [],
+    category: 'Weather',
+    topicTag: 'rainfall-risk',
+    crisisTag: 'Elevated Flood Risk',
+    location: 'Jurong West',
+    latitude: 1.3404,
+    longitude: 103.7058,
+  },
+  {
+    id: 'flood-risk-unverified',
+    author: 'RoadWatchSG',
+    createdAt: minutesAgo(93),
+    content: 'Someone said cars are floating near East Coast already. I cannot verify, but avoid the area if possible.',
+    verified: false,
+    aiFlag: true,
+    likes: 4,
+    dislikes: 10,
+    reports: 3,
+    replies: [],
+    moderationState: 'under_review',
+    category: 'Weather',
+    topicTag: 'rainfall-risk',
+    crisisTag: 'Elevated Flood Risk',
+    location: 'East Coast',
+    latitude: 1.305,
+    longitude: 103.912,
+  },
+  {
+    id: 'air-quality-west',
+    author: 'Westside Runner',
+    createdAt: minutesAgo(21),
+    content: 'Air smells smoky near the stadium. I stopped my run because my throat felt scratchy after 15 minutes.',
+    verified: false,
+    aiFlag: false,
+    likes: 15,
+    dislikes: 0,
+    reports: 0,
+    replies: [],
+    category: 'Weather',
+    topicTag: 'air-quality',
+    crisisTag: 'Air Quality Advisory',
+    location: 'West',
+    latitude: 1.357,
+    longitude: 103.7,
+  },
+  {
+    id: 'air-quality-north',
+    author: 'Sembawang Parent',
+    createdAt: minutesAgo(38),
+    content: 'My child has asthma and coughed more than usual after recess. We are keeping inhaler nearby and avoiding outdoor play.',
+    verified: false,
+    aiFlag: false,
+    likes: 19,
+    dislikes: 0,
+    reports: 0,
+    replies: [],
+    category: 'Weather',
+    topicTag: 'air-quality',
+    crisisTag: 'Air Quality Advisory',
+    location: 'North',
+    latitude: 1.418,
+    longitude: 103.82,
+  },
+  {
+    id: 'air-quality-central',
+    author: 'Central Clinic Nurse',
+    createdAt: minutesAgo(54),
+    content: 'We have seen a small rise in throat irritation complaints. Most are mild, but sensitive groups should reduce long outdoor exposure.',
+    verified: true,
+    aiFlag: false,
+    likes: 33,
+    dislikes: 0,
+    reports: 0,
+    replies: [],
+    category: 'Weather',
+    topicTag: 'air-quality',
+    crisisTag: 'Air Quality Advisory',
+    location: 'Central',
+    latitude: 1.357,
+    longitude: 103.82,
+  },
+  {
+    id: 'air-quality-east',
+    author: 'East Resident',
+    createdAt: minutesAgo(69),
+    content: 'Visibility looks normal here, but I can smell haze when windows are open. Anyone else in Tampines noticing this?',
+    verified: false,
+    aiFlag: false,
+    likes: 11,
+    dislikes: 2,
+    reports: 0,
+    replies: [],
+    category: 'Weather',
+    topicTag: 'air-quality',
+    crisisTag: 'Air Quality Advisory',
+    location: 'East',
+    latitude: 1.357,
+    longitude: 103.94,
+  },
+  {
+    id: 'air-quality-rumour',
+    author: 'ForwardedMessage',
+    createdAt: minutesAgo(86),
+    content: 'Heard the PSI is secretly over 300 but they are hiding it. Is that true?',
+    verified: false,
+    aiFlag: true,
+    likes: 1,
+    dislikes: 18,
+    reports: 7,
+    replies: [{ id: 'air-quality-rumour-reply', author: 'SiGnal Team', content: 'This is unverified. Please check official PSI readings and avoid spreading unsourced numbers.', createdAt: minutesAgo(80), official: true }],
+    moderationState: 'under_review',
+    category: 'Weather',
+    topicTag: 'air-quality',
+    crisisTag: 'Air Quality Advisory',
+    location: 'South',
+    latitude: 1.296,
+    longitude: 103.82,
+  },
+];
 
 export default function PublicForum() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [posts, setPosts] = useState<ForumPost[]>(() => loadLocalPosts());
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [newPost, setNewPost] = useState('');
   const [postImages, setPostImages] = useState<ForumImage[]>([]);
   const [category, setCategory] = useState('Community');
   const [query, setQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState('All');
-  const [activeTopic, setActiveTopic] = useState('All');
+  const [activeTopic, setActiveTopic] = useState(() => topicFromParam(searchParams.get('topic')));
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [replyText, setReplyText] = useState('');
@@ -142,6 +478,10 @@ export default function PublicForum() {
   const [viewerLocation, setViewerLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const communityUpdatesRef = useRef<HTMLDivElement | null>(null);
   const author = authUser?.username ?? authUser?.displayName ?? authUser?.email ?? 'Citizen';
+
+  useEffect(() => {
+    setActiveTopic(topicFromParam(searchParams.get('topic')));
+  }, [searchParams]);
 
   useEffect(() => {
     fetch(apiUrl('/api/auth/me'), { headers: authHeaders() })
@@ -212,15 +552,14 @@ export default function PublicForum() {
     const normalizedQuery = query.trim().toLowerCase();
 
     return posts.filter((post) => {
-      const categoryMatch = activeCategory === 'All' || post.category === activeCategory;
       const topicMatch = activeTopic === 'All' || post.topicTag === activeTopic;
       const textMatch =
         !normalizedQuery ||
         post.content.toLowerCase().includes(normalizedQuery) ||
         post.author.toLowerCase().includes(normalizedQuery);
-      return categoryMatch && topicMatch && textMatch;
+      return topicMatch && textMatch;
     });
-  }, [activeCategory, activeTopic, posts, query]);
+  }, [activeTopic, posts, query]);
   const topicTags = useMemo(
     () => [...new Set(posts.map((post) => post.topicTag).filter((tag): tag is string => Boolean(tag)))].sort(),
     [posts],
@@ -666,27 +1005,15 @@ export default function PublicForum() {
           </div>
         </div>
 
-        <div className="mb-4 flex flex-wrap gap-2">
-          {categories.map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setActiveCategory(item)}
-              className={`rounded-full px-3 py-1 text-xs transition-colors ${
-                activeCategory === item ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-              }`}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
-
         {topicTags.length > 0 ? (
           <div className="mb-4 flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-3">
             <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">Topics</span>
             <button
               type="button"
-              onClick={() => setActiveTopic('All')}
+              onClick={() => {
+                setActiveTopic('All');
+                setSearchParams({});
+              }}
               className={`rounded-full border px-3 py-1 text-xs transition-colors ${
                 activeTopic === 'All'
                   ? 'border-violet-500 bg-violet-600 text-white'
@@ -699,14 +1026,17 @@ export default function PublicForum() {
               <button
                 key={tag}
                 type="button"
-                onClick={() => setActiveTopic(tag)}
+              onClick={() => {
+                setActiveTopic(tag);
+                setSearchParams(activeSituationTopicIds.has(tag) ? { topic: tag } : {});
+              }}
                 className={`rounded-full border px-3 py-1 text-xs transition-colors ${
                   activeTopic === tag
                     ? 'border-violet-500 bg-violet-600 text-white'
                     : 'border-violet-900/70 bg-violet-950/30 text-violet-300 hover:bg-violet-950/60'
                 }`}
               >
-                #{tag}
+                #{topicLabel(tag)}
               </button>
             ))}
           </div>
@@ -1132,11 +1462,11 @@ class CooldownError extends Error {
 function loadLocalPosts() {
   try {
     const stored = localStorage.getItem(storageKey);
-    if (!stored) return seedPosts;
+    if (!stored) return withWelcomePost([]);
     const parsed = JSON.parse(stored) as ForumPost[];
-    return Array.isArray(parsed) ? withWelcomePost(sanitizeForumPosts(parsed)) : seedPosts;
+    return Array.isArray(parsed) ? withWelcomePost(sanitizeForumPosts(parsed)) : withWelcomePost([]);
   } catch {
-    return seedPosts;
+    return withWelcomePost([]);
   }
 }
 
@@ -1149,8 +1479,10 @@ function sanitizeForumPosts(posts: ForumPost[]) {
 
 function withWelcomePost(posts: ForumPost[]) {
   const existing = posts.find((post) => post.id === welcomePost.id);
+  const postIds = new Set(posts.map((post) => post.id));
   return [
     existing ? { ...welcomePost, ...existing, verified: true, aiFlag: false } : welcomePost,
+    ...activeSituationSeedPosts.filter((post) => !postIds.has(post.id)),
     ...posts.filter((post) => post.id !== welcomePost.id),
   ];
 }
@@ -1251,7 +1583,7 @@ function CrisisTag({ text, compact = false }: { text: string; compact?: boolean 
 function TopicTag({ text }: { text: string }) {
   return (
     <span className="inline-flex rounded-md border border-violet-900/70 bg-violet-950/30 px-1.5 py-0.5 text-[10px] font-medium text-violet-300">
-      #{text}
+      #{topicLabel(text)}
     </span>
   );
 }
@@ -1287,4 +1619,16 @@ function statusClass(tone: 'success' | 'warning' | 'error') {
   if (tone === 'success') return 'border-green-800 bg-green-950/50';
   if (tone === 'warning') return 'border-yellow-800 bg-yellow-950/40';
   return 'border-red-800 bg-red-950/40';
+}
+
+function minutesAgo(minutes: number) {
+  return new Date(Date.now() - minutes * 60_000).toISOString();
+}
+
+function topicFromParam(value: string | null) {
+  return value && activeSituationTopicIds.has(value) ? value : 'All';
+}
+
+function topicLabel(value: string) {
+  return activeSituationTopics.find((topic) => topic.id === value)?.label ?? value;
 }

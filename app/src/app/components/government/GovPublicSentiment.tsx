@@ -70,9 +70,6 @@ type SentimentPayload = {
   summary: { body: string; confidence: number; sources: string };
 };
 
-const categories = ['All', 'Health', 'Weather', 'Infrastructure', 'Supply', 'Community'];
-const moderationFilters = ['All', 'Reported', 'AI Flagged', 'Under Review', 'Hidden', 'Misleading', 'Resolved'];
-
 export default function GovPublicSentiment() {
   const location = useLocation();
   const linkedPostId = new URLSearchParams(location.search).get('post');
@@ -81,8 +78,6 @@ export default function GovPublicSentiment() {
   const [activeTab, setActiveTab] = useState<'overview' | 'forum'>(location.pathname.endsWith('/forum') ? 'forum' : 'overview');
   const [forumPosts, setForumPosts] = useState<ForumPost[]>([]);
   const [query, setQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState('All');
-  const [activeModeration, setActiveModeration] = useState('All');
   const [selectedPostId, setSelectedPostId] = useState<string | null>(linkedPostId);
   const [selectedImageOpen, setSelectedImageOpen] = useState(true);
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
@@ -100,8 +95,6 @@ export default function GovPublicSentiment() {
     if (linkedPostId) {
       setActiveTab('forum');
       setSelectedPostId(linkedPostId);
-      setActiveCategory('All');
-      setActiveModeration('All');
       setQuery('');
     }
   }, [linkedPostId]);
@@ -144,16 +137,16 @@ export default function GovPublicSentiment() {
     const normalizedQuery = query.trim().toLowerCase();
 
     return forumPosts.filter((post) => {
-      const categoryMatch = activeCategory === 'All' || post.category === activeCategory;
       const textMatch =
         !normalizedQuery ||
         post.content.toLowerCase().includes(normalizedQuery) ||
         post.author.toLowerCase().includes(normalizedQuery) ||
-        post.category.toLowerCase().includes(normalizedQuery);
-      const moderationMatch = matchesModerationFilter(post, activeModeration);
-      return categoryMatch && textMatch && moderationMatch;
+        post.category.toLowerCase().includes(normalizedQuery) ||
+        (post.topicTag ?? '').toLowerCase().includes(normalizedQuery) ||
+        (post.crisisTag ?? '').toLowerCase().includes(normalizedQuery);
+      return textMatch;
     });
-  }, [activeCategory, activeModeration, forumPosts, query]);
+  }, [forumPosts, query]);
 
   const selectedPost = filteredPosts.find((post) => post.id === selectedPostId) ?? filteredPosts[0] ?? null;
 
@@ -450,7 +443,7 @@ export default function GovPublicSentiment() {
                   <input
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search posts, authors, or categories"
+                    placeholder="Search community updates..."
                     className="w-full rounded-lg border border-zinc-700 bg-zinc-800 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
                   />
                 </div>
@@ -458,39 +451,13 @@ export default function GovPublicSentiment() {
                 <MiniStat label="Reported" value={String(forumPosts.filter((post) => post.reports > 0).length)} />
                 <MiniStat label="Hidden" value={String(forumPosts.filter((post) => ['hidden', 'misleading'].includes(post.moderationState)).length)} />
               </div>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                {categories.map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => setActiveCategory(item)}
-                    className={`rounded-full px-3 py-1 text-xs transition-colors ${activeCategory === item ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>
-
-              <div className="mt-2 flex flex-wrap gap-2">
-                {moderationFilters.map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => setActiveModeration(item)}
-                    className={`rounded-full px-3 py-1 text-xs transition-colors ${activeModeration === item ? 'bg-zinc-200 text-zinc-950' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>
             </div>
 
             <div className="grid min-h-[620px] lg:h-[min(74vh,760px)] lg:grid-cols-[minmax(360px,0.9fr)_minmax(520px,1.2fr)]">
               <div className="min-h-0 space-y-3 overflow-y-auto border-r border-zinc-800 bg-zinc-950/40 p-3 [scrollbar-color:#3f3f46_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700/70">
                 {filteredPosts.length === 0 && (
                   <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-500">
-                    No forum posts match these filters.
+                    No community posts match this search.
                   </div>
                 )}
                 {filteredPosts.map((post) => (
@@ -978,17 +945,6 @@ function ModerationButton({
       {children}
     </button>
   );
-}
-
-function matchesModerationFilter(post: ForumPost, filter: string) {
-  if (filter === 'All') return true;
-  if (filter === 'Reported') return post.reports > 0;
-  if (filter === 'AI Flagged') return post.aiFlag;
-  if (filter === 'Under Review') return post.moderationState === 'under_review';
-  if (filter === 'Hidden') return post.moderationState === 'hidden';
-  if (filter === 'Misleading') return post.moderationState === 'misleading';
-  if (filter === 'Resolved') return post.moderationState === 'resolved';
-  return true;
 }
 
 function normalizePost(post: ForumPost): ForumPost {

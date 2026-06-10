@@ -18,6 +18,7 @@ import {
 import {
   acceptUrgentVolunteerAlert,
   createUrgentVolunteerAlert,
+  deleteUrgentVolunteerAlert,
   getVolunteerProfile,
   listUrgentVolunteerAlerts,
   listUrgentVolunteerAlertsForVolunteer,
@@ -501,6 +502,19 @@ app.post('/api/gov/volunteers/urgent-alerts', ...requireGovUser, async (request:
       needed,
     });
     response.status(201).json({ item });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete('/api/gov/volunteers/urgent-alerts/:id', ...requireGovUser, async (request, response, next) => {
+  try {
+    const deleted = await deleteUrgentVolunteerAlert(request.params.id);
+    if (!deleted) {
+      response.status(404).json({ error: 'Urgent volunteer alert not found' });
+      return;
+    }
+    response.status(204).send();
   } catch (error) {
     next(error);
   }

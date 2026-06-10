@@ -1,8 +1,8 @@
 // GET /api/citizen/alerts
 // GET /api/heatmap?layer=crises&public=true
-import { AlertTriangle, MapPin, Activity, Shield, Navigation, CloudRain, Wind } from 'lucide-react';
+import { AlertTriangle, MapPin, Activity, Shield, Navigation, CloudRain, Wind, MessageSquare } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import SingaporeRegionMap, { type MapHeatmapLayer, type MapMarker } from '../SingaporeRegionMap';
 import { apiUrl, useApi } from '../../lib/api';
 
@@ -120,7 +120,7 @@ const staticCrisisCards: CrisisCard[] = [
     id: 'covid-watch',
     title: 'Covid-19 Watch',
     type: 'Health',
-    value: '378 cases',
+    value: '7 reports',
     detail: 'Respiratory infection activity is being monitored using the same health feed used by the government dashboard.',
     severity: 'medium',
     region: 'West',
@@ -132,7 +132,7 @@ const staticCrisisCards: CrisisCard[] = [
     id: 'rainfall-risk',
     title: 'Elevated Flood Risk',
     type: 'Weather',
-    value: '45mm peak',
+    value: '6 reports',
     detail: 'Rainfall intensity is elevated in eastern and central areas. Avoid underpasses during heavy showers.',
     severity: 'high',
     region: 'East / Central',
@@ -144,7 +144,7 @@ const staticCrisisCards: CrisisCard[] = [
     id: 'air-quality',
     title: 'Air Quality Advisory',
     type: 'Environment',
-    value: 'PSI 76',
+    value: '5 reports',
     detail: 'Air quality remains acceptable but sensitive groups should monitor symptoms during prolonged outdoor activity.',
     severity: 'low',
     region: 'Nationwide',
@@ -154,13 +154,19 @@ const staticCrisisCards: CrisisCard[] = [
   },
 ];
 const covidCaseMarkers: MapMarker[] = [
-  { id: 'covid-bedok', name: 'Bedok', latitude: 1.324, longitude: 103.93, value: '64 active cases', detail: 'Moderate Covid-19 activity in eastern residential clusters.', severity: 'medium' },
-  { id: 'covid-tampines', name: 'Tampines', latitude: 1.3547, longitude: 103.9436, value: '58 active cases', detail: 'Clinic visits for respiratory symptoms remain elevated.', severity: 'medium' },
-  { id: 'covid-jurong', name: 'Jurong West', latitude: 1.3404, longitude: 103.7058, value: '76 active cases', detail: 'Highest current Covid-19 watch cluster in the public feed.', severity: 'high' },
-  { id: 'covid-woodlands', name: 'Woodlands', latitude: 1.436, longitude: 103.786, value: '49 active cases', detail: 'Northern residential cases under monitoring.', severity: 'medium' },
-  { id: 'covid-bishan', name: 'Bishan', latitude: 1.3508, longitude: 103.8485, value: '42 active cases', detail: 'Central area activity remains moderate.', severity: 'medium' },
-  { id: 'covid-queenstown', name: 'Queenstown', latitude: 1.2942, longitude: 103.7861, value: '29 active cases', detail: 'Lower but visible Covid-19 activity.', severity: 'low' },
-  { id: 'covid-punggol', name: 'Punggol', latitude: 1.3984, longitude: 103.9072, value: '36 active cases', detail: 'Monitoring newer residential clusters.', severity: 'low' },
+  { id: 'covid-bedok', name: 'Bedok', latitude: 1.324, longitude: 103.93, value: '1 active community report', detail: 'Resident reports fever and cough symptoms in an eastern residential cluster.', severity: 'medium' },
+  { id: 'covid-tampines', name: 'Tampines', latitude: 1.3547, longitude: 103.9436, value: '1 active community report', detail: 'Clinic visits for respiratory symptoms remain elevated.', severity: 'medium' },
+  { id: 'covid-jurong', name: 'Jurong West', latitude: 1.3404, longitude: 103.7058, value: '2 active community reports', detail: 'Highest current Covid-19 watch cluster in the public feed.', severity: 'high' },
+  { id: 'covid-woodlands', name: 'Woodlands', latitude: 1.436, longitude: 103.786, value: '1 active community report', detail: 'Northern residential symptoms under monitoring.', severity: 'medium' },
+  { id: 'covid-bishan', name: 'Bishan', latitude: 1.3508, longitude: 103.8485, value: '1 active community report', detail: 'Central area respiratory activity remains moderate.', severity: 'medium' },
+  { id: 'covid-queenstown', name: 'Queenstown', latitude: 1.2942, longitude: 103.7861, value: '1 active community report', detail: 'Lower but visible Covid-19 activity.', severity: 'low' },
+];
+const floodRiskMarkers: MapMarker[] = [
+  { id: 'flood-orchard-report', name: 'Orchard underpass', latitude: 1.3048, longitude: 103.8318, value: '1 active community report', detail: 'Water is pooling quickly near the underpass entrance.', severity: 'high' },
+  { id: 'flood-east-coast-report', name: 'East Coast', latitude: 1.305, longitude: 103.912, value: '2 active community reports', detail: 'Park connector puddles and low point overflow risk reported.', severity: 'high' },
+  { id: 'flood-bedok-report', name: 'Bedok', latitude: 1.324, longitude: 103.93, value: '1 active community report', detail: 'Drain backup reported outside shops.', severity: 'medium' },
+  { id: 'flood-bishan-report', name: 'Bishan', latitude: 1.3508, longitude: 103.8485, value: '1 active community report', detail: 'Rainwater gathering near sheltered walkway.', severity: 'medium' },
+  { id: 'flood-jurong-report', name: 'Jurong West', latitude: 1.3404, longitude: 103.7058, value: '1 active community report', detail: 'Fast-flowing roadside drains after rain eased.', severity: 'low' },
 ];
 const floodRiskLayer: MapHeatmapLayer = {
   label: 'Flood risk severity',
@@ -197,8 +203,16 @@ const psiRiskLayer: MapHeatmapLayer = {
     { id: 'psi-south', name: 'South', latitude: 1.296, longitude: 103.82, value: 52 },
   ],
 };
+const psiRiskMarkers: MapMarker[] = [
+  { id: 'psi-west-report', name: 'West', latitude: 1.357, longitude: 103.7, value: '1 active community report', detail: 'Smoky smell and throat irritation during outdoor exercise.', severity: 'medium' },
+  { id: 'psi-north-report', name: 'North', latitude: 1.418, longitude: 103.82, value: '1 active community report', detail: 'Asthma symptoms reported after outdoor school activity.', severity: 'medium' },
+  { id: 'psi-central-report', name: 'Central', latitude: 1.357, longitude: 103.82, value: '1 active community report', detail: 'Clinic notes mild rise in throat irritation complaints.', severity: 'medium' },
+  { id: 'psi-east-report', name: 'East', latitude: 1.357, longitude: 103.94, value: '1 active community report', detail: 'Residents report haze smell when windows are open.', severity: 'low' },
+  { id: 'psi-south-report', name: 'South', latitude: 1.296, longitude: 103.82, value: '1 active community report', detail: 'Unverified high PSI rumour flagged for review.', severity: 'low' },
+];
 
 export default function PublicHome() {
+  const navigate = useNavigate();
   const { data: publicHome, loading, error } = useApi<PublicHomeData>('/api/citizen/home');
   const { data: citizenAlerts } = useApi<{ items: LiveCitizenAlert[] }>('/api/citizen/alerts');
   const [broadcasts, setBroadcasts] = useState<BroadcastAlert[]>([]);
@@ -242,7 +256,8 @@ export default function PublicHome() {
   const mapMarkers = useMemo<MapMarker[]>(() => {
     if (!selectedCrisisId) return crisisTagMarkers;
     if (selectedCrisisId === 'covid-watch') return covidCaseMarkers;
-    if (selectedHeatmapLayer) return [];
+    if (selectedCrisisId === 'rainfall-risk') return floodRiskMarkers;
+    if (selectedCrisisId === 'air-quality') return psiRiskMarkers;
 
     const crisisMarkers = (selectedCrisis ? [selectedCrisis] : []).map((card) => ({
       id: card.id,
@@ -420,7 +435,7 @@ export default function PublicHome() {
               <SingaporeRegionMap
                 markers={mapMarkers}
                 heatmapLayer={selectedHeatmapLayer}
-                showMarkers={!selectedHeatmapLayer}
+                showMarkers
                 problemLabel={selectedHeatmapLayer ? selectedHeatmapLayer.label.toLowerCase() : selectedCrisisId === 'covid-watch' ? 'Covid-19 case clusters' : selectedCrisisId ? 'active signals' : 'community crisis tags'}
               />
             ) : (
@@ -442,6 +457,18 @@ export default function PublicHome() {
               ? 'Showing citizen forum crisis tags that include a location. Tags without coordinates are hidden from the map.'
               : 'Select an active situation to display its static map layer.'}
           </p>
+          {selectedCrisis ? (
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => navigate(`/public/forum?topic=${selectedCrisis.id}`)}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+              >
+                <MessageSquare className="h-4 w-4" />
+                View related community updates
+              </button>
+            </div>
+          ) : null}
         </section>
       </div>
 

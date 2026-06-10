@@ -3,6 +3,7 @@ import { ArrowDownUp, CheckCircle, Funnel, Globe, MapPin, MessageSquare, Plus, R
 import { apiUrl, fetchWithAuth } from '../../lib/api';
 import { authHeaders } from '../../lib/auth';
 import { singaporeAreaGroups } from '../../lib/singaporeLocations';
+import { clearStaleVolunteerNeeds, saveCustomVolunteerOpportunities, volunteerNeedsStorageKey, type UrgentVolunteerAlert, type VolunteerOpportunity } from '../../lib/volunteerFlow';
 
 type Broadcast = {
   id: string;
@@ -44,13 +45,24 @@ type BroadcastDraft = {
   agencies?: string[];
 };
 
+const demoFloodBroadcastDraft: Required<Pick<BroadcastDraft, 'title' | 'message' | 'severity' | 'regions' | 'agencies'>> = {
+  title: 'Flash Flood Advisory - Boon Lay / Jurong West',
+  message: 'PUB has verified flash flooding around Boon Lay Way, Jurong West Ave 2, and nearby low-lying roads. Residents in the West should avoid flooded roads, stay away from underpasses and low-lying areas, follow LTA diversion updates, and check on elderly or vulnerable family members. Do not walk or drive through moving water.',
+  severity: 'high',
+  regions: ['Boon Lay', 'Jurong West'],
+  agencies: ['PUB'],
+};
+
+const demoVolunteerNeedTitle = 'Islandwide Flood Recovery Support';
+const demoUrgentVolunteerTitle = 'Urgent Support Needed - Boon Lay Flood Response';
+
 export default function GovBroadcast() {
-  const [message, setMessage] = useState('');
-  const [title, setTitle] = useState('');
-  const [severity, setSeverity] = useState<Broadcast['severity']>('medium');
-  const [sendToAgencies, setSendToAgencies] = useState(false);
-  const [regions, setRegions] = useState<string[]>([]);
-  const [selectedAgencies, setSelectedAgencies] = useState<string[]>([]);
+  const [message, setMessage] = useState(demoFloodBroadcastDraft.message);
+  const [title, setTitle] = useState(demoFloodBroadcastDraft.title);
+  const [severity, setSeverity] = useState<Broadcast['severity']>(demoFloodBroadcastDraft.severity);
+  const [sendToAgencies, setSendToAgencies] = useState(true);
+  const [regions, setRegions] = useState<string[]>(demoFloodBroadcastDraft.regions);
+  const [selectedAgencies, setSelectedAgencies] = useState<string[]>(demoFloodBroadcastDraft.agencies);
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [selectedResolvedIds, setSelectedResolvedIds] = useState<string[]>([]);
   const [selectedBroadcastId, setSelectedBroadcastId] = useState<string | null>(null);
@@ -133,6 +145,15 @@ export default function GovBroadcast() {
   const toggleAgency = (agency: string) => setSelectedAgencies((prev) => prev.includes(agency) ? prev.filter((item) => item !== agency) : [...prev, agency]);
   const toggleResolvedSelection = (id: string) => setSelectedResolvedIds((prev) => prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]);
   const audienceSelected = true;
+
+  const resetDemoDraft = () => {
+    setTitle(demoFloodBroadcastDraft.title);
+    setMessage(demoFloodBroadcastDraft.message);
+    setSeverity(demoFloodBroadcastDraft.severity);
+    setRegions(demoFloodBroadcastDraft.regions);
+    setSelectedAgencies(demoFloodBroadcastDraft.agencies);
+    setSendToAgencies(true);
+  };
 
   const handleResolve = async (id: string) => {
     try {
@@ -230,15 +251,30 @@ export default function GovBroadcast() {
       setBroadcasts((prev) => [createdItem, ...prev]);
       setSelectedBroadcastId(createdItem.id);
       setBroadcastSuccess(true);
-      setTitle('');
-      setMessage('');
-      setRegions([]);
-      setSelectedAgencies([]);
-      setSendToAgencies(false);
+      resetDemoDraft();
       setComposerOpen(false);
       setTimeout(() => setBroadcastSuccess(false), 3000);
     } catch {
       setNotice('Could not create broadcast in backend.');
+    }
+  };
+
+  const handleResetDemo = async () => {
+    const demoBroadcasts = broadcasts.filter((item) => (
+      item.title === demoFloodBroadcastDraft.title ||
+      (item.message === demoFloodBroadcastDraft.message && item.senderAgencyCode === 'PUB') ||
+      (item.title.toLowerCase().includes('boon lay') && item.title.toLowerCase().includes('jurong west'))
+    ));
+
+    try {
+      await Promise.all(demoBroadcasts.map((item) => handleDeleteBroadcast(item.id)));
+      clearDemoVolunteerNeeds();
+      await clearDemoUrgentVolunteerAlerts();
+      resetDemoDraft();
+      setSelectedResolvedIds([]);
+      setNotice('Demo broadcast and volunteer submissions cleared. Draft has been reset.');
+    } catch {
+      setNotice('Could not fully reset demo records.');
     }
   };
 
@@ -315,6 +351,14 @@ export default function GovBroadcast() {
           >
             {composerOpen ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
             {composerOpen ? 'Close' : 'Compose'}
+          </button>
+          <button
+            type="button"
+            onClick={handleResetDemo}
+            className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-zinc-800"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Reset Demo
           </button>
         </div>
       </div>
@@ -576,6 +620,42 @@ export default function GovBroadcast() {
       )}
     </div>
   );
+}
+
+function clearDemoVolunteerNeeds() {
+  if (typeof window === 'undefined') return;
+  clearStaleVolunteerNeeds();
+  const raw = window.localStorage.getItem(volunteerNeedsStorageKey);
+  if (!raw) return;
+
+  try {
+    const needs = JSON.parse(raw) as VolunteerOpportunity[];
+    const filteredNeeds = needs.filter((need) => (
+      need.title !== demoVolunteerNeedTitle &&
+      !(need.title.toLowerCase().includes('flood') && need.location.toLowerCase().includes('west'))
+    ));
+    saveCustomVolunteerOpportunities(filteredNeeds);
+  } catch {
+    window.localStorage.removeItem(volunteerNeedsStorageKey);
+  }
+}
+
+async function clearDemoUrgentVolunteerAlerts() {
+  const response = await fetch(apiUrl('/api/gov/volunteers/urgent-alerts'), { headers: authHeaders() });
+  if (!response.ok) return;
+
+  const data = await response.json() as { items: UrgentVolunteerAlert[] };
+  const demoAlerts = data.items.filter((alert) => (
+    alert.title === demoUrgentVolunteerTitle ||
+    (alert.title.toLowerCase().includes('boon lay') && alert.location.toLowerCase().includes('jurong west'))
+  ));
+
+  await Promise.all(demoAlerts.map((alert) => (
+    fetch(apiUrl(`/api/gov/volunteers/urgent-alerts/${alert.id}`), {
+      method: 'DELETE',
+      headers: authHeaders(),
+    })
+  )));
 }
 
 function Notice({ color, text }: { color: 'green' | 'red'; text: string }) {

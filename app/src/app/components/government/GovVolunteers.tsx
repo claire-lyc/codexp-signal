@@ -4,7 +4,7 @@
 // PATCH /api/volunteers/applications/{id}/verify
 // POST /api/volunteers/assignments
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Building2, ChevronDown, Clock, Lock, MapPin, Plus, ShieldCheck, UserCheck, Users, X } from 'lucide-react';
+import { AlertCircle, Building2, ChevronDown, Clock, Lock, MapPin, Plus, RotateCcw, ShieldCheck, UserCheck, Users, X } from 'lucide-react';
 import { API_REFRESH_INTERVAL_MS, apiUrl } from '../../lib/api';
 import { authHeaders } from '../../lib/auth';
 import {
@@ -70,19 +70,35 @@ type CreateMode = 'need' | 'urgent';
 const agencies = ['All agencies', 'LTA', 'MOH', 'PUB', 'SCDF', 'SPF', 'NEA', 'Enterprise SG', 'MSF'];
 
 const emptyNeedForm: NeedForm = {
-  title: 'Traffic Diversion Support',
-  location: 'Bugis',
-  region: 'Central',
+  title: 'Islandwide Flood Recovery Support',
+  location: 'Islandwide / West staging points',
+  region: 'Islandwide',
   urgency: 'medium',
-  shift: 'Today, 16:00-20:00',
-  reportingPoint: 'Bugis MRT Exit B command point',
-  description: 'Support ground officers with wayfinding, queue control, and public updates around disrupted transport routes.',
+  shift: 'Tomorrow, 09:00-17:00',
+  reportingPoint: 'Jurong West Community Club volunteer desk',
+  description: 'Volunteers are needed for non-urgent flood recovery support after the Boon Lay / Jurong West flooding. Tasks include first-aid support, multilingual assistance, logistics coordination, welfare pack sorting, shelter support, and post-flood cleanup once areas are declared safe.',
   roles: [
     {
       id: 'draft-role-1',
-      title: 'Crowd guide',
+      title: 'First-aid and welfare support',
+      needed: 6,
+      skills: ['First Aid', 'Community Outreach'],
+      isSpecial: true,
+      specialRequirements: 'Basic first-aid certification preferred.',
+    },
+    {
+      id: 'draft-role-2',
+      title: 'Multilingual resident support',
       needed: 8,
-      skills: ['Community Outreach'],
+      skills: ['Translation', 'Community Outreach'],
+      isSpecial: false,
+      specialRequirements: '',
+    },
+    {
+      id: 'draft-role-3',
+      title: 'Logistics and cleanup crew',
+      needed: 12,
+      skills: ['Logistics', 'Heavy Lifting'],
       isSpecial: false,
       specialRequirements: '',
     },
@@ -90,14 +106,17 @@ const emptyNeedForm: NeedForm = {
 };
 
 const emptyUrgentAlertForm: UrgentAlertForm = {
-  title: 'Immediate nearby support needed',
-  message: 'Need nearby registered volunteers to report immediately for urgent ground support.',
-  location: 'Bugis Community Support Point',
-  targetAddress: '230 Victoria Street, Singapore 188024',
-  region: 'Islandwide',
-  radiusKm: 5,
-  needed: 6,
+  title: 'Urgent Support Needed - Boon Lay Flood Response',
+  message: 'PUB is requesting nearby registered volunteers around Boon Lay and Jurong West for immediate low-risk support. Tasks include distributing bottled water, guiding residents away from flooded paths, queue control near shelters, and helping direct residents to safe waiting areas. Do not enter floodwater or perform rescue tasks.',
+  location: 'Boon Lay / Jurong West',
+  targetAddress: 'Boon Lay Way, Singapore 609966',
+  region: 'West',
+  radiusKm: 3,
+  needed: 10,
 };
+
+const demoNeedTitles = new Set([emptyNeedForm.title]);
+const demoUrgentAlertTitles = new Set([emptyUrgentAlertForm.title]);
 
 const urgentAlertRadiusOptions = [1, 3, 5, 8, 10];
 
@@ -463,7 +482,7 @@ export default function GovVolunteers() {
   };
 
   const addNeed = () => {
-    const agency = currentAgency === 'All agencies' ? 'LTA' : currentAgency;
+    const agency = currentAgency === 'All agencies' ? 'PUB' : currentAgency;
     const createdAt = Date.now();
     const roleSlots: VolunteerRoleSlot[] = needForm.roles.map((role, index) => ({
       id: `role-${createdAt}-${index}`,
@@ -502,6 +521,33 @@ export default function GovVolunteers() {
     pushActivity(`${agency} added ${newNeed.title}`);
   };
 
+  const resetDemoVolunteerFlow = async () => {
+    const nextCustomNeeds = customNeeds.filter((need) => (
+      !demoNeedTitles.has(need.title) &&
+      !(need.title.toLowerCase().includes('flood') && need.location.toLowerCase().includes('west'))
+    ));
+    const demoUrgentAlerts = urgentAlerts.filter((alert) => (
+      demoUrgentAlertTitles.has(alert.title) ||
+      (alert.title.toLowerCase().includes('boon lay') && alert.location.toLowerCase().includes('jurong west'))
+    ));
+
+    setCustomNeeds(nextCustomNeeds);
+    saveCustomVolunteerOpportunities(nextCustomNeeds);
+    window.dispatchEvent(new Event('signal-volunteer-needs-updated'));
+
+    await Promise.all(demoUrgentAlerts.map((alert) => (
+      fetch(apiUrl(`/api/gov/volunteers/urgent-alerts/${alert.id}`), {
+        method: 'DELETE',
+        headers: authHeaders(),
+      }).catch(() => null)
+    )));
+    setUrgentAlerts((current) => current.filter((alert) => !demoUrgentAlerts.some((demo) => demo.id === alert.id)));
+    setNeedForm(emptyNeedForm);
+    setUrgentAlertForm(emptyUrgentAlertForm);
+    setExpandedId(nextCustomNeeds[0]?.id ?? null);
+    pushActivity('Demo volunteer submissions cleared');
+  };
+
   const sendUrgentAlert = () => {
     const agency = currentAgency === 'All agencies' ? 'Government' : currentAgency;
     fetch(apiUrl('/api/gov/volunteers/urgent-alerts'), {
@@ -534,6 +580,10 @@ export default function GovVolunteers() {
   };
 
   const openCreatePanel = (mode: CreateMode = 'need') => {
+    if ((mode === 'need' && showNeedForm) || (mode === 'urgent' && showUrgentAlertForm)) {
+      closeCreatePanel();
+      return;
+    }
     setCreateMode(mode);
     setCreateMenuOpen(false);
     if (mode === 'urgent') {
@@ -629,6 +679,14 @@ export default function GovVolunteers() {
               </div>
             )}
           </div>
+          <button
+            type="button"
+            onClick={resetDemoVolunteerFlow}
+            className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-800"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Reset Demo
+          </button>
           <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-400">
             <label className="mb-1 block text-xs text-zinc-500">Agency filter</label>
             <select value={currentAgency} onChange={(event) => setCurrentAgency(event.target.value)} className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-zinc-100">
@@ -800,7 +858,7 @@ export default function GovVolunteers() {
           <div className="grid gap-4 p-5 lg:grid-cols-2">
             <Field label="Need title" value={needForm.title} onChange={(value) => setNeedForm({ ...needForm, title: value })} />
             <Field label="Location" value={needForm.location} onChange={(value) => setNeedForm({ ...needForm, location: value })} />
-            <SelectField label="Region" value={needForm.region} values={['Central', 'North', 'South', 'East', 'West']} onChange={(value) => setNeedForm({ ...needForm, region: value })} />
+            <SelectField label="Region" value={needForm.region} values={['Islandwide', 'Central', 'North', 'South', 'East', 'West']} onChange={(value) => setNeedForm({ ...needForm, region: value })} />
             <SelectField label="Urgency" value={needForm.urgency} values={['high', 'medium', 'low']} onChange={(value) => setNeedForm({ ...needForm, urgency: value as NeedForm['urgency'] })} />
             <Field label="Shift" value={needForm.shift} onChange={(value) => setNeedForm({ ...needForm, shift: value })} />
             <Field label="Reporting point" value={needForm.reportingPoint} onChange={(value) => setNeedForm({ ...needForm, reportingPoint: value })} />

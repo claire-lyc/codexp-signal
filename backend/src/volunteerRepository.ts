@@ -211,6 +211,19 @@ export async function listUrgentVolunteerAlerts() {
   return hydrateUrgentAlerts(rows, null);
 }
 
+export async function deleteUrgentVolunteerAlert(alertId: string) {
+  await ensureVolunteerSchema();
+  const rows = await query<{ id: string }>(
+    `
+      DELETE FROM citizen.volunteer_urgent_alerts
+      WHERE id = $1
+      RETURNING id
+    `,
+    [alertId],
+  );
+  return Boolean(rows[0]);
+}
+
 export async function listUrgentVolunteerAlertsForVolunteer(userId: string) {
   await ensureVolunteerSchema();
   const item = await getVolunteerProfile(userId);
