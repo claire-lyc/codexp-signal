@@ -113,53 +113,7 @@ const welcomePost: ForumPost = {
   category: 'Community',
 };
 
-const seedPosts: ForumPost[] = [
-  welcomePost,
-  {
-    id: 'forum-1',
-    author: 'Sarah T.',
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    content:
-      'Does anyone know if Tampines community center is distributing N95 masks today? Need some for my elderly parents.',
-    verified: false,
-    aiFlag: false,
-    likes: 12,
-    dislikes: 0,
-    replies: [
-      {
-        id: 'reply-1',
-        author: 'Community Volunteer',
-        content: 'Tampines West CC posted that collection starts from 2 PM. Bring NRIC for each household member.',
-        createdAt: new Date(Date.now() - 80 * 60 * 1000).toISOString(),
-      },
-    ],
-    category: 'Health',
-  },
-  {
-    id: 'forum-3',
-    author: 'John L.',
-    createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-    content: 'Flood waters receding in East Coast area. Roads are passable now but still be careful.',
-    verified: false,
-    aiFlag: false,
-    likes: 8,
-    dislikes: 0,
-    replies: [],
-    category: 'Weather',
-  },
-  {
-    id: 'forum-4',
-    author: 'Anonymous User',
-    createdAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-    content: 'BREAKING: All hospitals running out of beds and turning away patients!!!',
-    verified: false,
-    aiFlag: true,
-    likes: 0,
-    dislikes: 0,
-    replies: [],
-    category: 'Health',
-  },
-];
+const seedPosts: ForumPost[] = [welcomePost];
 
 export default function PublicForum() {
   const [posts, setPosts] = useState<ForumPost[]>(() => loadLocalPosts());
@@ -616,7 +570,7 @@ export default function PublicForum() {
                   className="mt-1 h-4 w-4 accent-blue-600"
                 />
                 <span>
-                  <span className="block text-sm font-medium text-zinc-200">Also send this as a government report</span>
+                  <span className="block text-sm font-medium text-zinc-200">Link this to currently relevant government tag</span>
                   <span className="block text-xs text-zinc-500">You must be signed in. The forum post and ticket will be linked.</span>
                 </span>
               </label>
@@ -1187,8 +1141,9 @@ function loadLocalPosts() {
 }
 
 function sanitizeForumPosts(posts: ForumPost[]) {
+  const removedSeedPostIds = new Set(['forum-1', 'forum-3', 'forum-4']);
   return posts
-    .filter((post) => post.author !== 'MOH Official')
+    .filter((post) => post.author !== 'MOH Official' && !removedSeedPostIds.has(post.id))
     .map((post) => ({ ...post, dislikes: post.dislikes ?? 0, images: post.images ?? [] }));
 }
 

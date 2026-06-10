@@ -182,6 +182,14 @@ npm run db:seed:tickets
 
 This clears `citizen.reports` and reloads `backend/data/ticket-seed.json`.
 
+Clear active alerts while keeping resolved/historical records:
+
+```bash
+npm run db:clear:active-alerts
+```
+
+This removes active dashboard alerts, ongoing/draft broadcasts, and active volunteer urgent alerts. Resolved broadcasts and historical alert records are kept.
+
 Apply old SQL seed files:
 
 ```bash

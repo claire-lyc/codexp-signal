@@ -13,6 +13,7 @@ import {
   readVolunteerOpportunities,
   readVolunteerProfile,
   saveCustomVolunteerOpportunities,
+  clearStaleVolunteerNeeds,
   saveVolunteerProfile,
   scoreVolunteerBreakdown,
   scoreVolunteerForOpportunity,
@@ -997,6 +998,7 @@ export default function GovVolunteers() {
 
 function readCustomNeeds() {
   if (typeof window === 'undefined') return [];
+  clearStaleVolunteerNeeds();
   const raw = window.localStorage.getItem(volunteerNeedsStorageKey);
   if (!raw) return [];
   try {

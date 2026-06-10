@@ -43,22 +43,6 @@ const severitySpark: Record<string, string> = {
   low: '#38bdf8',
 };
 
-const fallbackCrisisCards: CrisisCard[] = [
-  { id: 'covid', label: 'Covid-19', type: 'Health', severity: 'medium', path: '/gov/pandemic?disease=covid', stats: [{ label: 'MOH cluster archive', value: 'Apr 2020', delta: '' }, { label: 'Current status', value: 'Archive', delta: '' }], icon: 'Activity' },
-  { id: 'dengue', label: 'Dengue', type: 'Health', severity: 'high', path: '/gov/pandemic?disease=dengue', stats: [{ label: 'Red zone clusters', value: '14', delta: '+3' }, { label: 'Cases this week', value: '212', delta: '+8%' }], icon: 'Activity' },
-  { id: 'flood', label: 'Flash Flood Risk', type: 'Weather', severity: 'high', path: '/gov/weather', stats: [{ label: 'High-risk zones', value: '6', delta: '' }, { label: 'Peak rainfall (1h)', value: '45mm', delta: 'Alert' }], icon: 'Cloud' },
-  { id: 'panadol', label: 'Panadol Shortage', type: 'Supply Chain', severity: 'medium', path: '/gov/supply-chain', stats: [{ label: 'Affected outlets', value: '87', delta: '' }, { label: 'Est. restock', value: '4 days', delta: '' }], icon: 'Package' },
-  { id: 'cyber', label: 'Cyber Incident', type: 'Cybersecurity', severity: 'low', path: '/gov/cybersecurity', stats: [{ label: 'Active threats', value: '3', delta: '-1' }], icon: 'Shield' },
-];
-const fallbackAlerts: AlertItem[] = [
-  { id: 1, type: 'Weather', severity: 'high', message: 'Flash flood risk in Orchard & East Coast', region: 'East/Central', time: '10:23 AM' },
-  { id: 2, type: 'Health', severity: 'high', message: 'New dengue red zone: Bedok North Ave 1', region: 'East', time: '09:45 AM' },
-  { id: 3, type: 'Supply', severity: 'medium', message: 'Panadol Menstrual out-of-stock at 87 outlets', region: 'Nationwide', time: '08:30 AM' },
-  { id: 4, type: 'Infrastructure', severity: 'medium', message: 'Power grid fluctuation in Woodlands', region: 'North', time: '07:15 AM' },
-  { id: 5, type: 'Health', severity: 'medium', message: 'New Covid-19 cluster at Jurong West MRT', region: 'West', time: '06:50 AM' },
-];
-const trendData: Array<{ date: string; incidents: number }> = [];
-
 const filterTypes = ['All', 'Broadcast', 'Health', 'Weather', 'Supply', 'Infrastructure', 'Cybersecurity'];
 const filterSeverities = ['All', 'Critical', 'High', 'Medium', 'Low'];
 const filterRegions = ['All', 'North', 'South', 'East', 'West', 'Central', 'Nationwide'];
@@ -73,10 +57,8 @@ export default function GovOverview() {
   const mapSectionRef = useRef<HTMLDivElement | null>(null);
   const filtersRef = useRef<HTMLDivElement | null>(null);
   const alertsListRef = useRef<HTMLDivElement | null>(null);
-  const apiCrisisCards = data?.overview?.crisisCards ?? [];
-  const crisisCards: CrisisCard[] = apiCrisisCards.length > 0 ? apiCrisisCards : fallbackCrisisCards;
-  const apiAlerts = data?.alerts ?? [];
-  const alerts = apiAlerts.length > 0 ? apiAlerts : fallbackAlerts;
+  const crisisCards: CrisisCard[] = data?.overview?.crisisCards ?? [];
+  const alerts = data?.alerts ?? [];
   const trendData = data?.overview?.incidentTrend ?? [];
   const riskSummary = data?.overview?.riskSummary;
   const hasIncidentProblem = trendData.some((point) => Number(point.incidents) > 0);

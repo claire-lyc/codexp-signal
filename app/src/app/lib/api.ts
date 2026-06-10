@@ -14,15 +14,6 @@ type ApiState<T> = {
 
 const fallbackResponses: Record<string, unknown> = {
   '/api/dashboard/cached-external': cachedExternalDashboard,
-  '/api/gov/overview': {
-    crises: [],
-    alerts: dashboardUiData.govAlerts,
-    overview: {
-      crisisCards: dashboardUiData.crisisCards,
-      incidentTrend: dashboardUiData.incidentTrend,
-      riskSummary: dashboardUiData.riskSummary,
-    },
-  },
   '/api/gov/cybersecurity': dashboardUiData.cybersecurity,
   '/api/citizen/home': dashboardUiData.publicHome,
   '/api/public/home': dashboardUiData.publicHome,
