@@ -72,6 +72,25 @@ const navSections = [
   },
 ];
 
+const governmentNotifications = [
+  {
+    id: 'agency-ping-tkt-0040',
+    to: '/gov/form-handling?ticket=TKT-0040',
+    icon: Ticket,
+    title: 'Agency ping',
+    text: 'PUB was pinged on flood report TKT-0040',
+  },
+  {
+    id: 'active-broadcast-flash-flood',
+    to: '/gov/broadcast',
+    icon: Radio,
+    title: 'Active broadcast',
+    text: 'Flash flood warning remains ongoing',
+  },
+];
+
+const readNotificationsStorageKey = 'signal.gov.read-notifications.v1';
+
 export default function GovLayout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -79,6 +98,14 @@ export default function GovLayout() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileUser, setProfileUser] = useState<ProfileUser | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
+    try {
+      const stored = window.localStorage.getItem(readNotificationsStorageKey);
+      return stored ? JSON.parse(stored) as string[] : [];
+    } catch {
+      return [];
+    }
+  });
   const notificationsRef = useRef<HTMLDivElement | null>(null);
   const profileRef = useRef<HTMLDivElement | null>(null);
   const profileModalRef = useRef<HTMLDivElement | null>(null);
@@ -121,6 +148,21 @@ export default function GovLayout() {
   const profileSubtext = profileUser?.agencyCode ?? profileUser?.role ?? 'Government account';
   const profileEmail = profileUser?.email ?? 'Not provided';
   const profileAgency = profileUser?.agencyCode ?? 'All Agencies';
+  const hasUnreadNotifications = governmentNotifications.some((notification) => !readNotificationIds.includes(notification.id));
+
+  const markNotificationRead = (id: string) => {
+    setReadNotificationIds((current) => {
+      if (current.includes(id)) return current;
+      const next = [...current, id];
+      try {
+        window.localStorage.setItem(readNotificationsStorageKey, JSON.stringify(next));
+      } catch {
+        // The in-memory read state still works when browser storage is unavailable.
+      }
+      return next;
+    });
+    setNotificationsOpen(false);
+  };
 
   const logout = () => {
     clearAuthTokens();
@@ -239,12 +281,18 @@ export default function GovLayout() {
               <div ref={notificationsRef} className="relative">
                 <button onClick={() => setNotificationsOpen((open) => !open)} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors relative">
                   <Bell className="w-5 h-5 text-zinc-400" />
-                  <div className="absolute top-1 right-1 w-2 h-2 bg-red-600 rounded-full"></div>
+                  {hasUnreadNotifications ? <div className="absolute top-1 right-1 w-2 h-2 bg-red-600 rounded-full" /> : null}
                 </button>
                 {notificationsOpen && (
                   <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-lg border border-zinc-800 bg-zinc-900 p-2 shadow-2xl">
-                    <NotificationLink to="/gov/form-handling?ticket=TKT-0040" icon={Ticket} title="Agency ping" text="PUB was pinged on flood report TKT-0040" onClick={() => setNotificationsOpen(false)} />
-                    <NotificationLink to="/gov/broadcast" icon={Radio} title="Active broadcast" text="Flash flood warning remains ongoing" onClick={() => setNotificationsOpen(false)} />
+                    {governmentNotifications.map((notification) => (
+                      <NotificationLink
+                        key={notification.id}
+                        {...notification}
+                        read={readNotificationIds.includes(notification.id)}
+                        onClick={() => markNotificationRead(notification.id)}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
@@ -338,10 +386,28 @@ function ProfileSettingRow({ label, value, muted = false }: { label: string; val
   );
 }
 
-function NotificationLink({ to, icon: Icon, title, text, onClick }: { to: string; icon: LucideIcon; title: string; text: string; onClick: () => void }) {
+function NotificationLink({
+  to,
+  icon: Icon,
+  title,
+  text,
+  read,
+  onClick,
+}: {
+  to: string;
+  icon: LucideIcon;
+  title: string;
+  text: string;
+  read: boolean;
+  onClick: () => void;
+}) {
   return (
-    <Link to={to} onClick={onClick} className="flex items-start gap-3 rounded-lg px-3 py-2 text-left hover:bg-zinc-800">
-      <Icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-400" />
+    <Link
+      to={to}
+      onClick={onClick}
+      className={`flex items-start gap-3 rounded-lg px-3 py-2 text-left hover:bg-zinc-800 ${read ? 'opacity-60' : ''}`}
+    >
+      <Icon className={`mt-0.5 h-4 w-4 flex-shrink-0 ${read ? 'text-zinc-500' : 'text-blue-400'}`} />
       <span>
         <span className="block text-sm font-medium text-zinc-100">{title}</span>
         <span className="block text-xs text-zinc-500">{text}</span>

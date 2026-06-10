@@ -15,6 +15,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { fetchWithAuth } from '../../lib/api';
+import PublicCrisisAssistant from './PublicCrisisAssistant';
 
 const navItems = [
   { path: '/public', label: 'Home', icon: Home },
@@ -209,6 +210,8 @@ export default function PublicLayout() {
           </div>
         </div>
       </footer>
+
+      <PublicCrisisAssistant />
     </div>
   );
 }
