@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 export type ForumReply = {
   id: string;
   author: string;
@@ -122,7 +124,7 @@ export function createForumPost(input: {
   }
   const moderationState = input.moderationState ?? (input.verified ? 'verified' : input.aiFlag ? 'under_review' : 'live');
   const post: ForumPost = {
-    id: crypto.randomUUID(),
+    id: randomUUID(),
     author,
     content,
     createdAt: new Date().toISOString(),
@@ -137,7 +139,7 @@ export function createForumPost(input: {
       .filter((image) => image.previewUrl)
       .slice(0, 3)
       .map((image) => ({
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         filename: image.filename ?? null,
         mimeType: image.mimeType ?? null,
         previewUrl: image.previewUrl as string,
@@ -199,7 +201,7 @@ export function createForumReply(id: string, input: { author?: string; content: 
     throw new ForumAuthorBannedError(author);
   }
   const reply: ForumReply = {
-    id: crypto.randomUUID(),
+    id: randomUUID(),
     author,
     content: input.content.trim(),
     createdAt: new Date().toISOString(),
@@ -224,7 +226,7 @@ export function moderateForumPost(
     post.moderationState = 'verified';
     if (input.note?.trim()) {
       post.replies.push({
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         author: moderator,
         content: input.note.trim(),
         createdAt: new Date().toISOString(),
@@ -240,7 +242,7 @@ export function moderateForumPost(
     post.moderationState = 'resolved';
     if (input.note?.trim()) {
       post.replies.push({
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         author: moderator,
         content: input.note.trim(),
         createdAt: new Date().toISOString(),
@@ -255,7 +257,7 @@ export function moderateForumPost(
     post.moderationState = input.action === 'misleading' ? 'misleading' : 'hidden';
     if (input.note?.trim()) {
       post.replies.push({
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         author: moderator,
         content: input.note.trim(),
         createdAt: new Date().toISOString(),
@@ -269,7 +271,7 @@ export function moderateForumPost(
   post.moderationState = 'under_review';
   if (input.note?.trim()) {
     post.replies.push({
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       author: moderator,
       content: input.note.trim(),
       createdAt: new Date().toISOString(),
@@ -289,7 +291,7 @@ export function banForumAuthor(id: string, input: { moderator?: string; note?: s
       item.moderationState = 'hidden';
       if (input.note?.trim()) {
         item.replies.push({
-          id: crypto.randomUUID(),
+          id: randomUUID(),
           author: input.moderator?.trim() || 'Government Moderator',
           content: input.note.trim(),
           createdAt: new Date().toISOString(),
