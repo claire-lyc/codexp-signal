@@ -1,11 +1,12 @@
 import { Activity, AlertTriangle, Database, MapPin, TrendingUp } from 'lucide-react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import SingaporeRegionMap, { type MapMarker } from '../SingaporeRegionMap';
 import { useApi } from '../../lib/api';
 
 type CrisisId = 'covid' | 'dengue' | 'hantavirus';
-type Severity = 'high' | 'medium' | 'low';
+type Severity = 'critical' | 'high' | 'medium' | 'low';
 
 type CrisisOption = {
   id: CrisisId;
@@ -37,47 +38,63 @@ type SimulatedCrisis = {
 };
 
 const crisisOptions: CrisisOption[] = [
-  { id: 'covid', label: 'Covid-19', severity: 'medium', color: 'text-orange-400', badge: 'bg-orange-900 text-orange-400', border: 'border-orange-700' },
+  { id: 'covid', label: 'Covid-19', severity: 'critical', color: 'text-red-400', badge: 'bg-red-950 text-red-200 ring-1 ring-red-500/60', border: 'border-red-700' },
   { id: 'dengue', label: 'Dengue', severity: 'high', color: 'text-red-400', badge: 'bg-red-900 text-red-400', border: 'border-red-700' },
   { id: 'hantavirus', label: 'Hantavirus', severity: 'low', color: 'text-blue-400', badge: 'bg-blue-900 text-blue-400', border: 'border-blue-700' },
 ];
 
 const simulatedCrisisData: Record<Exclude<CrisisId, 'dengue'>, SimulatedCrisis> = {
   covid: {
-    description: 'Covid-19 archive - Historical cluster locations published by MOH in April 2020. These are not current active clusters.',
+    description: 'Covid-19 critical outbreak - Simulated full-scale national surge. Community transmission is widespread, hospitals are under severe pressure, and response teams are operating islandwide.',
     stats: [
-      { label: 'Archived clusters mapped', value: '5', icon: 'red' },
-      { label: 'Largest listed cluster', value: '306', icon: 'orange' },
-      { label: 'Archive period', value: 'Apr 2020', icon: 'green' },
-      { label: 'Current-status use', value: 'No', icon: 'yellow' },
+      { label: 'Active cases today', value: '24,860', delta: '+6,420', icon: 'red' },
+      { label: 'Hospital strain', value: '96%', delta: 'ICU surge', icon: 'orange' },
+      { label: 'Active clusters mapped', value: '18', delta: 'Islandwide', icon: 'red' },
+      { label: 'Operational status', value: 'Critical', delta: 'Escalated', icon: 'yellow' },
     ],
     clusters: [
-      { name: 'S11 Dormitory @ Punggol', cases: 306, severity: 'high', latitude: 1.4127, longitude: 103.9103, detail: 'MOH cluster total reported on 10 April 2020' },
-      { name: 'Westlite Toh Guan Dormitory', cases: 69, severity: 'high', latitude: 1.3277, longitude: 103.7467, detail: 'MOH cluster total reported on 10 April 2020' },
-      { name: 'Mustafa Centre', cases: 57, severity: 'medium', latitude: 1.3098, longitude: 103.8551, detail: 'MOH cluster total reported on 9 April 2020' },
-      { name: 'Toh Guan Dormitory', cases: 25, severity: 'medium', latitude: 1.3285, longitude: 103.7461, detail: 'MOH cluster total reported on 9 April 2020' },
-      { name: 'NUH renovation site', cases: 14, severity: 'low', latitude: 1.2942, longitude: 103.7832, detail: 'New MOH cluster reported on 10 April 2020' },
+      { name: 'Woodlands regional cluster', cases: 2840, severity: 'critical', latitude: 1.436, longitude: 103.786, detail: 'Critical community spread with multiple linked residential and transport exposures' },
+      { name: 'Yishun healthcare cluster', cases: 2180, severity: 'critical', latitude: 1.429, longitude: 103.835, detail: 'Hospital and clinic load at surge threshold; urgent staffing support required' },
+      { name: 'Sengkang-Punggol family cluster', cases: 2460, severity: 'critical', latitude: 1.397, longitude: 103.895, detail: 'Fast-growing household transmission across several neighbourhoods' },
+      { name: 'Tampines east cluster', cases: 1920, severity: 'critical', latitude: 1.353, longitude: 103.945, detail: 'Large workplace and school exposure chain under active containment' },
+      { name: 'Bedok community cluster', cases: 1740, severity: 'high', latitude: 1.324, longitude: 103.93, detail: 'High test positivity and rising fever-clinic visits' },
+      { name: 'Toa Payoh-Novena medical cluster', cases: 2380, severity: 'critical', latitude: 1.329, longitude: 103.847, detail: 'Medical capacity is strained by high admissions and staff infections' },
+      { name: 'Orchard-Downtown cluster', cases: 2210, severity: 'critical', latitude: 1.304, longitude: 103.832, detail: 'Dense commercial exposure zone with sustained transmission' },
+      { name: 'Jurong West industrial cluster', cases: 2630, severity: 'critical', latitude: 1.34, longitude: 103.706, detail: 'Dormitory and industrial-site spread requiring mass testing' },
+      { name: 'Bukit Batok residential cluster', cases: 1370, severity: 'high', latitude: 1.35, longitude: 103.75, detail: 'Multiple residential blocks reporting simultaneous outbreaks' },
+      { name: 'Clementi education cluster', cases: 1180, severity: 'high', latitude: 1.315, longitude: 103.765, detail: 'School and campus-linked exposure under emergency tracing' },
+      { name: 'Queenstown cluster', cases: 1450, severity: 'high', latitude: 1.294, longitude: 103.806, detail: 'Rising admissions from surrounding estates' },
+      { name: 'Serangoon-Hougang cluster', cases: 1670, severity: 'high', latitude: 1.371, longitude: 103.886, detail: 'Sustained community spread across markets and transit nodes' },
+      { name: 'Ang Mo Kio cluster', cases: 1590, severity: 'high', latitude: 1.37, longitude: 103.849, detail: 'High-risk senior population and multiple care-site exposures' },
+      { name: 'Bukit Merah cluster', cases: 1510, severity: 'high', latitude: 1.281, longitude: 103.823, detail: 'Dense residential spread with high positivity rate' },
+      { name: 'Pasir Ris cluster', cases: 1210, severity: 'high', latitude: 1.372, longitude: 103.949, detail: 'Eastern transmission chain expanding through schools and workplaces' },
+      { name: 'Choa Chu Kang cluster', cases: 1160, severity: 'high', latitude: 1.385, longitude: 103.744, detail: 'Western residential cluster with rapid week-on-week increase' },
+      { name: 'Marine Parade cluster', cases: 980, severity: 'high', latitude: 1.302, longitude: 103.906, detail: 'Coastal neighbourhood cluster with rising clinic attendance' },
+      { name: 'Changi workplace cluster', cases: 1320, severity: 'high', latitude: 1.364, longitude: 103.991, detail: 'Large workplace exposure chain affecting essential operations' },
     ],
     trendData: [
-      { date: 'Apr 6', cases: 66, icu: 0 },
-      { date: 'Apr 8', cases: 142, icu: 0 },
-      { date: 'Apr 9', cases: 287, icu: 0 },
-      { date: 'Apr 10', cases: 198, icu: 0 },
+      { date: 'Jun 1', cases: 4820, icu: 61 },
+      { date: 'Jun 2', cases: 7280, icu: 88 },
+      { date: 'Jun 3', cases: 10340, icu: 126 },
+      { date: 'Jun 4', cases: 14880, icu: 184 },
+      { date: 'Jun 5', cases: 19320, icu: 246 },
+      { date: 'Jun 6', cases: 22410, icu: 301 },
+      { date: 'Jun 7', cases: 24860, icu: 358 },
     ],
     ppeStock: [
-      { item: 'N95 Masks', stock: 78, status: 'good' },
-      { item: 'Surgical Masks', stock: 92, status: 'good' },
-      { item: 'Gloves', stock: 65, status: 'medium' },
-      { item: 'Gowns', stock: 45, status: 'low' },
-      { item: 'Face Shields', stock: 88, status: 'good' },
+      { item: 'N95 Masks', stock: 21, status: 'low' },
+      { item: 'Surgical Masks', stock: 34, status: 'low' },
+      { item: 'Gloves', stock: 28, status: 'low' },
+      { item: 'Gowns', stock: 18, status: 'low' },
+      { item: 'Face Shields', stock: 25, status: 'low' },
     ],
-    projection: 'Archived cluster geography is provided for historical comparison only. It must not be used to infer present-day COVID-19 transmission or operational risk.',
-    confidence: 'Official archive',
-    dataSources: 'MOH press releases',
-    mapNote: 'Historical cluster totals published by MOH on 9-10 April 2020. Locations are mapped from the addresses named in those releases.',
+    projection: 'Emergency modelling shows uncontrolled community transmission without immediate surge measures. Expect hospital saturation, severe staffing shortages, and continued islandwide spread over the next 72 hours.',
+    confidence: 'Critical scenario',
+    dataSources: 'Static crisis exercise data',
+    mapNote: 'Simulated Covid-19 crisis layer: high-volume outbreak markers are distributed across Singapore to represent a fully escalated islandwide event.',
     source: {
-      label: 'MOH: 198 new cases and cluster links, 10 April 2020',
-      url: 'https://www.moh.gov.sg/newsroom/32-more-cases-discharged-198-new-cases-of-covid-19-infection-confirmed/',
+      label: 'Static exercise scenario',
+      url: '#',
     },
   },
   hantavirus: {
@@ -114,6 +131,7 @@ const simulatedCrisisData: Record<Exclude<CrisisId, 'dengue'>, SimulatedCrisis> 
 };
 
 const severityColors: Record<Severity, string> = {
+  critical: 'bg-red-950/40 border-red-600',
   high: 'bg-red-950/30 border-red-800',
   medium: 'bg-yellow-950/30 border-yellow-800',
   low: 'bg-blue-950/30 border-blue-800',
@@ -134,19 +152,22 @@ function severity(cases: number): MapMarker['severity'] {
 
 function descriptionClasses(crisisId: CrisisId) {
   if (crisisId === 'dengue') return 'bg-red-950/20 border-red-800 text-red-300';
-  if (crisisId === 'covid') return 'bg-yellow-950/20 border-yellow-800 text-yellow-300';
+  if (crisisId === 'covid') return 'bg-red-950/25 border-red-700 text-red-200';
   return 'bg-blue-950/20 border-blue-800 text-blue-300';
 }
 
 function SimulatedDiseaseDashboard({ crisisId }: { crisisId: Exclude<CrisisId, 'dengue'> }) {
   const crisis = crisisOptions.find((item) => item.id === crisisId)!;
   const data = simulatedCrisisData[crisisId];
+  const [showAllClusters, setShowAllClusters] = useState(false);
+  const visibleClusters = showAllClusters ? data.clusters : data.clusters.slice(0, 5);
+  const hiddenClusterCount = data.clusters.length - visibleClusters.length;
   const markers: MapMarker[] = data.clusters.map((cluster, index) => ({
     id: `${crisisId}-${index}`,
     name: cluster.name,
     latitude: cluster.latitude,
     longitude: cluster.longitude,
-    value: `${cluster.cases} ${crisisId === 'covid' ? 'archived cases' : 'scenario signals'}`,
+    value: `${cluster.cases} ${crisisId === 'covid' ? 'active cases' : 'scenario signals'}`,
     detail: cluster.detail,
     severity: cluster.severity,
   }));
@@ -161,7 +182,7 @@ function SimulatedDiseaseDashboard({ crisisId }: { crisisId: Exclude<CrisisId, '
       <div className="flex items-start gap-3 rounded-xl border border-blue-900/60 bg-blue-950/20 p-4 text-sm">
         <Database className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" />
         <div>
-          <div className="font-medium text-blue-300">{crisisId === 'covid' ? 'Archived government data' : 'Scenario map'}</div>
+          <div className="font-medium text-blue-300">{crisisId === 'covid' ? 'Critical scenario data' : 'Scenario map'}</div>
           <p className="mt-1 text-zinc-400">{data.mapNote}</p>
           {data.source ? (
             <a className="mt-2 inline-block text-xs text-blue-400 hover:text-blue-300" href={data.source.url} target="_blank" rel="noreferrer">
@@ -236,7 +257,7 @@ function SimulatedDiseaseDashboard({ crisisId }: { crisisId: Exclude<CrisisId, '
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
           <h2 className="mb-4 text-lg font-semibold">{crisisId === 'covid' ? 'Archived Clusters' : 'Monitoring Zones'}</h2>
           <div className="space-y-3">
-            {data.clusters.map((cluster) => (
+            {visibleClusters.map((cluster) => (
               <div key={cluster.name} className={`rounded-lg border p-4 ${severityColors[cluster.severity]}`}>
                 <div className="mb-1 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -245,9 +266,18 @@ function SimulatedDiseaseDashboard({ crisisId }: { crisisId: Exclude<CrisisId, '
                   </div>
                   <span className="text-xl font-bold">{cluster.cases}</span>
                 </div>
-                <div className="text-xs text-zinc-400">{crisisId === 'covid' ? 'Cases in archived MOH cluster total' : 'Scenario signals in monitoring zone'}</div>
+                <div className="text-xs text-zinc-400">{crisisId === 'covid' ? 'Active cases in cluster' : 'Scenario signals in monitoring zone'}</div>
               </div>
             ))}
+            {data.clusters.length > 5 ? (
+              <button
+                type="button"
+                onClick={() => setShowAllClusters((current) => !current)}
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950/40 px-3 py-2 text-sm font-medium text-zinc-300 transition-colors hover:border-zinc-500 hover:bg-zinc-800 hover:text-white"
+              >
+                {showAllClusters ? 'Show less' : `See more (${hiddenClusterCount} more)`}
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
