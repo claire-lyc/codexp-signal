@@ -7,6 +7,7 @@ import {
   MessageSquare,
   Plus,
   Reply,
+  RotateCcw,
   Search,
   Send,
   Shield,
@@ -96,6 +97,16 @@ const reportIssues: Record<string, string[]> = {
   infrastructure: ['Power outage', 'Water supply disruption', 'Building or road damage', 'Telecommunications outage'],
   transport: ['Train disruption', 'Bus disruption', 'Traffic incident', 'Road obstruction'],
   other: ['Community safety issue', 'Public facility issue', 'Noise or nuisance', 'Other issue'],
+};
+
+const demoForumPostDraft = {
+  content:
+    'Boon Lay Way near Jurong West Ave 2 is flooding again after the heavy rain. Water is covering part of the pedestrian crossing and traffic is slowing down. Residents should avoid the low-lying stretch and check on elderly neighbours who may need help getting around.',
+  category: 'Weather',
+  location: 'Boon Lay Way near Jurong West Ave 2',
+  topicTag: 'rainfall-risk',
+  reportType: 'environment',
+  specificIssue: 'Flash flood',
 };
 
 const welcomePost: ForumPost = {
@@ -456,9 +467,9 @@ export default function PublicForum() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [posts, setPosts] = useState<ForumPost[]>(() => loadLocalPosts());
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [newPost, setNewPost] = useState('');
+  const [newPost, setNewPost] = useState(demoForumPostDraft.content);
   const [postImages, setPostImages] = useState<ForumImage[]>([]);
-  const [category, setCategory] = useState('Community');
+  const [category, setCategory] = useState(demoForumPostDraft.category);
   const [query, setQuery] = useState('');
   const [activeTopic, setActiveTopic] = useState(() => topicFromParam(searchParams.get('topic')));
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
@@ -472,10 +483,10 @@ export default function PublicForum() {
   const [dislikedPostIds, setDislikedPostIds] = useState<Set<string>>(() => loadDislikedPostIds());
   const [selectedImageOpen, setSelectedImageOpen] = useState(true);
   const [now, setNow] = useState(Date.now());
-  const [location, setLocation] = useState('');
+  const [location, setLocation] = useState(demoForumPostDraft.location);
   const [postAsReport, setPostAsReport] = useState(false);
-  const [reportType, setReportType] = useState('other');
-  const [specificIssue, setSpecificIssue] = useState('Other issue');
+  const [reportType, setReportType] = useState(demoForumPostDraft.reportType);
+  const [specificIssue, setSpecificIssue] = useState(demoForumPostDraft.specificIssue);
   const [viewerLocation, setViewerLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const communityUpdatesRef = useRef<HTMLDivElement | null>(null);
   const author = authUser?.username ?? authUser?.displayName ?? authUser?.email ?? 'Citizen';
@@ -611,6 +622,21 @@ export default function PublicForum() {
     setPostImages(images);
   };
 
+  const resetDemoForumDraft = () => {
+    setNewPost(demoForumPostDraft.content);
+    setCategory(demoForumPostDraft.category);
+    setLocation(demoForumPostDraft.location);
+    setPostImages([]);
+    setPostAsReport(false);
+    setReportType(demoForumPostDraft.reportType);
+    setSpecificIssue(demoForumPostDraft.specificIssue);
+    setActiveTopic(demoForumPostDraft.topicTag);
+    setSearchParams({ topic: demoForumPostDraft.topicTag });
+    localStorage.removeItem(cooldownStorageKey);
+    setPostCooldownUntil(0);
+    setStatus(null);
+  };
+
   const handleSubmitPost = async () => {
     if (posting) return;
     if (postCooldownSeconds > 0) {
@@ -650,6 +676,8 @@ export default function PublicForum() {
       }>('/api/forum/posts', {
         content,
         category,
+        topicTag: activeTopic === 'All' ? demoForumPostDraft.topicTag : activeTopic,
+        forceNew: true,
         images: postImages,
         location,
         latitude: viewerLocation?.latitude ?? null,
@@ -662,15 +690,11 @@ export default function PublicForum() {
       setExpandedPostId(data.item.id);
       setPostImages([]);
       setComposerOpen(false);
-      setLocation('');
-      setReportType('other');
-      setSpecificIssue('Other issue');
+      resetDemoForumDraft();
       setUsingBackend(true);
       setStatus({
-        tone: data.item.aiFlag || data.merged ? 'warning' : 'success',
-        message: data.merged
-          ? `This was very similar to a recent post, so it was added beneath the original and automatically upvoted it.${data.linkedReportId ? ` Government report ${data.linkedReportId} was also created.` : ''}`
-          : data.item.aiFlag
+        tone: data.item.aiFlag ? 'warning' : 'success',
+        message: data.item.aiFlag
           ? 'Post submitted, but it was flagged for moderator review.'
           : `Post published to the community forum.${data.linkedReportId ? ` Government report ${data.linkedReportId} was also created.` : ''}`,
       });
@@ -700,6 +724,7 @@ export default function PublicForum() {
       setExpandedPostId(optimisticPost.id);
       setPostImages([]);
       setComposerOpen(false);
+      resetDemoForumDraft();
       setStatus({
         tone: optimisticPost.aiFlag ? 'warning' : 'success',
         message: optimisticPost.aiFlag
@@ -832,11 +857,22 @@ export default function PublicForum() {
           <button
             type="button"
             data-tour="compose-post"
-            onClick={() => setComposerOpen((open) => !open)}
+            onClick={() => {
+              if (!composerOpen) resetDemoForumDraft();
+              setComposerOpen((open) => !open);
+            }}
             className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-700"
           >
             <Plus className="h-4 w-4" />
             {composerOpen ? 'Close Compose' : 'Compose Post'}
+          </button>
+          <button
+            type="button"
+            onClick={resetDemoForumDraft}
+            className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-zinc-800"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Reset Demo
           </button>
         </div>
       </div>

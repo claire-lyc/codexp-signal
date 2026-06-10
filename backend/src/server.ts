@@ -247,7 +247,7 @@ app.post('/api/forum/posts', authenticateJwt as express.RequestHandler, async (r
         return;
       }
     }
-    const result = createOrMergeForumPost({
+    const forumPostInput = {
       author,
       content,
       category: stringBody(request.body?.category),
@@ -257,12 +257,14 @@ app.post('/api/forum/posts', authenticateJwt as express.RequestHandler, async (r
       longitude,
       sourceReportId: linkedTicket?.id ?? null,
       crisisTag: linkedTicket ? forumCrisisTag(linkedTicket) : null,
+      topicTag: stringBody(request.body?.topicTag),
       images: parseImageMetadata(request.body?.images).map((image) => ({
         filename: image.originalFilename,
         mimeType: image.mimeType,
         previewUrl: image.previewUrl,
       })),
-    });
+    };
+    const result = { post: createForumPost(forumPostInput), merged: false, similarityScore: 0 };
     forumPostCooldowns.set(cooldownKey, Date.now() + forumPostCooldownMs);
     response.status(201).json({
       item: result.post,
@@ -745,6 +747,25 @@ app.get('/api/citizen/reports/:publicReportId', authenticateJwt as express.Reque
       updatedAt: ticket.comments.at(-1)?.createdAt ?? new Date().toISOString(),
       item: redactInternalTicket(ticket),
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete('/api/citizen/reports/:publicReportId', authenticateJwt as express.RequestHandler, async (request, response, next) => {
+  try {
+    const ticket = await getTicketByPublicId(request.params.publicReportId);
+    if (!ticket) {
+      response.status(404).json({ error: 'Report not found' });
+      return;
+    }
+
+    const deleted = await deleteTicket(request.params.publicReportId);
+    if (!deleted) {
+      response.status(404).json({ error: 'Report not found' });
+      return;
+    }
+    response.status(204).send();
   } catch (error) {
     next(error);
   }

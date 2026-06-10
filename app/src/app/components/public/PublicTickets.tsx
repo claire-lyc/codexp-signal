@@ -9,6 +9,7 @@ import {
   MessageCircle,
   Phone,
   Plus,
+  RotateCcw,
   Search,
   Send,
   Shield,
@@ -109,6 +110,16 @@ const specificCrises: Record<string, string[]> = {
   other: ['Community safety issue', 'Public facility issue', 'Noise or nuisance', 'Other issue'],
 };
 
+const demoFloodReportDraft = {
+  reportType: 'environment',
+  specificCrisis: 'Flash flood',
+  description:
+    'Water is rising quickly along Boon Lay Way near Jurong West Ave 2 after heavy rain. The road shoulder and pedestrian crossing are flooded, vehicles are slowing down, and elderly residents may need help avoiding the low-lying area.',
+  location: 'Boon Lay Way near Jurong West Ave 2, Singapore',
+  latitude: 1.3404,
+  longitude: 103.7058,
+};
+
 export default function PublicTickets() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -117,12 +128,12 @@ export default function PublicTickets() {
   const [loginError, setLoginError] = useState('');
   const [loginBusy, setLoginBusy] = useState(false);
 
-  const [reportType, setReportType] = useState('');
-  const [specificCrisis, setSpecificCrisis] = useState('');
-  const [description, setDescription] = useState('');
-  const [location, setLocation] = useState('');
-  const [latitude, setLatitude] = useState<number | null>(null);
-  const [longitude, setLongitude] = useState<number | null>(null);
+  const [reportType, setReportType] = useState(demoFloodReportDraft.reportType);
+  const [specificCrisis, setSpecificCrisis] = useState(demoFloodReportDraft.specificCrisis);
+  const [description, setDescription] = useState(demoFloodReportDraft.description);
+  const [location, setLocation] = useState(demoFloodReportDraft.location);
+  const [latitude, setLatitude] = useState<number | null>(demoFloodReportDraft.latitude);
+  const [longitude, setLongitude] = useState<number | null>(demoFloodReportDraft.longitude);
   const [files, setFiles] = useState<File[]>([]);
   const [createdTicket, setCreatedTicket] = useState<CreatedTicket | null>(null);
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
@@ -298,6 +309,54 @@ export default function PublicTickets() {
     setFieldErrors((current) => ({ ...current, image: undefined }));
   };
 
+  const resetDemoReportDraft = () => {
+    setReportType(demoFloodReportDraft.reportType);
+    setSpecificCrisis(demoFloodReportDraft.specificCrisis);
+    setDescription(demoFloodReportDraft.description);
+    setLocation(demoFloodReportDraft.location);
+    setLatitude(demoFloodReportDraft.latitude);
+    setLongitude(demoFloodReportDraft.longitude);
+    setFiles([]);
+    setPostToForum(true);
+    setFieldErrors({});
+    setSubmitState('idle');
+    setSubmitMessage('');
+  };
+
+  const deleteDemoReport = async () => {
+    resetDemoReportDraft();
+    const demoTicket = tickets.find((ticket) => (
+      ticket.message.trim() === demoFloodReportDraft.description ||
+      (
+        ticket.location.toLowerCase().includes('boon lay') &&
+        ticket.location.toLowerCase().includes('jurong west') &&
+        ticket.crisisType.toLowerCase().includes('environment')
+      )
+    ));
+
+    if (!demoTicket) {
+      setSubmitState('success');
+      setSubmitMessage('Demo draft reset. No matching demo report was found.');
+      return;
+    }
+
+    try {
+      const response = await fetch(apiUrl(`/api/citizen/reports/${demoTicket.id}`), {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
+      if (!response.ok) throw new Error('Delete failed');
+      setTickets((current) => current.filter((ticket) => ticket.id !== demoTicket.id));
+      setSelectedTicket((current) => current?.id === demoTicket.id ? null : current);
+      setCreatedTicket((current) => current?.id === demoTicket.id || current?.publicReportId === demoTicket.id ? null : current);
+      setSubmitState('success');
+      setSubmitMessage(`Deleted demo report ${demoTicket.id}.`);
+    } catch {
+      setSubmitState('error');
+      setSubmitMessage(`Could not delete demo report ${demoTicket.id}.`);
+    }
+  };
+
   const validate = () => {
     const nextErrors: FieldErrors = {};
     if (!authUser) nextErrors.auth = 'Sign in before submitting a report.';
@@ -350,12 +409,7 @@ export default function PublicTickets() {
         setTickets((current) => [item, ...current.filter((ticket) => ticket.id !== item.id)]);
         setSelectedTicket(item);
       }
-      setDescription('');
-      setSpecificCrisis('');
-      setLocation('');
-      setLatitude(null);
-      setLongitude(null);
-      setFiles([]);
+      resetDemoReportDraft();
       setFieldErrors({});
       setSubmitState('success');
       const forumMessage = postToForum
@@ -475,15 +529,28 @@ export default function PublicTickets() {
             <h1 className="text-3xl font-bold">Report an Issue</h1>
             <p className="text-zinc-400">Send non-emergency reports and receive follow-up updates from the relevant agency</p>
           </div>
-          <button
-            type="button"
-            data-tour="submit-report"
-            onClick={() => setReportComposerOpen(true)}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-700"
-          >
-            <Plus className="h-4 w-4" />
-            Submit a Report
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              data-tour="submit-report"
+              onClick={() => {
+                resetDemoReportDraft();
+                setReportComposerOpen(true);
+              }}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium transition-colors hover:bg-blue-700"
+            >
+              <Plus className="h-4 w-4" />
+              Submit a Report
+            </button>
+            <button
+              type="button"
+              onClick={() => void deleteDemoReport()}
+              className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-zinc-800"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Reset Demo
+            </button>
+          </div>
         </div>
         <EmergencyBanner />
         <ReportGuidanceCard />
