@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS citizen.report_subject_tags (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   label TEXT NOT NULL UNIQUE,
   description TEXT,
+  verified_at TIMESTAMPTZ,
+  verified_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   created_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()

@@ -28,6 +28,7 @@ export type ReportSubjectTag = {
   label: string;
   description: string | null;
   categories: string[];
+  verifiedAt: string | null;
 };
 
 export type Ticket = {
@@ -77,6 +78,7 @@ type ReportRow = {
   subject_tag_id: string | null;
   subject_tag_label: string | null;
   subject_tag_description: string | null;
+  subject_tag_verified_at: string | null;
   started_work_at: string | null;
   started_work_by_name: string | null;
   current_handler_name: string | null;
@@ -131,8 +133,21 @@ type SubjectTagRow = {
   id: string;
   label: string;
   description: string | null;
+  verified_at: string | null;
   categories: string[];
 };
+
+let subjectTagVerificationColumnReady = false;
+
+async function ensureSubjectTagVerificationColumns() {
+  if (subjectTagVerificationColumnReady) return;
+  await query(`
+    ALTER TABLE citizen.report_subject_tags
+      ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS verified_by_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL
+  `);
+  subjectTagVerificationColumnReady = true;
+}
 
 export async function listTickets(filters: {
   agency?: string;
@@ -140,6 +155,7 @@ export async function listTickets(filters: {
   crisisType?: string;
   query?: string;
 } = {}) {
+  await ensureSubjectTagVerificationColumns();
   await auditExistingReportModeration();
   await backfillMissingSubjectTags();
 
@@ -205,6 +221,7 @@ export async function listTickets(filters: {
         subject_tags.id AS subject_tag_id,
         subject_tags.label AS subject_tag_label,
         subject_tags.description AS subject_tag_description,
+        subject_tags.verified_at AS subject_tag_verified_at,
         reports.started_work_at,
         started_by.display_name AS started_work_by_name,
         current_handler.display_name AS current_handler_name,
@@ -234,6 +251,7 @@ export async function listTickets(filters: {
 }
 
 export async function getTicketByPublicId(publicReportId: string) {
+  await ensureSubjectTagVerificationColumns();
   const reports = await query<ReportRow>(
     `
       SELECT
@@ -257,6 +275,7 @@ export async function getTicketByPublicId(publicReportId: string) {
         subject_tags.id AS subject_tag_id,
         subject_tags.label AS subject_tag_label,
         subject_tags.description AS subject_tag_description,
+        subject_tags.verified_at AS subject_tag_verified_at,
         reports.started_work_at,
         started_by.display_name AS started_work_by_name,
         current_handler.display_name AS current_handler_name,
@@ -280,6 +299,7 @@ export async function getTicketByPublicId(publicReportId: string) {
 }
 
 export async function listTicketsForReporter(userId: string, options: { visibleFeed?: boolean } = {}) {
+  await ensureSubjectTagVerificationColumns();
   if (options.visibleFeed) {
     const allTickets = await listTickets();
     return allTickets.filter((ticket) => ticket.status !== 'spam' && moderateCitizenReport({
@@ -316,6 +336,7 @@ export async function listTicketsForReporter(userId: string, options: { visibleF
         subject_tags.id AS subject_tag_id,
         subject_tags.label AS subject_tag_label,
         subject_tags.description AS subject_tag_description,
+        subject_tags.verified_at AS subject_tag_verified_at,
         reports.started_work_at,
         started_by.display_name AS started_work_by_name,
         current_handler.display_name AS current_handler_name,
@@ -508,6 +529,7 @@ export async function updateTicketStatus(id: string, status: TicketStatus) {
 }
 
 export async function listReportSubjectTags(options: { activeOnly?: boolean } = {}) {
+  await ensureSubjectTagVerificationColumns();
   const activeWhere = options.activeOnly
     ? `
       WHERE EXISTS (
@@ -525,11 +547,12 @@ export async function listReportSubjectTags(options: { activeOnly?: boolean } = 
         tags.id,
         tags.label,
         tags.description,
+        tags.verified_at,
         COALESCE(array_agg(categories.category ORDER BY categories.category) FILTER (WHERE categories.category IS NOT NULL), ARRAY[]::text[]) AS categories
       FROM citizen.report_subject_tags tags
       LEFT JOIN citizen.report_subject_tag_categories categories ON categories.subject_tag_id = tags.id
       ${activeWhere}
-      GROUP BY tags.id, tags.label, tags.description
+      GROUP BY tags.id, tags.label, tags.description, tags.verified_at
       ORDER BY tags.label ASC
     `,
   );
@@ -538,6 +561,7 @@ export async function listReportSubjectTags(options: { activeOnly?: boolean } = 
     label: row.label,
     description: row.description,
     categories: row.categories ?? [],
+    verifiedAt: row.verified_at,
   }));
 }
 
@@ -602,6 +626,36 @@ export async function renameReportSubjectTag(id: string, label: string) {
     [id, nextLabel],
   );
   if (!result[0]) return null;
+
+  const tags = await listReportSubjectTags();
+  return tags.find((tag) => tag.id === id) ?? null;
+}
+
+export async function verifyReportSubjectTag(id: string, userId?: string | null) {
+  await ensureSubjectTagVerificationColumns();
+  const result = await query<{ id: string }>(
+    `
+      UPDATE citizen.report_subject_tags
+      SET verified_at = COALESCE(verified_at, now()),
+          verified_by_user_id = COALESCE(verified_by_user_id, $2),
+          updated_at = now()
+      WHERE id = $1
+      RETURNING id
+    `,
+    [id, userId ?? null],
+  );
+  if (!result[0]) return null;
+
+  await query(
+    `
+      INSERT INTO citizen.report_comments (report_id, author_user_id, author_type, visibility, body)
+      SELECT reports.id, $2, 'government_user', 'internal', 'Crisis verified by PUB after cross-checking citizen reports and operational sources.'
+      FROM citizen.reports reports
+      WHERE reports.subject_tag_id = $1
+        AND reports.status NOT IN ('resolved'::citizen.report_status, 'rejected'::citizen.report_status)
+    `,
+    [id, userId ?? null],
+  );
 
   const tags = await listReportSubjectTags();
   return tags.find((tag) => tag.id === id) ?? null;
@@ -1016,6 +1070,7 @@ async function hydrateTickets(reports: ReportRow[], options: { includeImages?: b
             id: report.subject_tag_id,
             label: report.subject_tag_label ?? 'Subject',
             description: report.subject_tag_description,
+            verifiedAt: report.subject_tag_verified_at,
             categories: subjectCategories
               .filter((category) => category.subject_tag_id === report.subject_tag_id)
               .map((category) => category.category),

@@ -22,6 +22,13 @@ type StoredUrgentVolunteerAlert = {
   updated_at: string;
 };
 
+type StoredVolunteerOpportunity = {
+  id: number;
+  opportunity: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
 type StoredUrgentVolunteerResponse = {
   alert_id: string;
   volunteer_user_id: string;
@@ -105,6 +112,14 @@ async function ensureVolunteerSchema() {
             volunteer_skills TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
             accepted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             PRIMARY KEY (alert_id, volunteer_user_id)
+          )
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS citizen.volunteer_opportunities (
+            id BIGINT PRIMARY KEY,
+            opportunity JSONB NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
           )
         `);
       } finally {
@@ -195,6 +210,37 @@ export async function createUrgentVolunteerAlert(input: {
     [randomUUID(), input.title, input.message, input.location, input.targetAddress, input.region, Math.max(1, input.radiusKm), input.agency, Math.max(1, input.needed)],
   );
   return hydrateUrgentAlerts(rows, null).then((alerts) => alerts[0] ?? null);
+}
+
+export async function listVolunteerOpportunities() {
+  await ensureVolunteerSchema();
+  const rows = await query<StoredVolunteerOpportunity>(
+    `
+      SELECT id, opportunity, created_at, updated_at
+      FROM citizen.volunteer_opportunities
+      ORDER BY created_at DESC
+    `,
+  );
+  return rows.map((row) => ({ ...row.opportunity, id: Number(row.id) }));
+}
+
+export async function upsertVolunteerOpportunity(opportunity: Record<string, unknown>) {
+  await ensureVolunteerSchema();
+  const id = typeof opportunity.id === 'number' && Number.isFinite(opportunity.id)
+    ? Math.trunc(opportunity.id)
+    : Date.now();
+  const item = { ...opportunity, id };
+  const rows = await query<StoredVolunteerOpportunity>(
+    `
+      INSERT INTO citizen.volunteer_opportunities (id, opportunity, created_at, updated_at)
+      VALUES ($1, $2::jsonb, now(), now())
+      ON CONFLICT (id)
+      DO UPDATE SET opportunity = EXCLUDED.opportunity, updated_at = now()
+      RETURNING id, opportunity, created_at, updated_at
+    `,
+    [id, JSON.stringify(item)],
+  );
+  return rows[0] ? { ...rows[0].opportunity, id: Number(rows[0].id) } : item;
 }
 
 export async function listUrgentVolunteerAlerts() {

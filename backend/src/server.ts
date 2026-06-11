@@ -14,7 +14,9 @@ import {
   listForumPosts,
   moderateForumPost,
   reportForumPost,
+  verifyForumPostsByTopicTag,
 } from './forumRepository.js';
+import { clearExistingBoonLayFloodDemo, countBoonLayFloodReports, seedBoonLayFloodInflux } from './boonLayFloodDemo.js';
 import {
   acceptUrgentVolunteerAlert,
   createUrgentVolunteerAlert,
@@ -22,8 +24,10 @@ import {
   getVolunteerProfile,
   listUrgentVolunteerAlerts,
   listUrgentVolunteerAlertsForVolunteer,
+  listVolunteerOpportunities,
   listVolunteerProfiles,
   patchVolunteerProfile,
+  upsertVolunteerOpportunity,
   upsertVolunteerProfile,
 } from './volunteerRepository.js';
 import {
@@ -41,6 +45,7 @@ import {
   startTicketWork,
   TicketChatClosedError,
   updateTicketStatus,
+  verifyReportSubjectTag,
   type Ticket,
   type TicketStatus,
 } from './ticketRepository.js';
@@ -172,6 +177,36 @@ app.get('/api/forum/posts', (request, response) => {
   });
 });
 
+app.get('/api/demo/boon-lay-flood', authenticateJwt as express.RequestHandler, async (_request, response, next) => {
+  try {
+    response.json({ reports: await countBoonLayFloodReports() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/demo/boon-lay-flood/influx', authenticateJwt as express.RequestHandler, async (request, response, next) => {
+  try {
+    const result = await seedBoonLayFloodInflux({ reset: request.body?.reset !== false });
+    response.status(201).json({
+      accepted: true,
+      reportIds: result.createdReports.map((ticket) => ticket.id),
+      forumPostIds: result.forumPostIds,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/demo/boon-lay-flood/clear', authenticateJwt as express.RequestHandler, async (_request, response, next) => {
+  try {
+    await clearExistingBoonLayFloodDemo();
+    response.json({ accepted: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get('/api/forum/posts/by-report/:reportId', ...requireGovUser, (request, response) => {
   const post = findForumPostByReportId(request.params.reportId);
   if (!post) {
@@ -242,7 +277,12 @@ app.post('/api/forum/posts', authenticateJwt as express.RequestHandler, async (r
       longitude,
       sourceReportId: linkedTicket?.id ?? null,
       crisisTag: linkedTicket ? forumCrisisTag(linkedTicket) : null,
-      topicTag: stringBody(request.body?.topicTag),
+      topicTag: forumTopicTag({
+        content,
+        location,
+        linkedTicket,
+        requestedTopicTag: stringBody(request.body?.topicTag),
+      }),
       images: parseImageMetadata(request.body?.images).map((image) => ({
         filename: image.originalFilename,
         mimeType: image.mimeType,
@@ -398,6 +438,14 @@ app.get('/api/volunteers/urgent-alerts', authenticateJwt as express.RequestHandl
   }
 });
 
+app.get('/api/volunteers/opportunities', authenticateJwt as express.RequestHandler, async (_request, response, next) => {
+  try {
+    response.json({ items: await listVolunteerOpportunities() });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post('/api/volunteers/urgent-alerts/:id/accept', authenticateJwt as express.RequestHandler, async (request: AuthenticatedRequest, response, next) => {
   try {
     if (!request.user?.id) {
@@ -509,6 +557,28 @@ app.post('/api/gov/volunteers/urgent-alerts', ...requireGovUser, async (request:
   }
 });
 
+app.get('/api/gov/volunteers/opportunities', ...requireGovUser, async (_request, response, next) => {
+  try {
+    response.json({ items: await listVolunteerOpportunities() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/gov/volunteers/opportunities', ...requireGovUser, async (request, response, next) => {
+  try {
+    const body = asObject(request.body);
+    if (!stringBody(body.title) || !stringBody(body.location)) {
+      response.status(400).json({ error: 'Opportunity title and location are required' });
+      return;
+    }
+    const item = await upsertVolunteerOpportunity(body);
+    response.status(201).json({ item });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.delete('/api/gov/volunteers/urgent-alerts/:id', ...requireGovUser, async (request, response, next) => {
   try {
     const deleted = await deleteUrgentVolunteerAlert(request.params.id);
@@ -576,6 +646,27 @@ app.patch('/api/report-subject-tags/:id', ...requireGovUser, async (request, res
       return;
     }
     response.json({ item });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/report-subject-tags/:id/verify', ...requireGovUser, async (request: AuthenticatedRequest, response, next) => {
+  try {
+    const item = await verifyReportSubjectTag(request.params.id, request.user?.id);
+    if (!item) {
+      response.status(404).json({ error: 'Subject tag not found' });
+      return;
+    }
+    const moderator = request.user?.display_name ?? request.user?.username ?? request.user?.email ?? 'Government Moderator';
+    const topicTag = forumTopicTag({ content: item.label });
+    const verifiedForumPosts = topicTag
+      ? verifyForumPostsByTopicTag(topicTag, {
+          moderator,
+          note: `${item.label} has been verified by PUB.`,
+        })
+      : [];
+    response.json({ item, verifiedForumPosts });
   } catch (error) {
     next(error);
   }
@@ -679,6 +770,12 @@ app.post(
             longitude: numberBody(request.body?.longitude),
             sourceReportId: ticket.id,
             crisisTag: forumCrisisTag(ticket),
+            topicTag: forumTopicTag({
+              content: message,
+              location: stringBody(request.body?.locationText) ?? stringBody(request.body?.location),
+              linkedTicket: ticket,
+              requestedTopicTag: stringBody(request.body?.topicTag),
+            }),
             aiFlag: await detectPotentialMisinformation(message),
             images: [...uploadedImages, ...bodyImages].map((image) => ({
               filename: image.originalFilename,
@@ -1327,4 +1424,20 @@ function forumCrisisTag(ticket: Ticket) {
   const specificIssue = ticket.subjectTag?.label?.trim() || ticket.specificCrisis?.trim();
   if (!specificIssue || specificIssue.toLowerCase().startsWith('other')) return broadType;
   return `${broadType} / ${specificIssue}`;
+}
+
+function forumTopicTag(input: {
+  content: string;
+  location?: string | null;
+  linkedTicket?: Ticket | null;
+  requestedTopicTag?: string | null;
+}) {
+  if (input.requestedTopicTag) return input.requestedTopicTag;
+
+  const text = `${input.content} ${input.location ?? ''} ${input.linkedTicket?.specificCrisis ?? ''} ${input.linkedTicket?.subjectTag?.label ?? ''}`.toLowerCase();
+  const isBoonLay = text.includes('boon lay') || text.includes('jurong west street 64') || text.includes('boon lay mrt') || text.includes('boon lay interchange');
+  const isFlood = text.includes('flood') || text.includes('water') || text.includes('drain') || text.includes('rain') || text.includes('ponding');
+  if (isBoonLay && isFlood) return 'boon-lay-flooding';
+
+  return null;
 }

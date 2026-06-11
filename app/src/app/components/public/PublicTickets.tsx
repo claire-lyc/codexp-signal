@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { apiUrl } from '../../lib/api';
 import { accessTokenKey, authHeaders, refreshTokenKey } from '../../lib/auth';
 
@@ -27,8 +28,6 @@ type CreatedTicket = {
   status: string;
   assignedAgency: string;
   item?: TicketRecord;
-  forumMerged?: boolean;
-  forumSuppressed?: boolean;
 };
 
 type TicketUrgency = 'critical' | 'high' | 'medium' | 'low';
@@ -106,7 +105,7 @@ const specificCrises: Record<string, string[]> = {
   supply: ['Medicine shortage', 'Food shortage', 'Essential goods shortage', 'Fuel shortage'],
   infrastructure: ['Power outage', 'Water supply disruption', 'Building or road damage', 'Telecommunications outage'],
   transport: ['Train disruption', 'Bus disruption', 'Traffic incident', 'Road obstruction'],
-  environment: ['Flash flood', 'Drain overflow', 'Rising water level', 'Haze', 'Air pollution', 'Water pollution', 'Pest or animal issue', 'Other weather or environment issue'],
+  environment: ['Boon Lay Flooding', 'Flash flood', 'Drain overflow', 'Rising water level', 'Haze', 'Air pollution', 'Water pollution', 'Pest or animal issue', 'Other weather or environment issue'],
   other: ['Community safety issue', 'Public facility issue', 'Noise or nuisance', 'Other issue'],
 };
 
@@ -121,6 +120,7 @@ const demoFloodReportDraft = {
 };
 
 export default function PublicTickets() {
+  const [searchParams] = useSearchParams();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginUser, setLoginUser] = useState('');
@@ -148,7 +148,7 @@ export default function PublicTickets() {
   const [locating, setLocating] = useState(false);
   const [reportComposerOpen, setReportComposerOpen] = useState(false);
   const [subjectTags, setSubjectTags] = useState<SubjectTag[]>([]);
-  const [postToForum, setPostToForum] = useState(true);
+  const demoScenario = searchParams.get('demo');
 
   const visibleTags = showAllTags ? ticketTags : ticketTags.slice(0, 5);
   const imagePreviews = useMemo(() => files.map((file) => ({ file, url: URL.createObjectURL(file) })), [files]);
@@ -175,6 +175,17 @@ export default function PublicTickets() {
   useEffect(() => {
     fetchMe();
   }, []);
+
+  useEffect(() => {
+    if (demoScenario !== 'boon-lay') return;
+    setReportType('environment');
+    setSpecificCrisis('Boon Lay Flooding');
+    setDescription('Water is rising quickly near Boon Lay Place Market after heavy rain. The pedestrian crossing is ankle-deep, cars are slowing, and residents are unsure whether the flood is spreading toward Boon Lay MRT.');
+    setLocation('Boon Lay Place Market, West');
+    setLatitude(1.3459);
+    setLongitude(103.7118);
+    setReportComposerOpen(true);
+  }, [demoScenario]);
 
   useEffect(() => {
     if (!authUser) return;
@@ -385,7 +396,7 @@ export default function PublicTickets() {
     formData.append('locationText', location.trim());
     if (latitude !== null) formData.append('latitude', String(latitude));
     if (longitude !== null) formData.append('longitude', String(longitude));
-    formData.append('postToForum', String(postToForum));
+    formData.append('postToForum', 'false');
     files.forEach((file) => formData.append('images', file));
 
     setSubmitState('submitting');
@@ -412,14 +423,7 @@ export default function PublicTickets() {
       resetDemoReportDraft();
       setFieldErrors({});
       setSubmitState('success');
-      const forumMessage = postToForum
-        ? (data.forumSuppressed
-            ? ' It was not posted publicly because report triage placed it in the government spam queue.'
-            : data.forumMerged
-              ? ' Your update matched a recent forum thread and was added beneath the original.'
-              : ' It was also posted to the community forum.')
-        : '';
-      setSubmitMessage(`Report ${data.publicReportId} submitted and sent to ${data.assignedAgency}.${forumMessage}`);
+      setSubmitMessage(`Report ${data.publicReportId} submitted and sent to ${data.assignedAgency}.`);
       setReportComposerOpen(false);
       loadMyTickets(true);
     } catch {
@@ -711,19 +715,6 @@ export default function PublicTickets() {
                   ))}
                 </div>
               )}
-
-              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-blue-900/60 bg-blue-950/20 p-4">
-                <input
-                  type="checkbox"
-                  checked={postToForum}
-                  onChange={(event) => setPostToForum(event.target.checked)}
-                  className="mt-1 h-4 w-4 accent-blue-600"
-                />
-                <span>
-                  <span className="block text-sm font-medium text-zinc-200">Also post this report to the community forum</span>
-                  <span className="mt-1 block text-xs text-zinc-500">Similar recent updates are grouped beneath the earliest thread and count as an automatic upvote.</span>
-                </span>
-              </label>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <button

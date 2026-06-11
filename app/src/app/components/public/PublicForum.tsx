@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { API_REFRESH_INTERVAL_MS, apiUrl } from '../../lib/api';
 import { authHeaders } from '../../lib/auth';
 
@@ -91,7 +91,7 @@ const reportTypes = [
 ];
 const reportIssues: Record<string, string[]> = {
   health: ['COVID-19', 'Hantavirus', 'Dengue', 'Other health issue'],
-  environment: ['Flash flood', 'Drain overflow', 'Rising water level', 'Haze', 'Air pollution', 'Water pollution', 'Other weather or environment issue'],
+  environment: ['Boon Lay Flooding', 'Flash flood', 'Drain overflow', 'Rising water level', 'Haze', 'Air pollution', 'Water pollution', 'Other weather or environment issue'],
   supply: ['Medicine shortage', 'Food shortage', 'Essential goods shortage', 'Fuel shortage'],
   infrastructure: ['Power outage', 'Water supply disruption', 'Building or road damage', 'Telecommunications outage'],
   transport: ['Train disruption', 'Bus disruption', 'Traffic incident', 'Road obstruction'],
@@ -489,10 +489,23 @@ export default function PublicForum() {
   const [viewerLocation, setViewerLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const communityUpdatesRef = useRef<HTMLDivElement | null>(null);
   const author = authUser?.username ?? authUser?.displayName ?? authUser?.email ?? 'Citizen';
+  const demoScenario = searchParams.get('demo');
+  const shouldPrefillBoonLayDemo = demoScenario === 'boon-lay' || (!demoScenario && !searchParams.has('topic') && !searchParams.has('post'));
 
   useEffect(() => {
     setActiveTopic(topicFromParam(searchParams.get('topic')));
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!shouldPrefillBoonLayDemo) return;
+    setNewPost('Floodwater is rising quickly near Boon Lay Place Market after heavy rain. The pedestrian crossing is ankle-deep, cars are slowing, and it looks like the water may spread toward Boon Lay MRT.');
+    setCategory('Weather');
+    setLocation('Boon Lay Place Market, West');
+    setPostAsReport(true);
+    setReportType('environment');
+    setSpecificIssue('Boon Lay Flooding');
+    setViewerLocation({ latitude: 1.3459, longitude: 103.7118 });
+  }, [shouldPrefillBoonLayDemo]);
 
   useEffect(() => {
     fetch(apiUrl('/api/auth/me'), { headers: authHeaders() })
@@ -541,7 +554,7 @@ export default function PublicForum() {
         .then((data) => {
           if (!active) return;
           setUsingBackend(true);
-          setPosts(withWelcomePost(sanitizeForumPosts(data.items)));
+          setPosts(sanitizeForumPosts(data.items));
         })
         .catch(() => {
           if (!active) return;
@@ -1112,6 +1125,7 @@ export default function PublicForum() {
                         <span className="rounded bg-zinc-800 px-2 py-0.5">{post.category}</span>
                         {post.topicTag ? <TopicTag text={post.topicTag} /> : null}
                         {post.crisisTag ? <CrisisTag text={post.crisisTag} compact /> : null}
+                        {post.location ? <ForumLocationLink post={post} compact /> : null}
                         <span>{relativeTime(post.createdAt)}</span>
                         {post.distanceKm != null && <span>{post.distanceKm.toFixed(1)} km away</span>}
                       </div>
@@ -1121,7 +1135,7 @@ export default function PublicForum() {
                       {post.replies.length}
                     </div>
                   </div>
-                  <p className={`line-clamp-2 text-base font-medium leading-6 ${post.aiFlag ? 'text-red-200/70 blur-[2px]' : 'text-zinc-100'}`}>
+                    <p className={`line-clamp-2 text-base font-medium leading-6 ${post.aiFlag ? 'text-red-200/70 blur-[2px]' : 'text-zinc-100'}`}>
                     {post.content}
                   </p>
                   {post.sourceReportId ? <TicketBadge ticketId={post.sourceReportId} compact /> : null}
@@ -1165,7 +1179,10 @@ export default function PublicForum() {
                         )}
                       </div>
                       <h3 className="text-xl font-semibold leading-7">{threadTitle(selectedPost.content)}</h3>
-                      <div className="mt-1 text-xs text-zinc-500">Started by {selectedPost.author} - {relativeTime(selectedPost.createdAt)}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                        <span>Started by {selectedPost.author} - {relativeTime(selectedPost.createdAt)}</span>
+                        {selectedPost.location ? <ForumLocationLink post={selectedPost} /> : null}
+                      </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <button
@@ -1333,7 +1350,10 @@ export default function PublicForum() {
                       )}
                     </div>
                     <h3 className="text-lg font-semibold leading-6">{threadTitle(selectedPost.content)}</h3>
-                    <div className="mt-1 text-xs text-zinc-500">Started by {selectedPost.author} - {relativeTime(selectedPost.createdAt)}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                      <span>Started by {selectedPost.author} - {relativeTime(selectedPost.createdAt)}</span>
+                      {selectedPost.location ? <ForumLocationLink post={selectedPost} /> : null}
+                    </div>
                   </div>
                   <button
                     type="button"
@@ -1608,6 +1628,25 @@ function TicketBadge({ ticketId, compact = false }: { ticketId: string; compact?
   );
 }
 
+function ForumLocationLink({ post, compact = false }: { post: ForumPost; compact?: boolean }) {
+  const search = new URLSearchParams();
+  search.set('forumPost', post.id);
+  if (post.latitude != null) search.set('lat', String(post.latitude));
+  if (post.longitude != null) search.set('lng', String(post.longitude));
+
+  return (
+    <Link
+      to={`/public?${search.toString()}#situation-map`}
+      onClick={(event) => event.stopPropagation()}
+      className={`inline-flex items-center gap-1 rounded-md border border-blue-900/70 bg-blue-950/30 font-medium text-blue-300 transition-colors hover:border-blue-700 hover:bg-blue-900/40 hover:text-blue-100 ${compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs'}`}
+      title="Open this location on the public map"
+    >
+      <MapPin className="h-3 w-3" />
+      {post.location}
+    </Link>
+  );
+}
+
 function CrisisTag({ text, compact = false }: { text: string; compact?: boolean }) {
   return (
     <span className={`inline-flex rounded-md border border-red-900/70 bg-red-950/40 font-medium text-red-200 ${compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-1 text-xs'}`}>
@@ -1666,5 +1705,6 @@ function topicFromParam(value: string | null) {
 }
 
 function topicLabel(value: string) {
+  if (value === 'boon-lay-flooding') return 'Boon Lay Flooding';
   return activeSituationTopics.find((topic) => topic.id === value)?.label ?? value;
 }

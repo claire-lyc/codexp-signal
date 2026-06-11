@@ -253,14 +253,30 @@ export default function GovVolunteers() {
         setUrgentAlerts([]);
       });
 
+  const loadRemoteOpportunities = () =>
+    fetch(apiUrl('/api/gov/volunteers/opportunities'), { headers: authHeaders() })
+      .then((response) => {
+        if (!response.ok) throw new Error('Volunteer opportunities unavailable');
+        return response.json() as Promise<{ items: VolunteerOpportunity[] }>;
+      })
+      .then((data) => {
+        setCustomNeeds(data.items);
+        saveCustomVolunteerOpportunities(data.items);
+      })
+      .catch(() => {
+        setCustomNeeds(readCustomNeeds());
+      });
+
   useEffect(() => {
     loadCitizenProfile();
     loadRemoteProfiles();
     loadUrgentAlerts();
+    loadRemoteOpportunities();
     const refreshNeeds = () => setCustomNeeds(readCustomNeeds());
     const timer = window.setInterval(() => {
       loadRemoteProfiles();
       loadUrgentAlerts();
+      loadRemoteOpportunities();
     }, API_REFRESH_INTERVAL_MS);
     window.addEventListener('storage', loadCitizenProfile);
     window.addEventListener('storage', refreshNeeds);
@@ -515,6 +531,17 @@ export default function GovVolunteers() {
     const nextCustomNeeds = [newNeed, ...customNeeds];
     setCustomNeeds(nextCustomNeeds);
     saveCustomVolunteerOpportunities(nextCustomNeeds);
+    fetch(apiUrl('/api/gov/volunteers/opportunities'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(newNeed),
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error('Volunteer opportunity sync failed');
+        return response.json() as Promise<{ item: VolunteerOpportunity }>;
+      })
+      .then(() => loadRemoteOpportunities())
+      .catch(() => null);
     setExpandedId(newNeed.id);
     setBoardTab('open');
     setShowNeedForm(false);

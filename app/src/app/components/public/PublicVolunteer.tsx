@@ -144,6 +144,23 @@ export default function PublicVolunteer() {
         .catch(() => {
           setUrgentAlerts([]);
         });
+
+      fetch(apiUrl('/api/volunteers/opportunities'), { headers: authHeaders() })
+        .then((response) => {
+          if (!response.ok) throw new Error('Volunteer opportunities unavailable');
+          return response.json() as Promise<{ items: VolunteerOpportunity[] }>;
+        })
+        .then((data) => {
+          const remoteIds = new Set(data.items.map((item) => item.id));
+          const merged = [
+            ...data.items,
+            ...readVolunteerOpportunities().filter((item) => !remoteIds.has(item.id)),
+          ];
+          setOpportunities(merged);
+        })
+        .catch(() => {
+          setOpportunities(readVolunteerOpportunities());
+        });
     };
 
     syncVolunteerState();

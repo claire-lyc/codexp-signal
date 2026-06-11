@@ -2,9 +2,10 @@
 // GET /api/heatmap?layer=crises&public=true
 import { AlertTriangle, MapPin, Activity, Shield, Navigation, CloudRain, Wind, MessageSquare } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import SingaporeRegionMap, { type MapHeatmapLayer, type MapMarker } from '../SingaporeRegionMap';
-import { apiUrl, useApi } from '../../lib/api';
+import { API_REFRESH_INTERVAL_MS, apiUrl, useApi } from '../../lib/api';
+import { floodDemoUpdatedEvent } from '../FloodDemoController';
 
 type PublicHomeData = {
   activeCrisisLabels: string[];
@@ -57,6 +58,8 @@ type ForumCrisisPost = {
   longitude?: number | null;
   likes?: number;
   reports?: number;
+  verified?: boolean;
+  moderationState?: 'live' | 'under_review' | 'verified' | 'hidden' | 'misleading' | 'resolved';
 };
 
 type CrisisCard = {
@@ -213,11 +216,12 @@ const psiRiskMarkers: MapMarker[] = [
 
 export default function PublicHome() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { data: publicHome, loading, error } = useApi<PublicHomeData>('/api/citizen/home');
   const { data: citizenAlerts } = useApi<{ items: LiveCitizenAlert[] }>('/api/citizen/alerts');
   const [broadcasts, setBroadcasts] = useState<BroadcastAlert[]>([]);
   const [forumCrisisPosts, setForumCrisisPosts] = useState<ForumCrisisPost[]>([]);
-  const [selectedCrisisId, setSelectedCrisisId] = useState<string | null>(null);
+  const [selectedCrisisId, setSelectedCrisisId] = useState<string | null>('rainfall-risk');
   const situationMapRef = useRef<HTMLDivElement | null>(null);
   const liveAlerts = (citizenAlerts?.items ?? [])
     .filter((alert) => alert.status !== 'resolved')
@@ -230,7 +234,20 @@ export default function PublicHome() {
   const nearbyResources = publicHome?.nearbyResources ?? [];
   const primaryBroadcast = broadcasts.find((broadcast) => broadcast.status === 'ongoing') ?? null;
   const broadcastStyle = primaryBroadcast ? broadcastSeverityStyles[primaryBroadcast.severity] : broadcastSeverityStyles.low;
-  const selectedCrisis = staticCrisisCards.find((card) => card.id === selectedCrisisId) ?? null;
+  const linkedForumMarker = useMemo<MapMarker | null>(() => {
+    const latitude = Number(searchParams.get('lat'));
+    const longitude = Number(searchParams.get('lng'));
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+    return {
+      id: `linked-forum-${searchParams.get('forumPost') ?? 'location'}`,
+      name: 'Linked forum location',
+      latitude,
+      longitude,
+      value: 'Forum location',
+      detail: 'Location opened from a community forum post.',
+      severity: 'medium',
+    };
+  }, [searchParams]);
   const selectedHeatmapLayer = selectedCrisisId === 'rainfall-risk'
     ? floodRiskLayer
     : selectedCrisisId === 'air-quality'
@@ -244,19 +261,33 @@ export default function PublicHome() {
         name: post.location || post.crisisTag || 'Tagged crisis signal',
         latitude: post.latitude as number,
         longitude: post.longitude as number,
-        value: post.crisisTag || 'Crisis tag',
-        detail: `${post.category}: ${post.content}`,
+        value: `${post.verified || post.moderationState === 'verified' ? 'Verified' : 'Unverified'} - ${post.crisisTag || 'Crisis tag'}`,
+        detail: `${post.verified || post.moderationState === 'verified' ? 'Officially verified' : 'Community signal awaiting official verification'}: ${post.content}`,
         severity: markerSeverityFromPost(post),
       })),
     [forumCrisisPosts],
   );
-  const overallSituation = visibleAlerts.some((alert) => alert.severity === 'critical' || alert.severity === 'high') || staticCrisisCards.some((card) => card.severity === 'high')
+  const floodForumMarkers = useMemo(
+    () => crisisTagMarkers.filter((marker) => {
+      const text = `${marker.name} ${marker.value} ${marker.detail}`.toLowerCase();
+      return text.includes('flood') || text.includes('boon lay') || text.includes('drain') || text.includes('water');
+    }),
+    [crisisTagMarkers],
+  );
+  const situationCards = useMemo(() => {
+    const liveFloodReportCount = new Set(floodForumMarkers.map((marker) => marker.id)).size;
+    return staticCrisisCards.map((card) => card.id === 'rainfall-risk'
+      ? { ...card, value: `${6 + liveFloodReportCount} reports` }
+      : card);
+  }, [floodForumMarkers]);
+  const selectedCrisis = situationCards.find((card) => card.id === selectedCrisisId) ?? null;
+  const overallSituation = visibleAlerts.some((alert) => alert.severity === 'critical' || alert.severity === 'high') || situationCards.some((card) => card.severity === 'high')
     ? 'Elevated'
     : 'Stable';
   const mapMarkers = useMemo<MapMarker[]>(() => {
-    if (!selectedCrisisId) return crisisTagMarkers;
+    if (!selectedCrisisId) return linkedForumMarker ? [linkedForumMarker, ...crisisTagMarkers] : crisisTagMarkers;
     if (selectedCrisisId === 'covid-watch') return covidCaseMarkers;
-    if (selectedCrisisId === 'rainfall-risk') return floodRiskMarkers;
+    if (selectedCrisisId === 'rainfall-risk') return [...(linkedForumMarker ? [linkedForumMarker] : []), ...floodForumMarkers, ...floodRiskMarkers];
     if (selectedCrisisId === 'air-quality') return psiRiskMarkers;
 
     const crisisMarkers = (selectedCrisis ? [selectedCrisis] : []).map((card) => ({
@@ -272,7 +303,7 @@ export default function PublicHome() {
     if (selectedCrisis) return crisisMarkers;
 
     return crisisMarkers;
-  }, [crisisTagMarkers, selectedCrisis, selectedCrisisId, selectedHeatmapLayer, visibleAlerts]);
+  }, [crisisTagMarkers, floodForumMarkers, linkedForumMarker, selectedCrisis, selectedCrisisId, selectedHeatmapLayer, visibleAlerts]);
 
   useEffect(() => {
     fetch(apiUrl('/api/citizen/broadcasts'))
@@ -296,8 +327,12 @@ export default function PublicHome() {
     };
 
     loadForumCrisisPosts();
-    const timer = window.setInterval(loadForumCrisisPosts, 15000);
-    return () => window.clearInterval(timer);
+    const timer = window.setInterval(loadForumCrisisPosts, Math.min(API_REFRESH_INTERVAL_MS, 5000));
+    window.addEventListener(floodDemoUpdatedEvent, loadForumCrisisPosts);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener(floodDemoUpdatedEvent, loadForumCrisisPosts);
+    };
   }, []);
 
   useEffect(() => {
@@ -305,7 +340,7 @@ export default function PublicHome() {
       if (!selectedCrisisId) return;
       const target = event.target as Node;
       if (situationMapRef.current && !situationMapRef.current.contains(target)) {
-        setSelectedCrisisId(null);
+        setSelectedCrisisId('rainfall-risk');
       }
     };
 
@@ -377,15 +412,15 @@ export default function PublicHome() {
           </div>
 
           <div className="space-y-2">
-            {staticCrisisCards.map((card) => {
+            {situationCards.map((card) => {
               const Icon = crisisIconMap[card.icon];
               const active = selectedCrisisId === card.id;
               return (
                 <button
                   key={card.id}
                   type="button"
-                  data-tour={card.id === staticCrisisCards[0].id ? 'first-situation' : undefined}
-                  onClick={() => setSelectedCrisisId((current) => current === card.id ? null : card.id)}
+                  data-tour={card.id === situationCards[0].id ? 'first-situation' : undefined}
+                  onClick={() => setSelectedCrisisId(card.id)}
                   className={`w-full rounded-lg border bg-zinc-950/40 p-3 text-left transition-colors hover:bg-zinc-800/80 ${active ? 'border-red-600 ring-1 ring-red-600/60' : 'border-zinc-800'}`}
                 >
                   <div className="mb-2 flex items-start justify-between gap-3">
@@ -414,7 +449,7 @@ export default function PublicHome() {
           </div>
         </section>
 
-        <section data-tour="situation-map" className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+        <section id="situation-map" data-tour="situation-map" className="scroll-mt-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-base font-semibold flex items-center gap-2">
               <MapPin className="w-4 h-4 text-red-600" />

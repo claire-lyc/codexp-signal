@@ -71,6 +71,7 @@ type SubjectTag = {
   label: string;
   description: string | null;
   categories: string[];
+  verifiedAt?: string | null;
 };
 
 type AuthUser = {
@@ -136,6 +137,7 @@ function seedSubjectTag(label: string, categories: string[]): SubjectTag {
     label,
     description: null,
     categories,
+    verifiedAt: null,
   };
 }
 
@@ -821,6 +823,35 @@ export default function GovFormHandling() {
     }
   };
 
+  const verifySubjectGroup = async (subjectTag: SubjectTag) => {
+    if (subjectTag.verifiedAt) {
+      setNotice(`${subjectTag.label} is already verified.`);
+      return;
+    }
+
+    try {
+      const data = await requestJson<{ item: SubjectTag; verifiedForumPosts?: unknown[] }>(
+        `/api/report-subject-tags/${subjectTag.id}/verify`,
+        'POST',
+        {},
+      );
+      const verifiedTag = data.item;
+      setSubjectTags((current) => current.map((tag) => (tag.id === verifiedTag.id ? verifiedTag : tag)));
+      setTickets((current) => current.map((ticket) =>
+        ticket.subjectTag?.id === verifiedTag.id ? { ...ticket, subjectTag: verifiedTag } : ticket,
+      ));
+      window.dispatchEvent(new CustomEvent('signal:flood-demo-updated'));
+      setNotice(`Verified crisis: ${verifiedTag.label}. Citizen map pins now show as verified.`);
+    } catch {
+      const verifiedTag = { ...subjectTag, verifiedAt: new Date().toISOString() };
+      setSubjectTags((current) => current.map((tag) => (tag.id === subjectTag.id ? verifiedTag : tag)));
+      setTickets((current) => current.map((ticket) =>
+        ticket.subjectTag?.id === subjectTag.id ? { ...ticket, subjectTag: verifiedTag } : ticket,
+      ));
+      setNotice(`Verified crisis locally: ${subjectTag.label}.`);
+    }
+  };
+
   const regroupSubjectGroup = async (subjectTag: SubjectTag, options: { automatic?: boolean } = {}) => {
     const caseTickets = tickets.filter((ticket) => ticket.subjectTag?.id === subjectTag.id && !isResolved(ticket) && !isSpam(ticket));
     const splitBuckets = groupTicketsForCaseSplit(caseTickets).filter((bucket) => bucket.tickets.length >= 2);
@@ -894,25 +925,30 @@ export default function GovFormHandling() {
 
   const pingAgencies = async () => {
     if (!selectedTicket || pinnedAgencies.length === 0) return;
+    const targetTickets = selectedTicket.subjectTag
+      ? tickets.filter((ticket) => ticket.subjectTag?.id === selectedTicket.subjectTag?.id && !isResolved(ticket) && !isSpam(ticket))
+      : [selectedTicket];
 
     try {
-      const data = await requestJson<{ item: Ticket }>(
-        `/api/tickets/${selectedTicket.id}/ping-agencies`,
-        'POST',
-        { agencyCodes: pinnedAgencies },
-      );
-      syncTicket(data.item);
+      const results = await Promise.all(targetTickets.map((ticket) =>
+        requestJson<{ item: Ticket }>(
+          `/api/tickets/${ticket.id}/ping-agencies`,
+          'POST',
+          { agencyCodes: pinnedAgencies },
+        ),
+      ));
+      results.forEach((data) => syncTicket(data.item));
       setUsingBackend(true);
     } catch {
       setUsingBackend(false);
       updateLocalTickets(
         (current) =>
           current.map((ticket) =>
-            ticket.id === selectedTicket.id
+            targetTickets.some((target) => target.id === ticket.id)
               ? {
                   ...ticket,
                   pingedAgencies: [...new Set([...ticket.pingedAgencies, ...pinnedAgencies])],
-                  comments: [...ticket.comments, createComment('internal', `Pinged agencies: ${pinnedAgencies.join(', ')}.`)],
+                  comments: [...ticket.comments, createComment('internal', `Pinged agencies for ${selectedTicket.subjectTag ? `case "${selectedTicket.subjectTag.label}"` : 'ticket'}: ${pinnedAgencies.join(', ')}.`)],
                 }
               : ticket,
           ),
@@ -920,7 +956,9 @@ export default function GovFormHandling() {
       );
     }
 
-    setNotice(`Agencies pinged: ${pinnedAgencies.join(', ')}.`);
+    setNotice(selectedTicket.subjectTag
+      ? `Agencies pinged for ${selectedTicket.subjectTag.label}: ${pinnedAgencies.join(', ')} (${targetTickets.length} reports).`
+      : `Agencies pinged: ${pinnedAgencies.join(', ')}.`);
     setPinnedAgencies([]);
     setPingOpen(false);
   };
@@ -1148,7 +1186,18 @@ export default function GovFormHandling() {
                             className="min-w-0 flex-1 text-left"
                           >
                             <div className="flex items-center justify-between gap-2">
-                              <span className="truncate text-xs font-medium">{group.tag.label}</span>
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <span className="truncate text-xs font-medium">{group.tag.label}</span>
+                                {group.tag.verifiedAt && (
+                                  <span
+                                    className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-emerald-500/60 bg-emerald-500/15 text-emerald-300"
+                                    title="Crisis verified"
+                                    aria-label="Crisis verified"
+                                  >
+                                    <CheckCircle className="h-3 w-3" />
+                                  </span>
+                                )}
+                              </span>
                               <span className="shrink-0 text-[11px] text-zinc-500">{group.tickets.length}</span>
                             </div>
                             <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-500">
@@ -1173,6 +1222,7 @@ export default function GovFormHandling() {
                                   <CaseMenuButton label="Reopen case" onClick={() => { setCaseMenuId(null); void restoreSubjectGroup(group.tag); }} />
                                 ) : (
                                   <>
+                                    <CaseMenuButton label={group.tag.verifiedAt ? 'Verified' : 'Verify crisis'} onClick={() => { setCaseMenuId(null); void verifySubjectGroup(group.tag); }} />
                                     <CaseMenuButton label="AI regroup" onClick={() => { setCaseMenuId(null); void regroupSubjectGroup(group.tag); }} />
                                     <CaseMenuButton label="Archive case" onClick={() => { setCaseMenuId(null); void archiveSubjectGroup(group.tag); }} />
                                   </>
@@ -1509,6 +1559,10 @@ export default function GovFormHandling() {
       {pingOpen && selectedTicket && (
         <PingAgenciesDialog
           ticketId={selectedTicket.id}
+          caseLabel={selectedTicket.subjectTag?.label ?? null}
+          targetCount={selectedTicket.subjectTag
+            ? tickets.filter((ticket) => ticket.subjectTag?.id === selectedTicket.subjectTag?.id && !isResolved(ticket) && !isSpam(ticket)).length
+            : 1}
           pinnedAgencies={pinnedAgencies}
           onToggleAgency={(agency) =>
             setPinnedAgencies((previous) => previous.includes(agency) ? previous.filter((item) => item !== agency) : [...previous, agency])
@@ -1715,7 +1769,7 @@ function TicketDetailHeader({
         {actionMenuOpen && (
           <div className="absolute right-0 top-full z-40 mt-2 w-52 rounded-xl border border-zinc-800 bg-zinc-950 p-2 shadow-2xl">
             <ActionMenuButton icon={<Layers className="h-4 w-4" />} label="Move to case" onClick={onGroup} />
-            <ActionMenuButton icon={<Bell className="h-4 w-4" />} label="Ping agency" onClick={onPing} />
+            <ActionMenuButton icon={<Bell className="h-4 w-4" />} label={ticket.subjectTag ? 'Ping case agencies' : 'Ping agency'} onClick={onPing} />
             {onArchiveCase && <ActionMenuButton icon={<CheckCircle className="h-4 w-4" />} label="Archive case" onClick={onArchiveCase} />}
             {isResolved(ticket) || isSpam(ticket)
               ? <ActionMenuButton icon={<CheckCircle className="h-4 w-4" />} label={isSpam(ticket) ? 'Mark legitimate' : 'Reopen'} onClick={onRestore} />
@@ -1964,12 +2018,16 @@ function CreateSubjectDialog({
 
 function PingAgenciesDialog({
   ticketId,
+  caseLabel,
+  targetCount,
   pinnedAgencies,
   onToggleAgency,
   onCancel,
   onConfirm,
 }: {
   ticketId: string;
+  caseLabel: string | null;
+  targetCount: number;
   pinnedAgencies: string[];
   onToggleAgency: (agency: string) => void;
   onCancel: () => void;
@@ -1984,7 +2042,11 @@ function PingAgenciesDialog({
           <h3 className="font-semibold flex items-center gap-2"><Bell className="w-5 h-5 text-blue-400" />Ping Related Agencies</h3>
           <button onClick={onCancel} className="p-1 hover:bg-zinc-800 rounded transition-colors"><X className="w-4 h-4 text-zinc-400" /></button>
         </div>
-        <p className="text-sm text-zinc-400 mb-4">Selected agencies will receive this ticket ({ticketId}) in their queue and be notified.</p>
+        <p className="text-sm text-zinc-400 mb-4">
+          {caseLabel
+            ? `Selected agencies will receive all active reports in ${caseLabel} (${targetCount} reports), including ${ticketId}.`
+            : `Selected agencies will receive this ticket (${ticketId}) in their queue and be notified.`}
+        </p>
         <div className="relative mb-3">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-500" />
           <input
@@ -2009,7 +2071,7 @@ function PingAgenciesDialog({
           <button onClick={onCancel} className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm transition-colors">Cancel</button>
           <button onClick={onConfirm} disabled={pinnedAgencies.length === 0} className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm transition-colors flex items-center justify-center gap-2">
             <Send className="w-4 h-4" />
-            Ping {pinnedAgencies.length > 0 ? `(${pinnedAgencies.length})` : ''}
+            {caseLabel ? 'Ping Case' : 'Ping'} {pinnedAgencies.length > 0 ? `(${pinnedAgencies.length})` : ''}
           </button>
         </div>
       </div>
