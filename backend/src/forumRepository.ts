@@ -50,38 +50,6 @@ const forumLikes = new Map<string, Set<string>>();
 const forumDislikes = new Map<string, Set<string>>();
 const bannedForumAuthors = new Set<string>();
 
-export function upsertDemoForumPost(post: ForumPost) {
-  const existingIndex = forumPosts.findIndex((item) => item.id === post.id);
-  const nextPost = {
-    ...post,
-    replies: [...post.replies],
-    images: [...post.images],
-  };
-  if (existingIndex >= 0) {
-    forumPosts[existingIndex] = nextPost;
-  } else {
-    forumPosts.unshift(nextPost);
-  }
-  return nextPost;
-}
-
-export function appendDemoForumReply(postId: string, reply: ForumReply) {
-  const post = forumPosts.find((item) => item.id === postId);
-  if (!post || post.replies.some((item) => item.id === reply.id)) return post ?? null;
-  post.replies.push({ ...reply });
-  return post;
-}
-
-export function clearDemoForumPosts(postIds: Iterable<string>) {
-  const ids = new Set(postIds);
-  for (let index = forumPosts.length - 1; index >= 0; index -= 1) {
-    if (!ids.has(forumPosts[index].id)) continue;
-    forumLikes.delete(forumPosts[index].id);
-    forumDislikes.delete(forumPosts[index].id);
-    forumPosts.splice(index, 1);
-  }
-}
-
 export function listForumPosts(options: {
   includeHidden?: boolean;
   latitude?: number | null;

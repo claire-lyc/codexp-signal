@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router';
 import { fetchWithAuth } from '../../lib/api';
 import { hasAuthToken } from '../../lib/auth';
-import FloodDemoController from '../FloodDemoController';
 
 type AuthState = 'checking' | 'allowed' | 'denied';
 
@@ -55,10 +54,5 @@ export default function RequireAuth() {
     return <Navigate to={`/login?portal=${portal}&redirect=${encodeURIComponent(redirect)}`} replace />;
   }
 
-  return (
-    <>
-      <FloodDemoController />
-      <Outlet />
-    </>
-  );
+  return <Outlet />;
 }

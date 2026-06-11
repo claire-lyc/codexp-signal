@@ -16,7 +16,6 @@ import {
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import { API_REFRESH_INTERVAL_MS, fetchWithAuth, useApi } from '../../lib/api';
-import { floodDemoUpdatedEvent } from '../FloodDemoController';
 
 type ForumReply = {
   id: string;
@@ -127,12 +126,10 @@ export default function GovPublicSentiment() {
 
     loadForumPosts();
     const timer = window.setInterval(loadForumPosts, API_REFRESH_INTERVAL_MS);
-    window.addEventListener(floodDemoUpdatedEvent, loadForumPosts);
 
     return () => {
       active = false;
       window.clearInterval(timer);
-      window.removeEventListener(floodDemoUpdatedEvent, loadForumPosts);
     };
   }, []);
 
