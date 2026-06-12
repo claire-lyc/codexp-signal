@@ -68,6 +68,180 @@ export type UrgentVolunteerAlert = {
   responders: UrgentVolunteerAlertResponder[];
 };
 
+const defaultVolunteerOpportunities: Array<Record<string, unknown>> = [
+  {
+    id: 1,
+    title: 'Vaccination Centre Support',
+    organization: 'Ministry of Health',
+    location: 'Jurong West',
+    region: 'West',
+    urgency: 'high',
+    volunteers: 0,
+    needed: 25,
+    requiredSkills: ['Healthcare', 'First Aid'],
+    shift: 'Today, 14:00-18:00',
+    reportingPoint: 'Jurong West ActiveSG Hall, Gate B',
+    authorisedAgency: 'MOH',
+    description: 'Assist with triage, queue support, and health screening at temporary care facilities.',
+    roleSlots: [
+      { id: 'triage', title: 'Triage assistant', needed: 10, assigned: 0, requiredSkills: ['Healthcare', 'First Aid'], specialRequirements: 'Basic PPE briefing required' },
+      { id: 'queue', title: 'Queue marshal', needed: 15, assigned: 0, requiredSkills: ['Community Outreach'] }
+    ]
+  },
+  {
+    id: 2,
+    title: 'Supply Distribution',
+    organization: 'Enterprise Singapore',
+    location: 'Tampines',
+    region: 'East',
+    urgency: 'medium',
+    volunteers: 0,
+    needed: 15,
+    requiredSkills: ['Logistics', 'Driving'],
+    shift: 'Tomorrow, 09:00-13:00',
+    reportingPoint: 'Tampines West CC loading bay',
+    authorisedAgency: 'Enterprise SG',
+    description: 'Pack and distribute essential supplies to residents affected by medicine and food shortages.',
+    roleSlots: [
+      { id: 'driver', title: 'Van driver', needed: 5, assigned: 0, requiredSkills: ['Driving', 'Logistics'], specialRequirements: 'Class 3 licence' },
+      { id: 'packer', title: 'Packing crew', needed: 10, assigned: 0, requiredSkills: ['Logistics', 'Heavy Lifting'] }
+    ]
+  },
+  {
+    id: 3,
+    title: 'Community Welfare Checks',
+    organization: "People's Association",
+    location: 'Ang Mo Kio',
+    region: 'Central',
+    urgency: 'low',
+    volunteers: 0,
+    needed: 20,
+    requiredSkills: ['Community Outreach', 'Translation', 'Social Work'],
+    shift: 'Sat, 10:00-15:00',
+    reportingPoint: 'Ang Mo Kio Town Council service desk',
+    authorisedAgency: 'MSF',
+    description: 'Visit elderly residents, check basic needs, and escalate urgent welfare issues.',
+    roleSlots: [
+      { id: 'welfare', title: 'Welfare caller', needed: 10, assigned: 0, requiredSkills: ['Community Outreach', 'Social Work'] },
+      { id: 'translator', title: 'Language support', needed: 10, assigned: 0, requiredSkills: ['Translation', 'Language Support'] }
+    ]
+  },
+  {
+    id: 4,
+    title: 'Transport Diversion Support',
+    organization: 'Land Transport Authority',
+    location: 'Bugis',
+    region: 'Central',
+    urgency: 'medium',
+    volunteers: 0,
+    needed: 12,
+    requiredSkills: ['Community Outreach', 'Translation'],
+    shift: 'Today, 16:00-20:00',
+    reportingPoint: 'Bugis MRT Exit B command point',
+    authorisedAgency: 'LTA',
+    description: 'Guide commuters around temporary route diversions and support queue flow near affected stations.',
+    roleSlots: [
+      { id: 'crowd-guide', title: 'Crowd guide', needed: 8, assigned: 0, requiredSkills: ['Community Outreach'] },
+      { id: 'language-guide', title: 'Language support guide', needed: 4, assigned: 0, requiredSkills: ['Translation', 'Language Support'], specialRequirements: 'Able to give directions in at least one additional language' }
+    ]
+  },
+  {
+    id: 5,
+    title: 'Flood Relief Packing Line',
+    organization: 'PUB',
+    location: 'Potong Pasir',
+    region: 'Central',
+    urgency: 'high',
+    volunteers: 0,
+    needed: 18,
+    requiredSkills: ['Logistics', 'Heavy Lifting'],
+    shift: 'Tonight, 19:00-23:00',
+    reportingPoint: 'Potong Pasir CC multipurpose hall',
+    authorisedAgency: 'PUB',
+    description: 'Prepare flood relief packs, sandbag bundles, and bottled water for low-lying residential blocks.',
+    roleSlots: [
+      { id: 'packer', title: 'Relief packer', needed: 12, assigned: 0, requiredSkills: ['Logistics'] },
+      { id: 'loader', title: 'Loading crew', needed: 6, assigned: 0, requiredSkills: ['Heavy Lifting', 'Logistics'] }
+    ]
+  },
+  {
+    id: 6,
+    title: 'Shelter Registration Desk',
+    organization: 'SCDF',
+    location: 'Tampines',
+    region: 'East',
+    urgency: 'high',
+    volunteers: 0,
+    needed: 14,
+    requiredSkills: ['First Aid', 'Community Outreach'],
+    shift: 'Tomorrow, 08:00-14:00',
+    reportingPoint: 'Tampines East temporary shelter entrance',
+    authorisedAgency: 'SCDF',
+    description: 'Support evacuee registration, basic welfare checks, and escalation to shelter officers.',
+    roleSlots: [
+      { id: 'registration', title: 'Registration assistant', needed: 8, assigned: 0, requiredSkills: ['Community Outreach'] },
+      { id: 'first-aid', title: 'First aid support', needed: 6, assigned: 0, requiredSkills: ['First Aid'], specialRequirements: 'Valid first aid or CPR certification preferred' }
+    ]
+  },
+  {
+    id: 7,
+    title: 'Dengue Outreach Checks',
+    organization: 'National Environment Agency',
+    location: 'Bedok North',
+    region: 'East',
+    urgency: 'medium',
+    volunteers: 0,
+    needed: 16,
+    requiredSkills: ['Community Outreach', 'Translation'],
+    shift: 'Sat, 09:00-13:00',
+    reportingPoint: 'Bedok North RC centre',
+    authorisedAgency: 'NEA',
+    description: 'Help residents understand dengue prevention steps and collect household outreach acknowledgements.',
+    roleSlots: [
+      { id: 'doorstep', title: 'Doorstep outreach', needed: 10, assigned: 0, requiredSkills: ['Community Outreach'] },
+      { id: 'translator', title: 'Translation support', needed: 6, assigned: 0, requiredSkills: ['Translation', 'Language Support'] }
+    ]
+  },
+  {
+    id: 8,
+    title: 'Neighbourhood Safety Patrol Support',
+    organization: 'Singapore Police Force',
+    location: 'Woodlands',
+    region: 'North',
+    urgency: 'low',
+    volunteers: 0,
+    needed: 10,
+    requiredSkills: ['Community Outreach', 'IT Support'],
+    shift: 'Fri, 18:00-22:00',
+    reportingPoint: 'Woodlands NPC public assistance desk',
+    authorisedAgency: 'SPF',
+    description: 'Support public queue guidance, lost-person information collection, and non-sensitive wayfinding.',
+    roleSlots: [
+      { id: 'wayfinding', title: 'Public wayfinding', needed: 7, assigned: 0, requiredSkills: ['Community Outreach'] },
+      { id: 'digital-entry', title: 'Digital form assistant', needed: 3, assigned: 0, requiredSkills: ['IT Support'] }
+    ]
+  },
+  {
+    id: 9,
+    title: 'SME Supply Hotline Support',
+    organization: 'Enterprise Singapore',
+    location: 'One-North',
+    region: 'West',
+    urgency: 'medium',
+    volunteers: 0,
+    needed: 10,
+    requiredSkills: ['IT Support', 'Logistics', 'Translation'],
+    shift: 'Tomorrow, 10:00-16:00',
+    reportingPoint: 'One-North business continuity support desk',
+    authorisedAgency: 'Enterprise SG',
+    description: 'Help triage SME supply requests and translate basic hotline information for affected businesses.',
+    roleSlots: [
+      { id: 'hotline', title: 'Hotline triage assistant', needed: 6, assigned: 0, requiredSkills: ['IT Support', 'Community Outreach'] },
+      { id: 'supply-logistics', title: 'Supply request classifier', needed: 4, assigned: 0, requiredSkills: ['Logistics'] }
+    ]
+  }
+];
+
 let schemaReady: Promise<void> | null = null;
 
 async function ensureVolunteerSchema() {
@@ -221,7 +395,9 @@ export async function listVolunteerOpportunities() {
       ORDER BY created_at DESC
     `,
   );
-  return rows.map((row) => ({ ...row.opportunity, id: Number(row.id) }));
+  const items = rows.map((row) => ({ ...row.opportunity, id: Number(row.id) }));
+  const seen = new Set(items.map((item) => Number(item.id)));
+  return [...items, ...defaultVolunteerOpportunities.filter((item) => !seen.has(Number(item.id)))];
 }
 
 export async function upsertVolunteerOpportunity(opportunity: Record<string, unknown>) {

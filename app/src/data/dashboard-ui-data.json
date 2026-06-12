@@ -1,65 +1,81 @@
 {
   "generatedAt": "2026-06-07T20:45:00+08:00",
-  "crisisCards": [],
-  "govAlerts": [
+  "crisisCards": [
     {
+      "id": "covid",
+      "label": "Covid-19",
+      "type": "Health",
+      "severity": "medium",
+      "path": "/gov/pandemic",
+      "stats": [
+        { "label": "Active cases today", "value": "378", "delta": "+12%" },
+        { "label": "ICU occupancy", "value": "25", "delta": "+5" }
+      ],
+      "icon": "Activity"
+    },
+    {
+      "id": "dengue",
+      "label": "Dengue",
+      "type": "Health",
+      "severity": "high",
+      "path": "/gov/pandemic",
+      "stats": [
+        { "label": "Red zone clusters", "value": "14", "delta": "+3" },
+        { "label": "Cases this week", "value": "212", "delta": "+8%" }
+      ],
+      "icon": "Activity"
+    },
+    {
+      "id": "flood",
+      "label": "Flash Flood Risk",
       "type": "Weather",
       "severity": "high",
-      "message": "Flash flood advisory active for Central underpasses. PUB and LTA are coordinating drain clearance and lane diversions.",
-      "region": "Central",
-      "time": "18 mins ago"
+      "path": "/gov/weather",
+      "stats": [
+        { "label": "High-risk zones", "value": "6", "delta": "" },
+        { "label": "Peak rainfall (1h)", "value": "45mm", "delta": "Alert" }
+      ],
+      "icon": "Cloud"
     },
     {
-      "type": "Environment",
+      "id": "panadol",
+      "label": "Panadol Shortage",
+      "type": "Supply Chain",
       "severity": "medium",
-      "message": "Air quality has reached unhealthy range in West and Central. NEA advises reducing prolonged outdoor activity.",
-      "region": "West / Central",
-      "time": "42 mins ago"
+      "path": "/gov/supply-chain",
+      "stats": [
+        { "label": "Affected outlets", "value": "87", "delta": "" },
+        { "label": "Est. restock", "value": "4 days", "delta": "" }
+      ],
+      "icon": "Package"
     },
     {
-      "type": "Infrastructure",
-      "severity": "medium",
-      "message": "East-West Line disruption under monitoring. LTA has activated bus bridging and station crowd control.",
-      "region": "Islandwide",
-      "time": "1 hour ago"
-    },
-    {
-      "type": "Health",
+      "id": "cyber",
+      "label": "Cyber Incident",
+      "type": "Cybersecurity",
       "severity": "low",
-      "message": "Dengue cluster watch continues in Bedok North. NEA completed follow-up vector control checks.",
-      "region": "East",
-      "time": "2 hours ago"
+      "path": "/gov/cybersecurity",
+      "stats": [
+        { "label": "Active threats", "value": "3", "delta": "-1" }
+      ],
+      "icon": "Shield"
     }
   ],
+  "govAlerts": [
+    { "id": 1, "type": "Weather", "severity": "high", "message": "Flash flood risk in Orchard & East Coast", "region": "East/Central", "time": "10:23 AM" },
+    { "id": 2, "type": "Health", "severity": "high", "message": "New dengue red zone: Bedok North Ave 1", "region": "East", "time": "09:45 AM" },
+    { "id": 3, "type": "Supply", "severity": "medium", "message": "Panadol Menstrual out-of-stock at 87 outlets", "region": "Nationwide", "time": "08:30 AM" },
+    { "id": 4, "type": "Infrastructure", "severity": "medium", "message": "Power grid fluctuation in Woodlands", "region": "North", "time": "07:15 AM" },
+    { "id": 5, "type": "Health", "severity": "medium", "message": "New Covid-19 cluster at Jurong West MRT", "region": "West", "time": "06:50 AM" }
+  ],
   "incidentTrend": [
-    {
-      "date": "May 13",
-      "incidents": 4
-    },
-    {
-      "date": "May 14",
-      "incidents": 5
-    },
-    {
-      "date": "May 15",
-      "incidents": 7
-    },
-    {
-      "date": "May 16",
-      "incidents": 6
-    },
-    {
-      "date": "May 17",
-      "incidents": 8
-    },
-    {
-      "date": "May 18",
-      "incidents": 9
-    },
-    {
-      "date": "May 19",
-      "incidents": 8
-    }
+    { "date": "May 13", "incidents": 4 },
+    { "date": "May 14", "incidents": 5 },
+    { "date": "May 15", "incidents": 7 },
+    { "date": "May 16", "incidents": 6 },
+    { "date": "May 17", "incidents": 8 },
+    { "date": "May 18", "incidents": 9 },
+    { "date": "May 19", "incidents": 8 }
   ],
   "riskSummary": {
     "body": "Data projections indicate a moderate increase in respiratory cases over the next 72 hours due to deteriorating air quality. Supply disruptions for Panadol Menstrual may escalate if emergency procurement is not initiated. Recommend activating flood response protocols in eastern zones.",
@@ -67,241 +83,126 @@
     "sources": "MOH, NEA, Enterprise SG"
   },
   "publicHome": {
-    "activeCrisisLabels": [
-      "Flash Flood Advisory",
-      "Air Quality Advisory",
-      "Rail Service Disruption"
-    ],
-    "summary": "Multiple active advisories are being monitored. Follow official broadcasts for transport, weather, and air quality updates.",
+    "activeCrisisLabels": ["Covid-19", "Dengue", "Flash Flood Risk", "Panadol Shortage", "Cyber Incident"],
+    "summary": "Singapore is managing flash flood risk, dengue cluster expansion, medicine shortages, and a new Covid-19 cluster. Follow official advisories and check your area on the map below.",
     "stats": [
-      {
-        "label": "Covid-19 Cases Today",
-        "value": "378",
-        "icon": "Activity",
-        "colour": "red"
-      },
-      {
-        "label": "Air Quality (PSI)",
-        "value": "156",
-        "icon": "AlertTriangle",
-        "colour": "yellow"
-      },
-      {
-        "label": "Essential Supply Level",
-        "value": "94%",
-        "icon": "Shield",
-        "colour": "green"
-      },
-      {
-        "label": "Overall Situation",
-        "value": "Elevated",
-        "icon": "TrendingUp",
-        "colour": "blue"
-      }
+      { "label": "Covid-19 Cases Today", "value": "378", "icon": "Activity", "colour": "red" },
+      { "label": "Air Quality (PSI)", "value": "156", "icon": "AlertTriangle", "colour": "yellow" },
+      { "label": "Essential Supply Level", "value": "94%", "icon": "Shield", "colour": "green" },
+      { "label": "Overall Situation", "value": "Elevated", "icon": "TrendingUp", "colour": "blue" }
     ],
     "activeAlerts": [
-      {
-        "id": 1,
-        "type": "Weather",
-        "message": "Flash flood advisory active for Central underpasses. Avoid low-lying roads and follow LTA diversions.",
-        "severity": "high",
-        "region": "Central"
-      },
-      {
-        "id": 2,
-        "type": "Environment",
-        "message": "Unhealthy PSI readings reported in West and Central. Sensitive groups should reduce outdoor activity.",
-        "severity": "medium",
-        "region": "West / Central"
-      },
-      {
-        "id": 3,
-        "type": "Infrastructure",
-        "message": "East-West Line delays continue while LTA monitors crowding and bus bridging.",
-        "severity": "medium",
-        "region": "Islandwide"
-      }
+      { "id": 1, "type": "Weather", "message": "Flash flood risk in Orchard & East Coast regions", "severity": "high", "region": "East / Central" },
+      { "id": 2, "type": "Health", "message": "New dengue red zone declared at Bedok North Ave 1. Residents should remove stagnant water and monitor symptoms.", "severity": "high", "region": "East" },
+      { "id": 3, "type": "Supply", "message": "Panadol Menstrual shortage reported at 87 outlets. Alternative pharmacies and substitutes are being coordinated.", "severity": "medium", "region": "Nationwide" },
+      { "id": 4, "type": "Infrastructure", "message": "Power grid fluctuation under assessment in Woodlands. Lift and corridor power checks are underway.", "severity": "medium", "region": "North" },
+      { "id": 5, "type": "Health", "message": "New Covid-19 cluster detected at Jurong West MRT. Masking and testing are advised for recent close contacts.", "severity": "medium", "region": "West" }
     ],
     "nearbyResources": [
-      {
-        "name": "Singapore General Hospital",
-        "type": "Hospital",
-        "distance": "1.2 km",
-        "status": "Available"
-      },
-      {
-        "name": "Tanjong Pagar CC",
-        "type": "Shelter",
-        "distance": "800 m",
-        "status": "Available"
-      },
-      {
-        "name": "Outram Park Clinic",
-        "type": "Clinic",
-        "distance": "1.5 km",
-        "status": "Available"
-      }
+      { "name": "Singapore General Hospital", "type": "Hospital", "distance": "1.2 km", "status": "Available" },
+      { "name": "Tanjong Pagar CC", "type": "Shelter", "distance": "800 m", "status": "Available" },
+      { "name": "Outram Park Clinic", "type": "Clinic", "distance": "1.5 km", "status": "Available" }
     ],
     "updates": [
-      {
-        "time": "5 mins ago",
-        "message": "PUB reports water levels near Central underpasses are receding, but pedestrian diversions remain in place."
-      },
-      {
-        "time": "12 mins ago",
-        "message": "LTA has deployed additional officers for traffic control around affected low-lying roads."
-      },
-      {
-        "time": "25 mins ago",
-        "message": "NEA advises schools and outdoor operators to monitor updated PSI readings before resuming activities."
-      },
-      {
-        "time": "44 mins ago",
-        "message": "Free regular bus bridging activated for selected East-West Line stations."
-      }
+      { "time": "30 mins ago", "message": "Flash flood advisory issued for Orchard Road and East Coast Park areas." },
+      { "time": "2 hours ago", "message": "Dengue red zone declared at Bedok North Ave 1. Residents advised to remove stagnant water." },
+      { "time": "4 hours ago", "message": "Panadol Menstrual shortage confirmed islandwide. Authorities sourcing alternatives." },
+      { "time": "6 hours ago", "message": "Jurong West MRT cluster response activated with additional cleaning and exposure tracing." },
+      { "time": "1 day ago", "message": "Government announces enhanced flood prevention measures for 2026." }
     ]
   },
-  "publicIncidents": [],
+  "publicIncidents": [
+    {
+      "id": "INC-0041",
+      "title": "Flash Flood Warning - Orchard Road & East Coast",
+      "severity": "critical",
+      "type": "Weather",
+      "region": "Central, East",
+      "status": "active",
+      "verified": true,
+      "updates": [
+        { "time": "Jun 5, 14:30 SGT", "text": "Update - Water levels rising at Orchard Road underpass. Avoid the area. Alternative routes advised." },
+        { "time": "Jun 5, 14:10 SGT", "text": "Monitoring - Flash flood risk elevated. PUB drainage teams deployed." },
+        { "time": "Jun 5, 13:55 SGT", "text": "Investigating - Heavy rainfall reported in multiple zones. Assessing flood risk." }
+      ]
+    },
+    {
+      "id": "INC-0040",
+      "title": "Dengue Red Zone - Bedok North Ave 1",
+      "severity": "high",
+      "type": "Health",
+      "region": "East",
+      "status": "active",
+      "verified": true,
+      "updates": [
+        { "time": "Jun 5, 13:00 SGT", "text": "Update - 23 confirmed cases in cluster. NEA fogging operations underway." },
+        { "time": "Jun 5, 10:30 SGT", "text": "Identified - New dengue red zone declared at Bedok North Ave 1." }
+      ]
+    },
+    {
+      "id": "INC-0039",
+      "title": "Panadol Menstrual Shortage - Islandwide",
+      "severity": "medium",
+      "type": "Supply",
+      "region": "Nationwide",
+      "status": "monitoring",
+      "verified": true,
+      "updates": [
+        { "time": "Jun 5, 09:45 SGT", "text": "Update - Alternate suppliers contacted. Estimated restock within 4 days. Pharmacists advised to recommend paracetamol alternatives." },
+        { "time": "Jun 5, 08:00 SGT", "text": "Identified - Islandwide shortage confirmed at 87 outlets. Enterprise SG coordinating response." }
+      ]
+    },
+    {
+      "id": "INC-0038",
+      "title": "Air Quality Advisory - PSI at Unhealthy Levels",
+      "severity": "medium",
+      "type": "Weather",
+      "region": "Nationwide",
+      "status": "monitoring",
+      "verified": true,
+      "updates": [
+        { "time": "Jun 5, 06:30 SGT", "text": "Monitoring - PSI at 156 (Unhealthy). Vulnerable groups should avoid prolonged outdoor activity. Wear N95 masks if going out." }
+      ]
+    },
+    {
+      "id": "INC-0037",
+      "title": "Covid-19 Cluster - Jurong West MRT",
+      "severity": "medium",
+      "type": "Health",
+      "region": "West",
+      "status": "active",
+      "verified": true,
+      "updates": [
+        { "time": "Jun 5, 06:50 SGT", "text": "Cluster investigation activated. MOH is tracing recent contacts and increasing on-site cleaning." }
+      ]
+    }
+  ],
   "pastIncidents": [
-    {
-      "date": "Jun 5, 2026 - Public home updates",
-      "items": [
-        {
-          "title": "Flash flood risk in Orchard & East Coast regions",
-          "type": "Weather",
-          "note": "Archived - East / Central (high)."
-        },
-        {
-          "title": "Air quality advisory - PSI at 156 (Unhealthy). Avoid prolonged outdoor activity.",
-          "type": "Health",
-          "note": "Archived - All (medium)."
-        },
-        {
-          "title": "Flash flood advisory issued for Orchard Road and East Coast Park areas.",
-          "type": "Public update",
-          "note": "Archived - 30 mins ago."
-        },
-        {
-          "title": "Dengue red zone declared at Bedok North Ave 1. Residents advised to remove stagnant water.",
-          "type": "Public update",
-          "note": "Archived - 2 hours ago."
-        },
-        {
-          "title": "Panadol Menstrual shortage confirmed islandwide. Authorities sourcing alternatives.",
-          "type": "Public update",
-          "note": "Archived - 4 hours ago."
-        },
-        {
-          "title": "Government announces enhanced flood prevention measures for 2026.",
-          "type": "Public update",
-          "note": "Archived - 1 day ago."
-        }
-      ]
-    },
-    {
-      "date": "Jun 5, 2026",
-      "items": [
-        {
-          "title": "Flash Flood Warning - Orchard Road & East Coast",
-          "type": "Weather",
-          "note": "Archived - Update - Water levels rising at Orchard Road underpass. Avoid the area. Alternative routes advised."
-        },
-        {
-          "title": "Dengue Red Zone - Bedok North Ave 1",
-          "type": "Health",
-          "note": "Archived - Update - 23 confirmed cases in cluster. NEA fogging operations underway."
-        },
-        {
-          "title": "Panadol Menstrual Shortage - Islandwide",
-          "type": "Supply",
-          "note": "Archived - Update - Alternate suppliers contacted. Estimated restock within 4 days. Pharmacists advised to recommend paracetamol alternatives."
-        },
-        {
-          "title": "Air Quality Advisory - PSI at Unhealthy Levels",
-          "type": "Weather",
-          "note": "Archived - Monitoring - PSI at 156 (Unhealthy). Vulnerable groups should avoid prolonged outdoor activity. Wear N95 masks if going out."
-        }
-      ]
-    },
     {
       "date": "Jun 4, 2026",
       "items": [
-        {
-          "title": "MRT East-West Line Disruption",
-          "type": "Infrastructure",
-          "note": "Resolved - Service resumed at 6:45 PM."
-        },
-        {
-          "title": "Covid-19 Cluster - Jurong West MRT",
-          "type": "Health",
-          "note": "Resolved - Cluster isolated. Enhanced cleaning completed."
-        }
+        { "title": "MRT East-West Line Disruption", "type": "Infrastructure", "note": "Resolved - Service resumed at 6:45 PM." },
+        { "title": "Covid-19 Cluster - Jurong West MRT", "type": "Health", "note": "Resolved - Cluster isolated. Enhanced cleaning completed." }
       ]
     },
     {
       "date": "Jun 3, 2026",
       "items": [
-        {
-          "title": "Haze Advisory lifted",
-          "type": "Weather",
-          "note": "Resolved - PSI returned to Good range."
-        }
+        { "title": "Haze Advisory lifted", "type": "Weather", "note": "Resolved - PSI returned to Good range." }
       ]
     }
   ],
   "cybersecurity": {
     "metrics": [
-      {
-        "label": "Overall Security Status",
-        "value": "Secure",
-        "status": "ok",
-        "icon": "Shield",
-        "colour": "green"
-      },
-      {
-        "label": "Active Threats",
-        "value": "3",
-        "status": "Active",
-        "icon": "AlertTriangle",
-        "colour": "red"
-      },
-      {
-        "label": "Threats Blocked (24h)",
-        "value": "2.4M",
-        "status": "ok",
-        "icon": "Globe",
-        "colour": "blue"
-      },
-      {
-        "label": "System Integrity",
-        "value": "99.97%",
-        "status": "ok",
-        "icon": "Shield",
-        "colour": "purple"
-      }
+      { "label": "Overall Security Status", "value": "Secure", "status": "ok", "icon": "Shield", "colour": "green" },
+      { "label": "Active Threats", "value": "3", "status": "Active", "icon": "AlertTriangle", "colour": "red" },
+      { "label": "Threats Blocked (24h)", "value": "2.4M", "status": "ok", "icon": "Globe", "colour": "blue" },
+      { "label": "System Integrity", "value": "99.97%", "status": "ok", "icon": "Shield", "colour": "purple" }
     ],
     "threats": [
-      {
-        "type": "DDoS Attack",
-        "target": "Gov Portal",
-        "severity": "high",
-        "status": "mitigated",
-        "time": "45 mins ago"
-      },
-      {
-        "type": "Phishing Campaign",
-        "target": "Healthcare System",
-        "severity": "medium",
-        "status": "monitoring",
-        "time": "2 hours ago"
-      },
-      {
-        "type": "Malware Detection",
-        "target": "Public Services",
-        "severity": "low",
-        "status": "resolved",
-        "time": "5 hours ago"
-      }
+      { "type": "DDoS Attack", "target": "Gov Portal", "severity": "high", "status": "mitigated", "time": "45 mins ago" },
+      { "type": "Phishing Campaign", "target": "Healthcare System", "severity": "medium", "status": "monitoring", "time": "2 hours ago" },
+      { "type": "Malware Detection", "target": "Public Services", "severity": "low", "status": "resolved", "time": "5 hours ago" }
     ]
   },
   "recommendations": [
@@ -314,11 +215,7 @@
       "confidence": 87,
       "urgency": "high",
       "region": "East",
-      "sources": [
-        "MOH Case Data",
-        "Hospital Utilization Logs",
-        "Singapore 2023 Outbreak Study"
-      ],
+      "sources": ["MOH Case Data", "Hospital Utilization Logs", "Singapore 2023 Outbreak Study"],
       "comparison": "South Korea implemented similar measures 3 days ahead of peak, reducing overflow by 23%"
     },
     {
@@ -330,11 +227,7 @@
       "confidence": 91,
       "urgency": "high",
       "region": "Nationwide",
-      "sources": [
-        "Supply Chain Analytics",
-        "Import Dependency Map",
-        "WHO Guidelines"
-      ],
+      "sources": ["Supply Chain Analytics", "Import Dependency Map", "WHO Guidelines"],
       "comparison": "Taiwan maintains 3-source minimum for critical medicines, reducing supply disruptions by 67%"
     },
     {
@@ -346,11 +239,7 @@
       "confidence": 78,
       "urgency": "high",
       "region": "Central, East",
-      "sources": [
-        "NEA Weather Models",
-        "PUB Drainage Data",
-        "2018 Flood Analysis"
-      ],
+      "sources": ["NEA Weather Models", "PUB Drainage Data", "2018 Flood Analysis"],
       "comparison": "Netherlands uses similar predictive models with 82% accuracy in flood prevention"
     },
     {
@@ -362,11 +251,7 @@
       "confidence": 83,
       "urgency": "medium",
       "region": "East",
-      "sources": [
-        "NEA Dengue Surveillance",
-        "MOH Case Reports",
-        "Population Density Data"
-      ],
+      "sources": ["NEA Dengue Surveillance", "MOH Case Reports", "Population Density Data"],
       "comparison": "Malaysia reduced cluster spread by 34% with preemptive fogging within 48h of detection"
     },
     {
@@ -378,11 +263,7 @@
       "confidence": 95,
       "urgency": "medium",
       "region": "Nationwide",
-      "sources": [
-        "CSA Threat Intelligence",
-        "Interpol Cyber Advisory",
-        "Internal Network Scans"
-      ],
+      "sources": ["CSA Threat Intelligence", "Interpol Cyber Advisory", "Internal Network Scans"],
       "comparison": "Australia neutralised similar threats within 6h using coordinated patch deployment"
     }
   ],
@@ -395,159 +276,38 @@
     },
     "crisisTopicSets": {
       "health": [
-        {
-          "topic": "Covid-19 Response",
-          "sentiment": "positive",
-          "score": 72,
-          "trend": "up",
-          "source": "Social Media / Forum"
-        },
-        {
-          "topic": "Medicine Availability (Panadol)",
-          "sentiment": "negative",
-          "score": 38,
-          "trend": "down",
-          "source": "Citizen Reports / Tweets"
-        },
-        {
-          "topic": "Hospital Wait Times",
-          "sentiment": "neutral",
-          "score": 52,
-          "trend": "stable",
-          "source": "Forum / Reviews"
-        },
-        {
-          "topic": "Dengue Prevention Info",
-          "sentiment": "positive",
-          "score": 68,
-          "trend": "up",
-          "source": "Social Media"
-        }
+        { "topic": "Covid-19 Response", "sentiment": "positive", "score": 72, "trend": "up", "source": "Social Media / Forum" },
+        { "topic": "Medicine Availability (Panadol)", "sentiment": "negative", "score": 38, "trend": "down", "source": "Citizen Reports / Tweets" },
+        { "topic": "Hospital Wait Times", "sentiment": "neutral", "score": 52, "trend": "stable", "source": "Forum / Reviews" },
+        { "topic": "Dengue Prevention Info", "sentiment": "positive", "score": 68, "trend": "up", "source": "Social Media" }
       ],
       "weather": [
-        {
-          "topic": "Flood Preparedness",
-          "sentiment": "neutral",
-          "score": 60,
-          "trend": "up",
-          "source": "Social Media"
-        },
-        {
-          "topic": "Haze Advisories",
-          "sentiment": "positive",
-          "score": 74,
-          "trend": "up",
-          "source": "Forum"
-        },
-        {
-          "topic": "Public Transport Disruption",
-          "sentiment": "negative",
-          "score": 41,
-          "trend": "down",
-          "source": "Twitter / Citizen Reports"
-        }
+        { "topic": "Flood Preparedness", "sentiment": "neutral", "score": 60, "trend": "up", "source": "Social Media" },
+        { "topic": "Haze Advisories", "sentiment": "positive", "score": 74, "trend": "up", "source": "Forum" },
+        { "topic": "Public Transport Disruption", "sentiment": "negative", "score": 41, "trend": "down", "source": "Twitter / Citizen Reports" }
       ],
       "supply": [
-        {
-          "topic": "Panadol Shortage Anxiety",
-          "sentiment": "negative",
-          "score": 29,
-          "trend": "down",
-          "source": "Twitter / WhatsApp"
-        },
-        {
-          "topic": "Government Communication",
-          "sentiment": "neutral",
-          "score": 56,
-          "trend": "stable",
-          "source": "Forum / Survey"
-        },
-        {
-          "topic": "Essential Supply Status",
-          "sentiment": "positive",
-          "score": 71,
-          "trend": "up",
-          "source": "Official Channels"
-        }
+        { "topic": "Panadol Shortage Anxiety", "sentiment": "negative", "score": 29, "trend": "down", "source": "Twitter / WhatsApp" },
+        { "topic": "Government Communication", "sentiment": "neutral", "score": 56, "trend": "stable", "source": "Forum / Survey" },
+        { "topic": "Essential Supply Status", "sentiment": "positive", "score": 71, "trend": "up", "source": "Official Channels" }
       ]
     },
     "misinfoQueue": [
-      {
-        "id": 1,
-        "claim": "Hospitals running out of beds",
-        "status": "flagged",
-        "priority": "high",
-        "source": "Twitter",
-        "crisisType": "health",
-        "reports": 347
-      },
-      {
-        "id": 2,
-        "claim": "Water supply contaminated in Jurong",
-        "status": "verified-false",
-        "priority": "high",
-        "source": "WhatsApp",
-        "crisisType": "health",
-        "reports": 892
-      },
-      {
-        "id": 3,
-        "claim": "Border closure imminent next week",
-        "status": "under-review",
-        "priority": "medium",
-        "source": "Forum",
-        "crisisType": "health",
-        "reports": 124
-      },
-      {
-        "id": 4,
-        "claim": "Panadol shortage is permanent",
-        "status": "flagged",
-        "priority": "medium",
-        "source": "Social Media",
-        "crisisType": "supply",
-        "reports": 203
-      }
+      { "id": 1, "claim": "Hospitals running out of beds", "status": "flagged", "priority": "high", "source": "Twitter", "crisisType": "health", "reports": 347 },
+      { "id": 2, "claim": "Water supply contaminated in Jurong", "status": "verified-false", "priority": "high", "source": "WhatsApp", "crisisType": "health", "reports": 892 },
+      { "id": 3, "claim": "Border closure imminent next week", "status": "under-review", "priority": "medium", "source": "Forum", "crisisType": "health", "reports": 124 },
+      { "id": 4, "claim": "Panadol shortage is permanent", "status": "flagged", "priority": "medium", "source": "Social Media", "crisisType": "supply", "reports": 203 }
     ],
     "socialSources": [
-      {
-        "platform": "Twitter / X",
-        "posts": 12450,
-        "sentiment": "mixed",
-        "trending": "#Singapore #Dengue #Panadol"
-      },
-      {
-        "platform": "Citizen Reports",
-        "posts": 3287,
-        "sentiment": "concerned",
-        "trending": "Supply, Flood, Health"
-      },
-      {
-        "platform": "Community Forum (SiGnal)",
-        "posts": 876,
-        "sentiment": "moderate",
-        "trending": "Transport, Haze"
-      },
-      {
-        "platform": "WhatsApp Forwarded",
-        "posts": 5100,
-        "sentiment": "anxious",
-        "trending": "Misinformation detected"
-      }
+      { "platform": "Twitter / X", "posts": 12450, "sentiment": "mixed", "trending": "#Singapore #Dengue #Panadol" },
+      { "platform": "Citizen Reports", "posts": 3287, "sentiment": "concerned", "trending": "Supply, Flood, Health" },
+      { "platform": "Community Forum (SiGnal)", "posts": 876, "sentiment": "moderate", "trending": "Transport, Haze" },
+      { "platform": "WhatsApp Forwarded", "posts": 5100, "sentiment": "anxious", "trending": "Misinformation detected" }
     ],
     "crisisFilters": [
-      {
-        "id": "health",
-        "label": "Health"
-      },
-      {
-        "id": "weather",
-        "label": "Weather"
-      },
-      {
-        "id": "supply",
-        "label": "Supply Chain"
-      }
+      { "id": "health", "label": "Health" },
+      { "id": "weather", "label": "Weather" },
+      { "id": "supply", "label": "Supply Chain" }
     ],
     "summary": {
       "body": "Increasing public concern regarding Panadol Menstrual shortage and dengue cluster expansion. Recommend proactive communication campaign to address misinformation and clarify supply status. 47 flagged instances require human verification before public correction.",
@@ -557,135 +317,11 @@
   },
   "historicalCrises": [
     {
-      "name": "Covid-19",
-      "date": "Jun 5, 2026",
-      "severity": "Medium",
-      "outcome": "Archived dashboard scenario",
-      "lessonsLearned": [
-        "Health dashboard scenario retained for historical analysis.",
-        "Active cases today: 378 (+12%); ICU occupancy: 25 (+5)",
-        "Removed from active dashboard state until live data creates a current incident."
-      ],
-      "effectiveness": 76
-    },
-    {
-      "name": "Dengue",
-      "date": "Jun 5, 2026",
-      "severity": "High",
-      "outcome": "Archived dashboard scenario",
-      "lessonsLearned": [
-        "Health dashboard scenario retained for historical analysis.",
-        "Red zone clusters: 14 (+3); Cases this week: 212 (+8%)",
-        "Removed from active dashboard state until live data creates a current incident."
-      ],
-      "effectiveness": 82
-    },
-    {
-      "name": "Flash Flood Risk",
-      "date": "Jun 5, 2026",
-      "severity": "High",
-      "outcome": "Archived dashboard scenario",
-      "lessonsLearned": [
-        "Weather dashboard scenario retained for historical analysis.",
-        "High-risk zones: 6; Peak rainfall (1h): 45mm (Alert)",
-        "Removed from active dashboard state until live data creates a current incident."
-      ],
-      "effectiveness": 82
-    },
-    {
-      "name": "Panadol Shortage",
-      "date": "Jun 5, 2026",
-      "severity": "Medium",
-      "outcome": "Archived dashboard scenario",
-      "lessonsLearned": [
-        "Supply Chain dashboard scenario retained for historical analysis.",
-        "Affected outlets: 87; Est. restock: 4 days",
-        "Removed from active dashboard state until live data creates a current incident."
-      ],
-      "effectiveness": 76
-    },
-    {
-      "name": "Cyber Incident",
-      "date": "Jun 5, 2026",
-      "severity": "Low",
-      "outcome": "Archived dashboard scenario",
-      "lessonsLearned": [
-        "Cybersecurity dashboard scenario retained for historical analysis.",
-        "Active threats: 3 (-1)",
-        "Removed from active dashboard state until live data creates a current incident."
-      ],
-      "effectiveness": 76
-    },
-    {
-      "name": "Flash flood risk in Orchard & East Coast",
-      "date": "Jun 5, 2026 - 10:23 AM",
-      "severity": "High",
-      "outcome": "Archived historical alert",
-      "lessonsLearned": [
-        "Weather alert archived for historical review.",
-        "Region affected: East/Central.",
-        "Retained as reference data instead of active dashboard state."
-      ],
-      "effectiveness": 82
-    },
-    {
-      "name": "New dengue red zone: Bedok North Ave 1",
-      "date": "Jun 5, 2026 - 09:45 AM",
-      "severity": "High",
-      "outcome": "Archived historical alert",
-      "lessonsLearned": [
-        "Health alert archived for historical review.",
-        "Region affected: East.",
-        "Retained as reference data instead of active dashboard state."
-      ],
-      "effectiveness": 82
-    },
-    {
-      "name": "Panadol Menstrual out-of-stock at 87 outlets",
-      "date": "Jun 5, 2026 - 08:30 AM",
-      "severity": "Medium",
-      "outcome": "Archived historical alert",
-      "lessonsLearned": [
-        "Supply alert archived for historical review.",
-        "Region affected: Nationwide.",
-        "Retained as reference data instead of active dashboard state."
-      ],
-      "effectiveness": 76
-    },
-    {
-      "name": "Power grid fluctuation in Woodlands",
-      "date": "Jun 5, 2026 - 07:15 AM",
-      "severity": "Medium",
-      "outcome": "Archived historical alert",
-      "lessonsLearned": [
-        "Infrastructure alert archived for historical review.",
-        "Region affected: North.",
-        "Retained as reference data instead of active dashboard state."
-      ],
-      "effectiveness": 76
-    },
-    {
-      "name": "New Covid-19 cluster at Jurong West MRT",
-      "date": "Jun 5, 2026 - 06:50 AM",
-      "severity": "Medium",
-      "outcome": "Archived historical alert",
-      "lessonsLearned": [
-        "Health alert archived for historical review.",
-        "Region affected: West.",
-        "Retained as reference data instead of active dashboard state."
-      ],
-      "effectiveness": 76
-    },
-    {
       "name": "2023 Dengue Outbreak",
       "date": "June - August 2023",
       "severity": "High",
       "outcome": "Successfully contained",
-      "lessonsLearned": [
-        "Early cluster detection reduced spread by 34%",
-        "Community engagement programs improved compliance by 45%",
-        "Resource pre-positioning cut response time by 2.5 days"
-      ],
+      "lessonsLearned": ["Early cluster detection reduced spread by 34%", "Community engagement programs improved compliance by 45%", "Resource pre-positioning cut response time by 2.5 days"],
       "effectiveness": 87
     },
     {
@@ -693,11 +329,7 @@
       "date": "December 2022",
       "severity": "Medium",
       "outcome": "Managed with minimal disruption",
-      "lessonsLearned": [
-        "Enhanced drainage monitoring prevented overflow in 12 locations",
-        "Public transport rerouting protocols improved commute times by 18%",
-        "Real-time alerts reduced property damage by 23%"
-      ],
+      "lessonsLearned": ["Enhanced drainage monitoring prevented overflow in 12 locations", "Public transport rerouting protocols improved commute times by 18%", "Real-time alerts reduced property damage by 23%"],
       "effectiveness": 82
     },
     {
@@ -705,11 +337,7 @@
       "date": "September - October 2021",
       "severity": "High",
       "outcome": "Effectively mitigated health impacts",
-      "lessonsLearned": [
-        "N95 mask distribution to vulnerable groups reduced hospital visits by 31%",
-        "Air quality advisories via mobile apps reached 89% of population",
-        "School closure protocols minimized student exposure"
-      ],
+      "lessonsLearned": ["N95 mask distribution to vulnerable groups reduced hospital visits by 31%", "Air quality advisories via mobile apps reached 89% of population", "School closure protocols minimized student exposure"],
       "effectiveness": 79
     }
   ]

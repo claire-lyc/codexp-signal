@@ -139,6 +139,227 @@ type SubjectTagRow = {
 
 let subjectTagVerificationColumnReady = false;
 
+function demoSubjectTag(id: string, label: string, categories: string[]): ReportSubjectTag {
+  return {
+    id,
+    label,
+    description: null,
+    categories,
+    verifiedAt: null,
+  };
+}
+
+function defaultDemoTickets(): Ticket[] {
+  return [
+    {
+      id: 'TKT-0041',
+      timestamp: '2026-06-05 14:22',
+      reporter: 'Citizen (Anonymous)',
+      message: 'Panadol Menstrual completely out of stock at Jurong Point Watsons, Unity, and Guardian. Checked 4 outlets in the area.',
+      location: 'Jurong Point, West',
+      crisisType: 'Supply Chain',
+      specificCrisis: 'Medicine shortage',
+      status: 'open',
+      assignedAgency: 'Enterprise SG',
+      urgency: 'high',
+      hasImage: false,
+      relatedTickets: ['TKT-0039', 'TKT-0034'],
+      comments: [{ id: 'seed-comment-0041', author: 'Form Handler', visibility: 'internal', body: 'Enterprise SG should verify retail stock and supplier ETA.', createdAt: '2026-06-05T14:15:00+08:00' }],
+      pingedAgencies: [],
+      subjectTag: demoSubjectTag('seed-medicine-shortage', 'Medicine shortage', ['supply', 'health']),
+      startedWorkAt: null,
+      startedWorkBy: null,
+      currentHandler: null,
+    },
+    {
+      id: 'TKT-0040',
+      timestamp: '2026-06-05 13:55',
+      reporter: 'User #7821',
+      message: 'Flooding at Orchard underpass - water knee-deep. Cars stalling.',
+      location: 'Orchard Road, Central',
+      crisisType: 'Weather',
+      specificCrisis: 'Orchard Road flooding',
+      status: 'in-progress',
+      assignedAgency: 'PUB',
+      urgency: 'critical',
+      hasImage: true,
+      relatedTickets: ['TKT-0036', 'TKT-0035'],
+      comments: [{ id: 'seed-comment-0040', author: 'Form Handler', visibility: 'internal', body: 'PUB ops notified. Check whether LTA traffic diversion is needed.', createdAt: '2026-06-05T13:44:00+08:00' }],
+      pingedAgencies: ['PUB', 'LTA'],
+      subjectTag: demoSubjectTag('seed-orchard-flooding', 'Orchard Road flooding', ['flood', 'transport']),
+      startedWorkAt: null,
+      startedWorkBy: null,
+      currentHandler: null,
+    },
+    {
+      id: 'TKT-0039',
+      timestamp: '2026-06-05 13:40',
+      reporter: 'User #3312',
+      message: 'Cannot find Panadol Menstrual anywhere in Tampines Hub area.',
+      location: 'Tampines Hub, East',
+      crisisType: 'Supply Chain',
+      specificCrisis: 'Medicine shortage',
+      status: 'grouped',
+      assignedAgency: 'Enterprise SG',
+      urgency: 'medium',
+      hasImage: false,
+      relatedTickets: ['TKT-0041', 'TKT-0034'],
+      comments: [],
+      pingedAgencies: [],
+      subjectTag: demoSubjectTag('seed-medicine-shortage', 'Medicine shortage', ['supply', 'health']),
+      startedWorkAt: null,
+      startedWorkBy: null,
+      currentHandler: null,
+    },
+    {
+      id: 'TKT-0038',
+      timestamp: '2026-06-05 13:10',
+      reporter: 'User #5509',
+      message: 'Dengue symptoms visible in family of 3. Requesting health advisory for Bedok North Ave 1.',
+      location: 'Bedok North Ave 1, East',
+      crisisType: 'Health',
+      specificCrisis: 'Dengue',
+      status: 'open',
+      assignedAgency: 'MOH',
+      urgency: 'high',
+      hasImage: false,
+      relatedTickets: ['TKT-0029'],
+      comments: [],
+      pingedAgencies: ['NEA'],
+      subjectTag: demoSubjectTag('seed-dengue', 'Dengue', ['health']),
+      startedWorkAt: null,
+      startedWorkBy: null,
+      currentHandler: null,
+    },
+    {
+      id: 'TKT-0036',
+      timestamp: '2026-06-05 10:15',
+      reporter: 'User #2201',
+      message: 'Road flooded at Orchard Road near Ngee Ann City. Traffic at standstill.',
+      location: 'Orchard Road, Central',
+      crisisType: 'Weather',
+      specificCrisis: 'Orchard Road flooding',
+      status: 'grouped',
+      assignedAgency: 'PUB',
+      urgency: 'critical',
+      hasImage: true,
+      relatedTickets: ['TKT-0040', 'TKT-0035'],
+      comments: [],
+      pingedAgencies: ['PUB'],
+      subjectTag: demoSubjectTag('seed-orchard-flooding', 'Orchard Road flooding', ['flood', 'transport']),
+      startedWorkAt: null,
+      startedWorkBy: null,
+      currentHandler: null,
+    },
+    {
+      id: 'TKT-0035',
+      timestamp: '2026-06-05 09:42',
+      reporter: 'Citizen (Anonymous)',
+      message: 'Second report of flooding near Orchard Road underpass. Water already entering the pedestrian crossing and taxis are turning back.',
+      location: 'Orchard Road, Central',
+      crisisType: 'Weather',
+      specificCrisis: 'Orchard Road flooding',
+      status: 'grouped',
+      assignedAgency: 'PUB',
+      urgency: 'critical',
+      hasImage: true,
+      relatedTickets: ['TKT-0040', 'TKT-0036'],
+      comments: [],
+      pingedAgencies: ['PUB', 'LTA'],
+      subjectTag: demoSubjectTag('seed-orchard-flooding', 'Orchard Road flooding', ['flood', 'transport']),
+      startedWorkAt: null,
+      startedWorkBy: null,
+      currentHandler: null,
+    },
+    {
+      id: 'TKT-0034',
+      timestamp: '2026-06-05 09:18',
+      reporter: 'User #1188',
+      message: 'Guardian and Unity near Tampines Hub are out of children fever medicine and staff say more people have been asking since morning.',
+      location: 'Tampines Hub, East',
+      crisisType: 'Supply Chain',
+      specificCrisis: 'Medicine shortage',
+      status: 'grouped',
+      assignedAgency: 'Enterprise SG',
+      urgency: 'medium',
+      hasImage: false,
+      relatedTickets: ['TKT-0041', 'TKT-0039'],
+      comments: [],
+      pingedAgencies: ['MOH'],
+      subjectTag: demoSubjectTag('seed-medicine-shortage', 'Medicine shortage', ['supply', 'health']),
+      startedWorkAt: null,
+      startedWorkBy: null,
+      currentHandler: null,
+    },
+    {
+      id: 'TKT-0033',
+      timestamp: '2026-06-05 08:37',
+      reporter: 'User #9041',
+      message: 'Several seniors at a day activity centre near Toa Payoh are coughing and two tested positive for Covid-19 this morning.',
+      location: 'Toa Payoh Central, Central',
+      crisisType: 'Health',
+      specificCrisis: 'COVID-19',
+      status: 'open',
+      assignedAgency: 'MOH',
+      urgency: 'medium',
+      hasImage: false,
+      relatedTickets: ['TKT-0028'],
+      comments: [{ id: 'seed-comment-0033', author: 'Form Handler', visibility: 'internal', body: 'Escalate to cluster triage and confirm exposed headcount with centre staff.', createdAt: '2026-06-05T08:32:00+08:00' }],
+      pingedAgencies: [],
+      subjectTag: demoSubjectTag('seed-covid', 'COVID-19', ['health']),
+      startedWorkAt: null,
+      startedWorkBy: null,
+      currentHandler: null,
+    },
+    {
+      id: 'TKT-0032',
+      timestamp: '2026-06-05 08:04',
+      reporter: 'Citizen (Anonymous)',
+      message: 'Power keeps fluctuating at several blocks in Woodlands. Corridor lights blink and one lift stopped briefly.',
+      location: 'Woodlands Drive 52, North',
+      crisisType: 'Infrastructure',
+      specificCrisis: 'Power fluctuation',
+      status: 'open',
+      assignedAgency: 'LTA',
+      urgency: 'high',
+      hasImage: false,
+      relatedTickets: [],
+      comments: [],
+      pingedAgencies: ['SCDF'],
+      subjectTag: demoSubjectTag('seed-power', 'Power fluctuation', ['infrastructure']),
+      startedWorkAt: null,
+      startedWorkBy: null,
+      currentHandler: null,
+    },
+    {
+      id: 'TKT-0031',
+      timestamp: '2026-06-05 07:28',
+      reporter: 'User #7770',
+      message: 'A loud alarm has been ringing at a public facility near Clementi but nobody nearby knows which agency is responsible.',
+      location: 'Clementi Avenue 3, West',
+      crisisType: 'Infrastructure',
+      specificCrisis: null,
+      status: 'open',
+      assignedAgency: 'GOV-OPS',
+      urgency: 'low',
+      hasImage: false,
+      relatedTickets: [],
+      comments: [],
+      pingedAgencies: [],
+      subjectTag: null,
+      startedWorkAt: null,
+      startedWorkBy: null,
+      currentHandler: null,
+    },
+  ];
+}
+
+function mergeDemoTickets(tickets: Ticket[]) {
+  const defaults = defaultDemoTickets();
+  const seen = new Set(tickets.map((ticket) => ticket.id));
+  return [...tickets, ...defaults.filter((ticket) => !seen.has(ticket.id))];
+}
+
 async function ensureSubjectTagVerificationColumns() {
   if (subjectTagVerificationColumnReady) return;
   await query(`
@@ -247,7 +468,8 @@ export async function listTickets(filters: {
     values,
   );
 
-  return hydrateTickets(reports, { includeImages: false });
+  const hydrated = await hydrateTickets(reports, { includeImages: false });
+  return mergeDemoTickets(hydrated);
 }
 
 export async function getTicketByPublicId(publicReportId: string) {
@@ -295,7 +517,7 @@ export async function getTicketByPublicId(publicReportId: string) {
   );
 
   const [ticket] = await hydrateTickets(reports, { includeImages: true });
-  return ticket ?? null;
+  return ticket ?? defaultDemoTickets().find((item) => item.id === publicReportId) ?? null;
 }
 
 export async function listTicketsForReporter(userId: string, options: { visibleFeed?: boolean } = {}) {

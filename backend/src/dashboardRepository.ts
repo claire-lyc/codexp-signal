@@ -25,6 +25,127 @@ export type AlertRow = {
   resolved_at: string | null;
 };
 
+const defaultCrises: CrisisRow[] = [
+  {
+    id: 'seed-crisis-covid',
+    name: 'Covid-19',
+    crisis_type: 'health',
+    status: 'active',
+    severity: 'medium',
+    summary: 'Active cases today: 378; ICU occupancy: 25.',
+    started_at: '2026-06-05T06:50:00+08:00',
+    resolved_at: null,
+    created_at: '2026-06-05T06:50:00+08:00',
+    updated_at: '2026-06-05T06:50:00+08:00',
+  },
+  {
+    id: 'seed-crisis-dengue',
+    name: 'Dengue',
+    crisis_type: 'health',
+    status: 'active',
+    severity: 'high',
+    summary: 'Red zone clusters: 14; cases this week: 212.',
+    started_at: '2026-06-05T09:45:00+08:00',
+    resolved_at: null,
+    created_at: '2026-06-05T09:45:00+08:00',
+    updated_at: '2026-06-05T09:45:00+08:00',
+  },
+  {
+    id: 'seed-crisis-flood',
+    name: 'Flash Flood Risk',
+    crisis_type: 'weather',
+    status: 'active',
+    severity: 'high',
+    summary: 'High-risk zones: 6; peak rainfall (1h): 45mm.',
+    started_at: '2026-06-05T10:23:00+08:00',
+    resolved_at: null,
+    created_at: '2026-06-05T10:23:00+08:00',
+    updated_at: '2026-06-05T10:23:00+08:00',
+  },
+  {
+    id: 'seed-crisis-panadol',
+    name: 'Panadol Shortage',
+    crisis_type: 'supply_chain',
+    status: 'active',
+    severity: 'medium',
+    summary: 'Affected outlets: 87; estimated restock: 4 days.',
+    started_at: '2026-06-05T08:30:00+08:00',
+    resolved_at: null,
+    created_at: '2026-06-05T08:30:00+08:00',
+    updated_at: '2026-06-05T08:30:00+08:00',
+  },
+  {
+    id: 'seed-crisis-cyber',
+    name: 'Cyber Incident',
+    crisis_type: 'cybersecurity',
+    status: 'active',
+    severity: 'low',
+    summary: 'Active threats: 3.',
+    started_at: '2026-06-05T07:15:00+08:00',
+    resolved_at: null,
+    created_at: '2026-06-05T07:15:00+08:00',
+    updated_at: '2026-06-05T07:15:00+08:00',
+  },
+];
+
+const defaultAlerts: AlertRow[] = [
+  {
+    id: 'seed-alert-flood',
+    title: 'Flash flood risk in Orchard & East Coast',
+    message: 'Flash flood risk in Orchard & East Coast',
+    crisis_type: 'weather',
+    severity: 'high',
+    region: 'East/Central',
+    status: 'active',
+    created_at: '2026-06-05T10:23:00+08:00',
+    resolved_at: null,
+  },
+  {
+    id: 'seed-alert-dengue',
+    title: 'New dengue red zone: Bedok North Ave 1',
+    message: 'New dengue red zone: Bedok North Ave 1',
+    crisis_type: 'health',
+    severity: 'high',
+    region: 'East',
+    status: 'active',
+    created_at: '2026-06-05T09:45:00+08:00',
+    resolved_at: null,
+  },
+  {
+    id: 'seed-alert-panadol',
+    title: 'Panadol Menstrual out-of-stock at 87 outlets',
+    message: 'Panadol Menstrual out-of-stock at 87 outlets',
+    crisis_type: 'supply_chain',
+    severity: 'medium',
+    region: 'Nationwide',
+    status: 'active',
+    created_at: '2026-06-05T08:30:00+08:00',
+    resolved_at: null,
+  },
+  {
+    id: 'seed-alert-power',
+    title: 'Power grid fluctuation in Woodlands',
+    message: 'Power grid fluctuation in Woodlands',
+    crisis_type: 'infrastructure',
+    severity: 'medium',
+    region: 'North',
+    status: 'active',
+    created_at: '2026-06-05T07:15:00+08:00',
+    resolved_at: null,
+  },
+  {
+    id: 'seed-alert-covid',
+    title: 'New Covid-19 cluster at Jurong West MRT',
+    message: 'New Covid-19 cluster at Jurong West MRT',
+    crisis_type: 'health',
+    severity: 'medium',
+    region: 'West',
+    status: 'active',
+    created_at: '2026-06-05T06:50:00+08:00',
+    resolved_at: null,
+  },
+];
+
 export async function listCrises(filters: { status?: string; crisisType?: string }) {
   const clauses: string[] = [];
   const values: string[] = [];
@@ -39,7 +160,7 @@ export async function listCrises(filters: { status?: string; crisisType?: string
     clauses.push(`crisis_type = $${values.length}`);
   }
 
-  return query<CrisisRow>(
+  const rows = await query<CrisisRow>(
     `
       SELECT id, name, crisis_type, status, severity, summary, started_at, resolved_at, created_at, updated_at
       FROM dashboard.crises
@@ -55,6 +176,7 @@ export async function listCrises(filters: { status?: string; crisisType?: string
     `,
     values,
   );
+  return mergeCrisisRows(rows, filters);
 }
 
 export async function listAlerts(filters: { status?: string; crisisType?: string; region?: string }) {
@@ -76,7 +198,7 @@ export async function listAlerts(filters: { status?: string; crisisType?: string
     clauses.push(`region ILIKE $${values.length}`);
   }
 
-  return query<AlertRow>(
+  const rows = await query<AlertRow>(
     `
       SELECT id, title, message, crisis_type, severity, region, status, created_at, resolved_at
       FROM dashboard.alerts
@@ -85,6 +207,7 @@ export async function listAlerts(filters: { status?: string; crisisType?: string
     `,
     values,
   );
+  return mergeAlertRows(rows, filters);
 }
 
 export async function getLatestSnapshot<T>(snapshotKey: string): Promise<T | null> {
@@ -117,3 +240,23 @@ export async function getLatestMapLayer(layerKey: string) {
   return rows[0] ?? null;
 }
 
+function mergeCrisisRows(rows: CrisisRow[], filters: { status?: string; crisisType?: string }) {
+  const baseline = defaultCrises.filter((item) => {
+    const statusMatch = !filters.status || item.status === filters.status;
+    const typeMatch = !filters.crisisType || item.crisis_type === filters.crisisType;
+    return statusMatch && typeMatch;
+  });
+  const seen = new Set(rows.map((row) => row.name.toLowerCase()));
+  return [...rows, ...baseline.filter((item) => !seen.has(item.name.toLowerCase()))];
+}
+
+function mergeAlertRows(rows: AlertRow[], filters: { status?: string; crisisType?: string; region?: string }) {
+  const baseline = defaultAlerts.filter((item) => {
+    const statusMatch = !filters.status || item.status === filters.status;
+    const typeMatch = !filters.crisisType || item.crisis_type === filters.crisisType;
+    const regionMatch = !filters.region || (item.region ?? '').toLowerCase().includes(filters.region.toLowerCase());
+    return statusMatch && typeMatch && regionMatch;
+  });
+  const seen = new Set(rows.map((row) => row.title.toLowerCase()));
+  return [...rows, ...baseline.filter((item) => !seen.has(item.title.toLowerCase()))];
+}
