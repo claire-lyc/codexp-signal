@@ -1,7 +1,36 @@
 {
   "generatedAt": "2026-06-07T20:45:00+08:00",
   "crisisCards": [],
-  "govAlerts": [],
+  "govAlerts": [
+    {
+      "type": "Weather",
+      "severity": "high",
+      "message": "Flash flood advisory active for Central underpasses. PUB and LTA are coordinating drain clearance and lane diversions.",
+      "region": "Central",
+      "time": "18 mins ago"
+    },
+    {
+      "type": "Environment",
+      "severity": "medium",
+      "message": "Air quality has reached unhealthy range in West and Central. NEA advises reducing prolonged outdoor activity.",
+      "region": "West / Central",
+      "time": "42 mins ago"
+    },
+    {
+      "type": "Infrastructure",
+      "severity": "medium",
+      "message": "East-West Line disruption under monitoring. LTA has activated bus bridging and station crowd control.",
+      "region": "Islandwide",
+      "time": "1 hour ago"
+    },
+    {
+      "type": "Health",
+      "severity": "low",
+      "message": "Dengue cluster watch continues in Bedok North. NEA completed follow-up vector control checks.",
+      "region": "East",
+      "time": "2 hours ago"
+    }
+  ],
   "incidentTrend": [
     {
       "date": "May 13",
@@ -38,8 +67,12 @@
     "sources": "MOH, NEA, Enterprise SG"
   },
   "publicHome": {
-    "activeCrisisLabels": [],
-    "summary": "No current public emergency broadcast is active. Check government broadcasts and historical incidents for archived advisories.",
+    "activeCrisisLabels": [
+      "Flash Flood Advisory",
+      "Air Quality Advisory",
+      "Rail Service Disruption"
+    ],
+    "summary": "Multiple active advisories are being monitored. Follow official broadcasts for transport, weather, and air quality updates.",
     "stats": [
       {
         "label": "Covid-19 Cases Today",
@@ -66,7 +99,29 @@
         "colour": "blue"
       }
     ],
-    "activeAlerts": [],
+    "activeAlerts": [
+      {
+        "id": 1,
+        "type": "Weather",
+        "message": "Flash flood advisory active for Central underpasses. Avoid low-lying roads and follow LTA diversions.",
+        "severity": "high",
+        "region": "Central"
+      },
+      {
+        "id": 2,
+        "type": "Environment",
+        "message": "Unhealthy PSI readings reported in West and Central. Sensitive groups should reduce outdoor activity.",
+        "severity": "medium",
+        "region": "West / Central"
+      },
+      {
+        "id": 3,
+        "type": "Infrastructure",
+        "message": "East-West Line delays continue while LTA monitors crowding and bus bridging.",
+        "severity": "medium",
+        "region": "Islandwide"
+      }
+    ],
     "nearbyResources": [
       {
         "name": "Singapore General Hospital",
@@ -87,7 +142,24 @@
         "status": "Available"
       }
     ],
-    "updates": []
+    "updates": [
+      {
+        "time": "5 mins ago",
+        "message": "PUB reports water levels near Central underpasses are receding, but pedestrian diversions remain in place."
+      },
+      {
+        "time": "12 mins ago",
+        "message": "LTA has deployed additional officers for traffic control around affected low-lying roads."
+      },
+      {
+        "time": "25 mins ago",
+        "message": "NEA advises schools and outdoor operators to monitor updated PSI readings before resuming activities."
+      },
+      {
+        "time": "44 mins ago",
+        "message": "Free regular bus bridging activated for selected East-West Line stations."
+      }
+    ]
   },
   "publicIncidents": [],
   "pastIncidents": [

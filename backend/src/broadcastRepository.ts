@@ -75,6 +75,7 @@ export async function listBroadcasts(options: { includeResolved?: boolean; userI
     `,
     [options.userId ?? null],
   );
+  if (!rows.length) return defaultBroadcastItems(options);
   return hydrateBroadcasts(rows);
 }
 
@@ -267,6 +268,114 @@ function toBroadcastItem(row: BroadcastRow, updates: BroadcastItem['updates']): 
     updates,
     notificationAction: row.dismissed_action,
   };
+}
+
+function defaultBroadcastItems(options: { includeResolved?: boolean } = {}): BroadcastItem[] {
+  const items: BroadcastItem[] = [
+    {
+      id: '11111111-1111-4111-8111-111111111111',
+      title: 'Flash Flood Advisory - Central',
+      message: 'PUB has verified flash flooding near Orchard underpass and nearby low-lying roads. Avoid flooded roads, stay away from underpasses, and follow LTA diversion updates.',
+      severity: 'high',
+      target: 'Citizens in Central + PUB, LTA',
+      targetAgencies: ['PUB', 'LTA'],
+      targetRegions: ['Central'],
+      platforms: ['Web', 'Mobile', 'SMS'],
+      recipients: 362000,
+      status: 'ongoing',
+      time: relativeTime(minutesAgo(18)),
+      createdAt: minutesAgo(18),
+      resolvedAt: null,
+      updates: [
+        defaultBroadcastUpdate('11111111-1111-4111-8111-111111111112', 'PUB field teams are clearing blocked drains. LTA has started lane diversions around the affected underpass.', 12),
+        defaultBroadcastUpdate('11111111-1111-4111-8111-111111111113', 'Water level is receding but pedestrians should continue using marked alternative crossings.', 5),
+      ],
+      senderName: 'PUB Operations',
+      senderRole: 'Duty Officer',
+      senderAgencyCode: 'PUB',
+    },
+    {
+      id: '22222222-2222-4222-8222-222222222222',
+      title: 'Air Quality Advisory - West and Central',
+      message: 'NEA readings show unhealthy PSI levels in parts of the West and Central region. Reduce prolonged outdoor activity and keep medication nearby if sensitive to haze.',
+      severity: 'medium',
+      target: 'Citizens in West, Central + NEA, MOH',
+      targetAgencies: ['NEA', 'MOH'],
+      targetRegions: ['West', 'Central'],
+      platforms: ['Web', 'Mobile'],
+      recipients: 721000,
+      status: 'ongoing',
+      time: relativeTime(minutesAgo(42)),
+      createdAt: minutesAgo(42),
+      resolvedAt: null,
+      updates: [
+        defaultBroadcastUpdate('22222222-2222-4222-8222-222222222223', 'PSI remains elevated. Schools and outdoor operators should monitor updated readings before activities resume.', 25),
+        defaultBroadcastUpdate('22222222-2222-4222-8222-222222222224', 'Clinics report mild increase in throat irritation cases. Sensitive groups should avoid strenuous outdoor exercise.', 9),
+      ],
+      senderName: 'NEA Air Quality Desk',
+      senderRole: 'Operations Lead',
+      senderAgencyCode: 'NEA',
+    },
+    {
+      id: '33333333-3333-4333-8333-333333333333',
+      title: 'Train Service Disruption - East-West Line',
+      message: 'LTA is monitoring crowding after an East-West Line signalling fault. Expect additional travel time and use alternative routes where possible.',
+      severity: 'medium',
+      target: 'All Citizens + LTA',
+      targetAgencies: ['LTA'],
+      targetRegions: [],
+      platforms: ['Web', 'Mobile', 'SMS'],
+      recipients: 5001000,
+      status: 'ongoing',
+      time: relativeTime(minutesAgo(64)),
+      createdAt: minutesAgo(64),
+      resolvedAt: null,
+      updates: [
+        defaultBroadcastUpdate('33333333-3333-4333-8333-333333333334', 'Free regular bus bridging has been activated between affected stations.', 44),
+        defaultBroadcastUpdate('33333333-3333-4333-8333-333333333335', 'Train frequency is improving. Station staff remain deployed for crowd management.', 16),
+      ],
+      senderName: 'LTA Rail Operations',
+      senderRole: 'Incident Controller',
+      senderAgencyCode: 'LTA',
+    },
+    {
+      id: '44444444-4444-4444-8444-444444444444',
+      title: 'Dengue Cluster Advisory - Bedok North',
+      message: 'NEA and MOH completed vector control checks at Bedok North. Residents should continue removing stagnant water and seek care for persistent fever.',
+      severity: 'low',
+      target: 'Citizens in East + NEA, MOH',
+      targetAgencies: ['NEA', 'MOH'],
+      targetRegions: ['East'],
+      platforms: ['Web', 'Mobile'],
+      recipients: 361000,
+      status: 'resolved',
+      time: relativeTime(minutesAgo(360)),
+      createdAt: minutesAgo(360),
+      resolvedAt: minutesAgo(75),
+      updates: [
+        defaultBroadcastUpdate('44444444-4444-4444-8444-444444444445', 'Additional checks found no major breeding hotspots in common areas.', 210),
+        defaultBroadcastUpdate('44444444-4444-4444-8444-444444444446', 'Advisory resolved. Residents should keep weekly source-reduction routines.', 75),
+      ],
+      senderName: 'NEA Vector Control',
+      senderRole: 'Field Coordinator',
+      senderAgencyCode: 'NEA',
+    },
+  ];
+  return options.includeResolved ? items : items.filter((item) => item.status === 'ongoing');
+}
+
+function defaultBroadcastUpdate(id: string, body: string, minutes: number): BroadcastItem['updates'][number] {
+  const createdAt = minutesAgo(minutes);
+  return {
+    id,
+    body,
+    createdAt,
+    time: relativeTime(createdAt),
+  };
+}
+
+function minutesAgo(minutes: number) {
+  return new Date(Date.now() - minutes * 60_000).toISOString();
 }
 
 function isMissingRelationError(error: unknown) {
